@@ -1,7 +1,7 @@
 // Tool registry and dispatcher with auth retry
 
 import QuickBooks from "node-quickbooks";
-import { getClient, clearCredentialsCache, isAuthError } from "../client/index.js";
+import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
 import {
   handleGetCompanyInfo,
   handleQuery,
@@ -107,8 +107,13 @@ export async function executeTool(
     return await executeOperation();
   } catch (error) {
     if (isAuthError(error)) {
-      // Clear cache and retry once with fresh credentials from Secrets Manager
-      clearCredentialsCache();
+      // Refresh token with Intuit, save to provider, then retry
+      try {
+        await refreshTokens();
+      } catch {
+        // If refresh fails, clear cache and retry with stored credentials
+        clearCredentialsCache();
+      }
       try {
         return await executeOperation();
       } catch (retryError) {

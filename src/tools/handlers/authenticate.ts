@@ -30,7 +30,8 @@ export async function handleAuthenticate(args: AuthenticateArgs): Promise<ToolRe
           `To use local mode, either:\n` +
           `- Remove QBO_CREDENTIAL_MODE from your environment (local is the default)\n` +
           `- Set QBO_CREDENTIAL_MODE=local\n\n` +
-          `AWS mode uses credentials from AWS Secrets Manager and does not require this tool.`,
+          `AWS mode uses credentials from AWS Secrets Manager and Azure mode uses Azure Key Vault.\n` +
+          `Neither requires this tool.`,
       }],
       isError: true,
     };

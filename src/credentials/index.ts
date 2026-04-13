@@ -16,13 +16,17 @@ let providerInstance: CredentialProvider | null = null;
 /**
  * Get the credential provider based on QBO_CREDENTIAL_MODE environment variable
  * - "aws": Uses AWS Secrets Manager and SSM Parameter Store
+ * - "azure": Uses Azure Key Vault (lazily loaded to avoid Lambda bundling)
  * - "local" (default): Uses local file storage at ~/.quickbooks-mcp/credentials.json
  */
-export function getCredentialProvider(): CredentialProvider {
+export async function getCredentialProvider(): Promise<CredentialProvider> {
   if (!providerInstance) {
     const mode = getCredentialMode();
     if (mode === "aws") {
       providerInstance = new AWSCredentialProvider();
+    } else if (mode === "azure") {
+      const { AzureCredentialProvider } = await import("./azure-provider.js");
+      providerInstance = new AzureCredentialProvider();
     } else {
       providerInstance = new LocalCredentialProvider();
     }
@@ -49,4 +53,11 @@ export function isLocalMode(): boolean {
  */
 export function isAWSMode(): boolean {
   return getCredentialMode() === "aws";
+}
+
+/**
+ * Check if we're using Azure credential mode
+ */
+export function isAzureMode(): boolean {
+  return getCredentialMode() === "azure";
 }
