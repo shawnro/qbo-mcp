@@ -1,7 +1,7 @@
 // QuickBooks client authentication and session management
 
 import QuickBooks from "node-quickbooks";
-import { getCredentialProvider, getCredentialMode, isLocalMode } from "../credentials/index.js";
+import { getCredentialProvider, getCredentialMode, isLocalMode, resolveCompanyId } from "../credentials/index.js";
 import type { QBCredentials, CredentialProvider } from "../credentials/index.js";
 import { refreshAccessToken } from "../credentials/oauth-client.js";
 import { clearLookupCache } from "./cache.js";
@@ -21,10 +21,11 @@ export function getCompanyIdValue(): string | null {
   return companyId;
 }
 
-// Clear cached credentials (call on auth errors to force fresh fetch)
+// Clear cached credentials (call on auth errors or profile switches)
 export function clearCredentialsCache(): void {
   qbo = null;
   credentials = null;
+  companyId = null;
   clearLookupCache();
 }
 
@@ -75,9 +76,9 @@ export async function getClient(): Promise<QuickBooks> {
   // ALWAYS fetch fresh credentials from provider (like Python version)
   credentials = await provider.getCredentials();
 
-  // Load company ID from provider if not cached
+  // Load company ID (profile override > provider > env fallback)
   if (!companyId) {
-    companyId = await provider.getCompanyId();
+    companyId = await resolveCompanyId();
   }
 
   // Create QuickBooks client with current tokens

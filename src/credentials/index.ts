@@ -4,34 +4,78 @@ export type { QBCredentials, CredentialProvider, CredentialMode } from "./types.
 export { getCredentialMode } from "./types.js";
 export { AWSCredentialProvider } from "./aws-provider.js";
 export { LocalCredentialProvider } from "./local-provider.js";
+export {
+  loadProfiles,
+  hasProfiles,
+  listProfiles,
+  getActiveProfileName,
+  getActiveProfile,
+  setActiveProfile,
+} from "./profiles.js";
+export type { QBProfile, QBProfileConfig } from "./profiles.js";
 
 import { getCredentialMode } from "./types.js";
 import type { CredentialProvider } from "./types.js";
 import { AWSCredentialProvider } from "./aws-provider.js";
 import { LocalCredentialProvider } from "./local-provider.js";
+import {
+  hasProfiles,
+  getActiveProfile,
+  getActiveProfileName,
+  setActiveProfile,
+} from "./profiles.js";
 
 // Singleton provider instance
 let providerInstance: CredentialProvider | null = null;
 
 /**
- * Get the credential provider based on QBO_CREDENTIAL_MODE environment variable
- * - "aws": Uses AWS Secrets Manager and SSM Parameter Store
- * - "azure": Uses Azure Key Vault (lazily loaded to avoid Lambda bundling)
- * - "local" (default): Uses local file storage at ~/.quickbooks-mcp/credentials.json
+ * Create a credential provider for a given mode and optional config.
+ */
+async function createProvider(mode: string, secretName?: string): Promise<CredentialProvider> {
+  if (mode === "aws") {
+    return new AWSCredentialProvider();
+  } else if (mode === "azure") {
+    const { AzureCredentialProvider } = await import("./azure-provider.js");
+    return new AzureCredentialProvider(secretName);
+  } else {
+    return new LocalCredentialProvider();
+  }
+}
+
+/**
+ * Get the credential provider.
+ * If profiles are loaded, creates a provider based on the active profile.
+ * Otherwise falls back to env-var-based mode selection (backward compat).
  */
 export async function getCredentialProvider(): Promise<CredentialProvider> {
   if (!providerInstance) {
-    const mode = getCredentialMode();
-    if (mode === "aws") {
-      providerInstance = new AWSCredentialProvider();
-    } else if (mode === "azure") {
-      const { AzureCredentialProvider } = await import("./azure-provider.js");
-      providerInstance = new AzureCredentialProvider();
+    if (hasProfiles()) {
+      const profile = getActiveProfile();
+      if (!profile) {
+        throw new Error("Profiles loaded but no active profile set.");
+      }
+      providerInstance = await createProvider(profile.mode, profile.secret_name);
     } else {
-      providerInstance = new LocalCredentialProvider();
+      providerInstance = await createProvider(getCredentialMode());
     }
   }
   return providerInstance;
+}
+
+/**
+ * Resolve the effective company ID.
+ * Priority: profile override > provider's getCompanyId() (which checks secret payload > env var)
+ */
+export async function resolveCompanyId(): Promise<string> {
+  if (hasProfiles()) {
+    const profile = getActiveProfile();
+    if (profile?.company_id) {
+      return profile.company_id;
+    }
+  }
+
+  const provider = await getCredentialProvider();
+  return provider.getCompanyId();
 }
 
 /**
@@ -42,9 +86,25 @@ export function clearProviderCache(): void {
 }
 
 /**
+ * Switch the active profile. Clears provider singleton so the next
+ * getCredentialProvider() call creates a fresh provider for the new profile.
+ * Returns the previous profile name for rollback support.
+ */
+export function switchProfile(name: string): string {
+  const previousName = getActiveProfileName();
+  setActiveProfile(name); // throws if profile doesn't exist
+  clearProviderCache();
+  return previousName || name;
+}
+
+/**
  * Check if we're using local credential mode
  */
 export function isLocalMode(): boolean {
+  if (hasProfiles()) {
+    const profile = getActiveProfile();
+    return profile?.mode === "local";
+  }
   return getCredentialMode() === "local";
 }
 
@@ -52,6 +112,10 @@ export function isLocalMode(): boolean {
  * Check if we're using AWS credential mode
  */
 export function isAWSMode(): boolean {
+  if (hasProfiles()) {
+    const profile = getActiveProfile();
+    return profile?.mode === "aws";
+  }
   return getCredentialMode() === "aws";
 }
 
@@ -59,5 +123,9 @@ export function isAWSMode(): boolean {
  * Check if we're using Azure credential mode
  */
 export function isAzureMode(): boolean {
+  if (hasProfiles()) {
+    const profile = getActiveProfile();
+    return profile?.mode === "azure";
+  }
   return getCredentialMode() === "azure";
 }

@@ -11,9 +11,13 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { setOutputMode } from "./utils/output.js";
 import { toolDefinitions, executeTool } from "./tools/index.js";
 import { getAuthConfig, validateToken } from "./auth/token-validator.js";
+import { loadProfiles } from "./credentials/index.js";
 
 // Set HTTP output mode at module load (before any handlers run)
 setOutputMode("http");
+
+// Load profiles config eagerly (no-op if no profiles file exists)
+loadProfiles();
 
 // Filter out qbo_authenticate — not relevant for remote/Lambda usage
 const remoteToolDefinitions = toolDefinitions.filter(

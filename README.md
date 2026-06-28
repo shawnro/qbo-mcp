@@ -299,6 +299,63 @@ Ensure the identity has **Secret Get** and **Secret Set** permissions on the Key
 
 ---
 
+## Multi-Company Profiles
+
+If you manage multiple QuickBooks companies, you can configure named profiles to switch between them from a single MCP server instance.
+
+### 1. Create a Profiles Config File
+
+Create `~/.quickbooks-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
+
+```json
+{
+  "default": "my-business",
+  "profiles": {
+    "my-business": {
+      "mode": "azure",
+      "secret_name": "qbo-my-business"
+    },
+    "side-project": {
+      "mode": "azure",
+      "secret_name": "qbo-side-project"
+    },
+    "division-a": {
+      "mode": "azure",
+      "secret_name": "qbo-shared-login",
+      "company_id": "1234567890"
+    },
+    "division-b": {
+      "mode": "azure",
+      "secret_name": "qbo-shared-login",
+      "company_id": "9876543210"
+    }
+  }
+}
+```
+
+**Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `mode` | Yes | Credential provider: `local`, `aws`, or `azure` |
+| `secret_name` | Yes (aws/azure) | Provider-specific secret name |
+| `company_id` | No | Override company ID (useful when one login has multiple companies) |
+| `default` | Yes (top-level) | Profile to use on startup |
+
+### 2. Use the Profile Tools
+
+- **`list_qbo_profiles`** — Shows all configured profiles and which is active
+- **`switch_qbo_profile`** — Switches to a different company (validates the connection)
+
+### Notes
+
+- If the profiles file does not exist, the server runs in single-company mode (backward compatible)
+- If the profiles file exists but is malformed, the server fails at startup with a descriptive error
+- Switching profiles clears all cached data (accounts, departments, etc.)
+- On switch failure, the server automatically rolls back to the previous profile
+
+---
+
 ## Inline Output Mode
 
 By default, large responses (reports, query results) are written to `/tmp` files and the server returns a file path. This works well for Claude Code in terminal environments but breaks in **Claude Desktop** and **plugin environments** where the model cannot read from `/tmp`.
@@ -350,6 +407,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_COMPANY_ID_PARAM` | `/prod/qbo/company_id` | SSM parameter path (aws mode) |
 | `AZURE_KEY_VAULT_URL` | - | Key Vault URI, e.g. `https://myvault.vault.azure.net` (azure mode) |
 | `QBO_COMPANY_ID` | - | Fallback company ID if not in Key Vault secret (azure mode) |
+| `QBO_PROFILES_FILE` | `~/.quickbooks-mcp/profiles.json` | Path to multi-company profiles config |
 
 ---
 
@@ -398,6 +456,9 @@ QBO_INLINE_OUTPUT=true
 | `edit_vendor_credit` | Modify an existing vendor credit |
 | **Delete** | |
 | `delete_entity` | Delete any transaction (journal entry, bill, invoice, deposit, sales receipt, expense, vendor credit) |
+| **Profiles** | |
+| `list_qbo_profiles` | List all configured company profiles and show which is active |
+| `switch_qbo_profile` | Switch to a different company profile |
 
 ---
 

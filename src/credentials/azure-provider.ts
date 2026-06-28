@@ -16,11 +16,10 @@ export class AzureCredentialProvider implements CredentialProvider {
   private readonly vaultUrl: string | undefined;
   private readonly secretName: string;
   private client: SecretClient | null = null;
-  private cachedCompanyId: string | null = null;
 
-  constructor() {
+  constructor(secretName?: string) {
     this.vaultUrl = process.env.AZURE_KEY_VAULT_URL || undefined;
-    this.secretName = process.env.QBO_SECRET_NAME || "qbo-credentials";
+    this.secretName = secretName || process.env.QBO_SECRET_NAME || "qbo-credentials";
   }
 
   /**
@@ -64,22 +63,16 @@ export class AzureCredentialProvider implements CredentialProvider {
   }
 
   async getCompanyId(): Promise<string> {
-    if (this.cachedCompanyId) {
-      return this.cachedCompanyId;
-    }
-
     // Primary: read from the credential secret
     const credentials = await this.getCredentials();
     if (credentials.company_id) {
-      this.cachedCompanyId = credentials.company_id;
-      return this.cachedCompanyId;
+      return credentials.company_id;
     }
 
     // Fallback: environment variable
     const envCompanyId = process.env.QBO_COMPANY_ID;
     if (envCompanyId) {
-      this.cachedCompanyId = envCompanyId;
-      return this.cachedCompanyId;
+      return envCompanyId;
     }
 
     throw new Error(

@@ -37,6 +37,8 @@ import {
   handleEditCustomer,
   handleDeleteEntity,
   handleAuthenticate,
+  handleListProfiles,
+  handleSwitchProfile,
 } from "./handlers/index.js";
 
 export { toolDefinitions } from "./definitions.js";
@@ -90,6 +92,14 @@ export async function executeTool(
   // Special case: qbo_authenticate doesn't need a QuickBooks client
   if (name === "qbo_authenticate") {
     return handleAuthenticate(args as { authorization_code?: string; realm_id?: string });
+  }
+
+  // Special case: profile tools don't need a QuickBooks client
+  if (name === "list_qbo_profiles") {
+    return handleListProfiles();
+  }
+  if (name === "switch_qbo_profile") {
+    return handleSwitchProfile(args as { profile: string });
   }
 
   const handler = toolHandlers.get(name);

@@ -24,3 +24,4 @@ export { handleCreateVendorCredit, handleGetVendorCredit, handleEditVendorCredit
 export { handleCreateCustomer, handleGetCustomer, handleEditCustomer } from './customer.js';
 export { handleDeleteEntity } from './delete.js';
 export { handleAuthenticate } from './authenticate.js';
+export { handleListProfiles, handleSwitchProfile } from './profiles.js';
