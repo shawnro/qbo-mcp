@@ -237,6 +237,125 @@ The server needs these AWS permissions:
 
 ---
 
+## Option 4: Azure Mode
+
+For environments using Azure Key Vault for secret management. Stores all QuickBooks credentials (including company ID) in a single Key Vault secret.
+
+### 1. Create the Key Vault Secret
+
+Store your QuickBooks credentials as a JSON secret in Azure Key Vault:
+
+```bash
+az keyvault secret set \
+  --vault-name myvault \
+  --name qbo-credentials \
+  --value '{
+    "client_id": "your_client_id",
+    "client_secret": "your_client_secret",
+    "access_token": "your_access_token",
+    "refresh_token": "your_refresh_token",
+    "redirect_url": "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl",
+    "company_id": "your_company_id"
+  }'
+```
+
+### 2. Configure the Server
+
+Create a `.env` file in the quickbooks-mcp directory:
+
+```bash
+QBO_CREDENTIAL_MODE=azure
+AZURE_KEY_VAULT_URL=https://myvault.vault.azure.net
+```
+
+Optionally override the secret name (default: `qbo-credentials`):
+
+```bash
+QBO_SECRET_NAME=my-custom-secret-name
+```
+
+### 3. Azure Identity
+
+The provider uses `DefaultAzureCredential` from `@azure/identity`, which supports:
+
+- **Managed Identity** (Azure VMs, App Service, Functions)
+- **Azure CLI** (`az login`)
+- **Environment variables** (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET`)
+
+Ensure the identity has **Secret Get** and **Secret Set** permissions on the Key Vault.
+
+### 4. Add to Claude Code
+
+```json
+{
+  "mcpServers": {
+    "quickbooks": {
+      "command": "node",
+      "args": ["/path/to/quickbooks-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+---
+
+## Multi-Company Profiles
+
+If you manage multiple QuickBooks companies, you can configure named profiles to switch between them from a single MCP server instance.
+
+### 1. Create a Profiles Config File
+
+Create `~/.quickbooks-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
+
+```json
+{
+  "default": "my-business",
+  "profiles": {
+    "my-business": {
+      "mode": "azure",
+      "secret_name": "qbo-my-business"
+    },
+    "side-project": {
+      "mode": "azure",
+      "secret_name": "qbo-side-project"
+    },
+    "division-a": {
+      "mode": "azure",
+      "secret_name": "qbo-shared-login",
+      "company_id": "1234567890"
+    },
+    "division-b": {
+      "mode": "azure",
+      "secret_name": "qbo-shared-login",
+      "company_id": "9876543210"
+    }
+  }
+}
+```
+
+**Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `mode` | Yes | Credential provider: `local`, `aws`, or `azure` |
+| `secret_name` | Yes (aws/azure) | Provider-specific secret name |
+| `company_id` | No | Override company ID (useful when one login has multiple companies) |
+| `default` | Yes (top-level) | Profile to use on startup |
+
+### 2. Use the Profile Tools
+
+- **`list_qbo_profiles`** — Shows all configured profiles and which is active
+- **`switch_qbo_profile`** — Switches to a different company (validates the connection)
+
+### Notes
+
+- If the profiles file does not exist, the server runs in single-company mode (backward compatible)
+- If the profiles file exists but is malformed, the server fails at startup with a descriptive error
+- Switching profiles clears all cached data (accounts, departments, etc.)
+- On switch failure, the server automatically rolls back to the previous profile
+
+---
+
 ## Inline Output Mode
 
 By default, large responses (reports, query results) are written to `/tmp` files and the server returns a file path. This works well for Claude Code in terminal environments but breaks in **Claude Desktop** and **plugin environments** where the model cannot read from `/tmp`.
@@ -277,7 +396,7 @@ QBO_INLINE_OUTPUT=true
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `QBO_CREDENTIAL_MODE` | `local` | Credential storage: `local` or `aws` |
+| `QBO_CREDENTIAL_MODE` | `local` | Credential storage: `local`, `aws`, or `azure` |
 | `QBO_CLIENT_ID` | - | QuickBooks app Client ID (local mode) |
 | `QBO_CLIENT_SECRET` | - | QuickBooks app Client Secret (local mode) |
 | `QBO_CREDENTIAL_FILE` | `~/.quickbooks-mcp/credentials.json` | Custom credential file path |
@@ -286,6 +405,9 @@ QBO_INLINE_OUTPUT=true
 | `AWS_REGION` | `us-east-2` | AWS region (aws mode) |
 | `QBO_SECRET_NAME` | `prod/qbo` | Secrets Manager secret name (aws mode) |
 | `QBO_COMPANY_ID_PARAM` | `/prod/qbo/company_id` | SSM parameter path (aws mode) |
+| `AZURE_KEY_VAULT_URL` | - | Key Vault URI, e.g. `https://myvault.vault.azure.net` (azure mode) |
+| `QBO_COMPANY_ID` | - | Fallback company ID if not in Key Vault secret (azure mode) |
+| `QBO_PROFILES_FILE` | `~/.quickbooks-mcp/profiles.json` | Path to multi-company profiles config |
 
 ---
 
@@ -334,6 +456,9 @@ QBO_INLINE_OUTPUT=true
 | `edit_vendor_credit` | Modify an existing vendor credit |
 | **Delete** | |
 | `delete_entity` | Delete any transaction (journal entry, bill, invoice, deposit, sales receipt, expense, vendor credit) |
+| **Profiles** | |
+| `list_qbo_profiles` | List all configured company profiles and show which is active |
+| `switch_qbo_profile` | Switch to a different company profile |
 
 ---
 

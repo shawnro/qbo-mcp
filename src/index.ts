@@ -7,6 +7,7 @@ import { dirname, join } from "path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { server } from "./server.js";
 import { setOutputMode } from "./utils/output.js";
+import { loadProfiles } from "./credentials/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,6 +17,12 @@ config({ path: join(__dirname, "..", ".env"), quiet: true });
 
 if (process.env.QBO_INLINE_OUTPUT === "true") {
   setOutputMode("http");
+}
+
+// Load profiles config eagerly at startup (fail fast on malformed config)
+const hasProfileConfig = loadProfiles();
+if (hasProfileConfig) {
+  console.error("QuickBooks MCP server: profiles loaded");
 }
 
 // Start the server

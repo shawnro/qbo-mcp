@@ -4,6 +4,7 @@ export { promisify } from './promisify.js';
 export {
   getClient,
   clearCredentialsCache,
+  refreshTokens,
   isAuthError,
   getCompanyIdValue,
 } from './auth.js';

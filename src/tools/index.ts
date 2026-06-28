@@ -1,7 +1,7 @@
 // Tool registry and dispatcher with auth retry
 
 import QuickBooks from "node-quickbooks";
-import { getClient, clearCredentialsCache, isAuthError } from "../client/index.js";
+import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
 import {
   handleGetCompanyInfo,
   handleQuery,
@@ -37,6 +37,8 @@ import {
   handleEditCustomer,
   handleDeleteEntity,
   handleAuthenticate,
+  handleListProfiles,
+  handleSwitchProfile,
 } from "./handlers/index.js";
 
 export { toolDefinitions } from "./definitions.js";
@@ -92,6 +94,14 @@ export async function executeTool(
     return handleAuthenticate(args as { authorization_code?: string; realm_id?: string });
   }
 
+  // Special case: profile tools don't need a QuickBooks client
+  if (name === "list_qbo_profiles") {
+    return handleListProfiles();
+  }
+  if (name === "switch_qbo_profile") {
+    return handleSwitchProfile(args as { profile: string });
+  }
+
   const handler = toolHandlers.get(name);
   if (!handler) {
     throw new Error(`Unknown tool: ${name}`);
@@ -107,8 +117,13 @@ export async function executeTool(
     return await executeOperation();
   } catch (error) {
     if (isAuthError(error)) {
-      // Clear cache and retry once with fresh credentials from Secrets Manager
-      clearCredentialsCache();
+      // Refresh token with Intuit, save to provider, then retry
+      try {
+        await refreshTokens();
+      } catch {
+        // If refresh fails, clear cache and retry with stored credentials
+        clearCredentialsCache();
+      }
       try {
         return await executeOperation();
       } catch (retryError) {

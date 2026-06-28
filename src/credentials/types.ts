@@ -41,7 +41,7 @@ export interface CredentialProvider {
 /**
  * Credential mode - determines which provider to use
  */
-export type CredentialMode = "local" | "aws";
+export type CredentialMode = "local" | "aws" | "azure";
 
 /**
  * Get credential mode from environment
@@ -51,6 +51,9 @@ export function getCredentialMode(): CredentialMode {
   const mode = process.env.QBO_CREDENTIAL_MODE?.toLowerCase();
   if (mode === "aws") {
     return "aws";
+  }
+  if (mode === "azure") {
+    return "azure";
   }
   return "local";
 }

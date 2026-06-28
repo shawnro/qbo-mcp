@@ -1615,4 +1615,32 @@ export const toolDefinitions = [
       required: ["id"],
     },
   },
+  {
+    name: "list_qbo_profiles",
+    description: "List all configured QuickBooks company profiles and show which is currently active. " +
+      "Returns profile names, credential modes, and company IDs from the config file. " +
+      "No QBO API calls are made.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "switch_qbo_profile",
+    description: "Switch to a different QuickBooks company profile. " +
+      "This changes the active company for all subsequent tool calls. " +
+      "Validates the switch by connecting to the new company. " +
+      "On failure, automatically rolls back to the previous profile.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        profile: {
+          type: "string",
+          description: "Name of the profile to switch to (as defined in profiles.json)",
+        },
+      },
+      required: ["profile"],
+    },
+  },
 ];
