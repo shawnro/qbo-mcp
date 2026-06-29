@@ -26,6 +26,7 @@ export function clearCredentialsCache(): void {
   qbo = null;
   credentials = null;
   companyId = null;
+  provider = null;
   clearLookupCache();
 }
 
