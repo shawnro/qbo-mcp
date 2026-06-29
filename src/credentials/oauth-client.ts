@@ -86,10 +86,13 @@ export async function exchangeCodeForTokens(
 export async function refreshAccessToken(credentials: QBCredentials): Promise<QBCredentials> {
   const oauthClient = createOAuthClient(credentials.client_id, credentials.client_secret);
 
-  // Set the current refresh token
+  // Set the current refresh token — must include x_refresh_token_expires_in
+  // or the library's client-side validation rejects it as "expired"
   oauthClient.setToken({
     refresh_token: credentials.refresh_token,
     access_token: credentials.access_token,
+    x_refresh_token_expires_in: 8726400, // 100 days (QBO standard)
+    createdAt: Date.now(),
   });
 
   // Refresh the token
