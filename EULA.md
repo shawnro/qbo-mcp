@@ -2,8 +2,8 @@
 
 **Effective Date:** June 28, 2026
 
-**Application:** SV Equipt MCP Connector ("the Application")
-**Operated by:** Ops Group Holdings LLC, on behalf of its affiliated entities including SV Equipt LLC, RanchOps LLC, and FarmOps LLC ("we," "us," "our")
+**Application:** QuickBooks MCP Connector ("the Application")
+**Operated by:** The application operator and their affiliated entities ("we," "us," "our")
 
 ## 1. Acceptance of Terms
 
@@ -11,7 +11,7 @@ By installing, accessing, or using the Application, you agree to be bound by the
 
 ## 2. Scope of Use
 
-The Application is developed and maintained for internal use only by Ops Group Holdings LLC and its affiliated entities. It is not licensed, distributed, or made available for use by any external party, customer, or member of the public.
+The Application is developed and maintained for internal use only by the application operator and their affiliated entities. It is not licensed, distributed, or made available for use by any external party, customer, or member of the public.
 
 ## 3. License Grant
 
@@ -35,7 +35,7 @@ The Application is provided "as is" without warranties of any kind, express or i
 
 ## 7. Limitation of Liability
 
-To the fullest extent permitted by law, Ops Group Holdings LLC and its affiliates shall not be liable for any indirect, incidental, special, or consequential damages arising from the use of, or inability to use, the Application.
+To the fullest extent permitted by law, the application operator and its affiliates shall not be liable for any indirect, incidental, special, or consequential damages arising from the use of, or inability to use, the Application.
 
 ## 8. Changes to This Agreement
 
@@ -43,4 +43,4 @@ We may update this Agreement from time to time. Continued use of the Application
 
 ## 9. Contact
 
-Questions regarding this Agreement may be directed to the application owner at Ops Group Holdings LLC.
+Questions regarding this Agreement may be directed to the application operator.

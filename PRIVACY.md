@@ -2,12 +2,12 @@
 
 **Effective Date:** June 28, 2026
 
-**Application:** SV Equipt MCP Connector ("the Application")
-**Operated by:** Ops Group Holdings LLC, on behalf of its affiliated entities including SV Equipt LLC, RanchOps LLC, and FarmOps LLC ("we," "us," "our")
+**Application:** QuickBooks MCP Connector ("the Application")
+**Operated by:** The application operator and their affiliated entities ("we," "us," "our")
 
 ## 1. Overview
 
-This Application is an internal tool used solely by Ops Group Holdings LLC and its affiliated entities to connect QuickBooks Online accounting data to internal automation and reporting tools. The Application is not distributed publicly, is not available on any app marketplace, and is not used by any third party outside of our organization.
+This Application is an internal tool used solely by the application operator and their affiliated entities to connect QuickBooks Online accounting data to internal automation and reporting tools. The Application is not distributed publicly, is not available on any app marketplace, and is not used by any third party outside of our organization.
 
 ## 2. Information We Access
 
@@ -39,4 +39,4 @@ We may update this privacy policy from time to time to reflect changes in our pr
 
 ## 8. Contact
 
-Questions regarding this privacy policy may be directed to the application owner at Ops Group Holdings LLC.
+Questions regarding this privacy policy may be directed to the application operator.

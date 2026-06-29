@@ -12,6 +12,7 @@ deploy/
 *.csv
 *.json.tmp
 data/
+**/temp-creds.json
 
 # Claude Code local settings and auto-generated files
 .claude/settings.local.json

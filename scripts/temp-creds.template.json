@@ -1,0 +1,8 @@
+{
+  "client_id": "PASTE_CLIENT_ID",
+  "client_secret": "PASTE_CLIENT_SECRET",
+  "access_token": "PASTE_NEW_ACCESS_TOKEN",
+  "refresh_token": "PASTE_NEW_REFRESH_TOKEN",
+  "redirect_url": "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl",
+  "company_id": "PASTE_REALM_ID"
+}
