@@ -6,7 +6,7 @@ import {
   switchProfile,
   getActiveProfileName,
 } from "../../credentials/index.js";
-import { getClient, clearCredentialsCache, promisify } from "../../client/index.js";
+import { getClient, clearCredentialsCache, refreshTokens, isAuthError, promisify } from "../../client/index.js";
 
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
 
@@ -93,12 +93,24 @@ export async function handleSwitchProfile(
   clearCredentialsCache();
 
   // Validate the new profile by connecting to QBO
-  try {
+  const tryConnect = async () => {
     const client = await getClient();
     const companyInfo = await promisify<unknown>((cb) =>
       client.getCompanyInfo(client.realmId as string, cb)
     );
-    const companyName = (companyInfo as { CompanyName?: string })?.CompanyName || "Unknown";
+    return (companyInfo as { CompanyName?: string })?.CompanyName || "Unknown";
+  };
+
+  try {
+    let companyName: string;
+    try {
+      companyName = await tryConnect();
+    } catch (err) {
+      // If access token is expired, refresh and retry once
+      if (!isAuthError(err)) throw err;
+      await refreshTokens();
+      companyName = await tryConnect();
+    }
 
     return {
       content: [{
