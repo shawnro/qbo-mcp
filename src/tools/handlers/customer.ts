@@ -2,7 +2,7 @@
 
 import QuickBooks from "node-quickbooks";
 import { promisify, resolveCustomer } from "../../client/index.js";
-import { outputReport } from "../../utils/index.js";
+import { outputReport, getQboUrl } from "../../utils/index.js";
 
 interface AddressInput {
   line1?: string;
@@ -203,7 +203,7 @@ export async function handleCreateCustomer(
     client.createCustomer(customerObj, cb)
   ) as QBCustomer;
 
-  const qboUrl = `https://app.qbo.intuit.com/app/customerdetail?nameId=${result.Id}`;
+  const qboUrl = getQboUrl("customer", result.Id)!;
 
   const response = [
     "Customer Created!",
@@ -227,7 +227,7 @@ export async function handleGetCustomer(
     client.getCustomer(id, cb)
   ) as QBCustomer;
 
-  const qboUrl = `https://app.qbo.intuit.com/app/customerdetail?nameId=${customer.Id}`;
+  const qboUrl = getQboUrl("customer", customer.Id)!;
 
   const lines: string[] = [
     "Customer",
@@ -353,7 +353,7 @@ export async function handleEditCustomer(
     updated.SalesTermRef = { value: match.Id, name: match.Name };
   }
 
-  const qboUrl = `https://app.qbo.intuit.com/app/customerdetail?nameId=${id}`;
+  const qboUrl = getQboUrl("customer", id)!;
 
   if (draft) {
     const previewLines: string[] = [

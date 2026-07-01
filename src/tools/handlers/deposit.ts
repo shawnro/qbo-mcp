@@ -7,7 +7,7 @@ import {
   getDepartmentCache,
   getVendorCache,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, toCents, sumCents, outputReport } from "../../utils/index.js";
+import { validateAmount, toDollars, formatDollars, toCents, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import type { AccountCache, DepartmentCache, VendorCache } from "../../types/index.js";
 
 // --- Interfaces ---
@@ -240,7 +240,7 @@ export async function handleCreateDeposit(
     client.createDeposit(depositObject, cb)
   ) as { Id: string };
 
-  const qboUrl = `https://app.qbo.intuit.com/app/deposit?txnId=${result.Id}`;
+  const qboUrl = getQboUrl("deposit", result.Id)!;
 
   const response = [
     "Deposit Created!",
@@ -268,7 +268,7 @@ export async function handleGetDeposit(
   const deposit = await promisify<unknown>((cb) =>
     client.getDeposit(id, cb)
   ) as Deposit;
-  const qboUrl = `https://app.qbo.intuit.com/app/deposit?txnId=${deposit.Id}`;
+  const qboUrl = getQboUrl("deposit", deposit.Id)!;
 
   // Format summary
   const lines: string[] = [
@@ -466,7 +466,7 @@ export async function handleEditDeposit(
     updated.Line = finalLines;
   }
 
-  const qboUrl = `https://app.qbo.intuit.com/app/deposit?txnId=${id}`;
+  const qboUrl = getQboUrl("deposit", id)!;
 
   if (draft) {
     const previewLines: string[] = [

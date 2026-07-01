@@ -8,7 +8,7 @@ import {
   getVendorCache,
   resolveVendor,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, sumCents, outputReport } from "../../utils/index.js";
+import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 
 interface CreateBillLine {
   account_id?: string;
@@ -214,7 +214,7 @@ export async function handleCreateBill(
     client.createBill(billObject, cb)
   ) as { Id: string; DocNumber?: string };
 
-  const qboUrl = `https://app.qbo.intuit.com/app/bill?txnId=${result.Id}`;
+  const qboUrl = getQboUrl("bill", result.Id)!;
 
   const response = [
     "Bill Created!",
@@ -266,7 +266,7 @@ export async function handleGetBill(
       };
     }>;
   };
-  const qboUrl = `https://app.qbo.intuit.com/app/bill?txnId=${bill.Id}`;
+  const qboUrl = getQboUrl("bill", bill.Id)!;
 
   // Format summary
   const lines: string[] = [
@@ -467,7 +467,7 @@ export async function handleEditBill(
     updated.Line = finalLines;
   }
 
-  const qboUrl = `https://app.qbo.intuit.com/app/bill?txnId=${id}`;
+  const qboUrl = getQboUrl("bill", id)!;
 
   if (draft) {
     const previewLines: string[] = [

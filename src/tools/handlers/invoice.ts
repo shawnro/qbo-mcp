@@ -8,7 +8,7 @@ import {
   resolveItem,
   resolveCustomer,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, sumCents, outputReport } from "../../utils/index.js";
+import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 
 interface InvoiceLineChange {
   line_id?: string;
@@ -214,7 +214,7 @@ export async function handleCreateInvoice(
     client.createInvoice(invObject, cb)
   ) as { Id: string; DocNumber?: string };
 
-  const qboUrl = `https://app.qbo.intuit.com/app/invoice?txnId=${result.Id}`;
+  const qboUrl = getQboUrl("invoice", result.Id)!;
 
   const response = [
     "Invoice Created!",
@@ -274,7 +274,7 @@ export async function handleGetInvoice(
       };
     }>;
   };
-  const qboUrl = `https://app.qbo.intuit.com/app/invoice?txnId=${invoice.Id}`;
+  const qboUrl = getQboUrl("invoice", invoice.Id)!;
 
   // Format summary
   const lines: string[] = [
@@ -551,7 +551,7 @@ export async function handleEditInvoice(
     updated.Line = finalLines;
   }
 
-  const qboUrl = `https://app.qbo.intuit.com/app/invoice?txnId=${id}`;
+  const qboUrl = getQboUrl("invoice", id)!;
 
   if (draft) {
     const previewLines: string[] = [

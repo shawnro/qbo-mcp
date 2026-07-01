@@ -8,7 +8,7 @@ import {
   resolveItem,
   resolveCustomer,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, sumCents, outputReport } from "../../utils/index.js";
+import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 
 interface SalesReceiptLineChange {
   line_id?: string;
@@ -189,7 +189,7 @@ export async function handleCreateSalesReceipt(
     client.createSalesReceipt(srObject, cb)
   ) as { Id: string; DocNumber?: string };
 
-  const qboUrl = `https://app.qbo.intuit.com/app/salesreceipt?txnId=${result.Id}`;
+  const qboUrl = getQboUrl("salesreceipt", result.Id)!;
 
   const response = [
     "Sales Receipt Created!",
@@ -240,7 +240,7 @@ export async function handleGetSalesReceipt(
       };
     }>;
   };
-  const qboUrl = `https://app.qbo.intuit.com/app/salesreceipt?txnId=${salesReceipt.Id}`;
+  const qboUrl = getQboUrl("salesreceipt", salesReceipt.Id)!;
 
   // Format summary
   const lines: string[] = [
@@ -459,7 +459,7 @@ export async function handleEditSalesReceipt(
     updated.Line = finalLines;
   }
 
-  const qboUrl = `https://app.qbo.intuit.com/app/salesreceipt?txnId=${id}`;
+  const qboUrl = getQboUrl("salesreceipt", id)!;
 
   if (draft) {
     const previewLines: string[] = [

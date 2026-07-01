@@ -13,6 +13,7 @@ import {
   toDollars,
   formatDollars,
   outputReport,
+  getQboUrl,
 } from "../../utils/index.js";
 
 interface JournalEntryLine {
@@ -210,7 +211,7 @@ export async function handleCreateJournalEntry(
   ) as { Id: string; DocNumber?: string };
 
   // Build QuickBooks URL
-  const qboUrl = `https://app.qbo.intuit.com/app/journal?txnId=${result.Id}`;
+  const qboUrl = getQboUrl("journalentry", result.Id)!;
 
   const response = [
     "Journal Entry Created!",
@@ -254,7 +255,7 @@ export async function handleGetJournalEntry(
       };
     }>;
   };
-  const qboUrl = `https://app.qbo.intuit.com/app/journal?txnId=${je.Id}`;
+  const qboUrl = getQboUrl("journalentry", je.Id)!;
 
   // Format summary
   const lines: string[] = [
@@ -457,7 +458,7 @@ export async function handleEditJournalEntry(
     validateBalance(totalDebitsCents, totalCreditsCents);
   }
 
-  const qboUrl = `https://app.qbo.intuit.com/app/journal?txnId=${id}`;
+  const qboUrl = getQboUrl("journalentry", id)!;
 
   if (draft) {
     // Preview mode

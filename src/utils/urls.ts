@@ -8,6 +8,9 @@ const TXN_URL_MAP: Record<string, string> = {
   bill: "bill",
   invoice: "invoice",
   payment: "payment",
+  vendorcredit: "vendorcredit",
+  billpayment: "billpayment",
+  expense: "expense",
 };
 
 // Name entities use nameId= instead of txnId=
