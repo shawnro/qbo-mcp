@@ -1,0 +1,178 @@
+// Tests for tool dispatcher (auth retry logic)
+
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Mock the client module
+const mockGetClient = vi.fn();
+const mockClearCredentialsCache = vi.fn();
+const mockRefreshTokens = vi.fn();
+const mockIsAuthError = vi.fn();
+
+vi.mock("../../client/index.js", () => ({
+  getClient: (...args: unknown[]) => mockGetClient(...args),
+  clearCredentialsCache: (...args: unknown[]) => mockClearCredentialsCache(...args),
+  refreshTokens: (...args: unknown[]) => mockRefreshTokens(...args),
+  isAuthError: (...args: unknown[]) => mockIsAuthError(...args),
+}));
+
+// Mock handlers module
+const mockHandler = vi.fn();
+vi.mock("../../tools/handlers/index.js", () => ({
+  handleAuthenticate: vi.fn(),
+  handleListProfiles: vi.fn(),
+  handleSwitchProfile: vi.fn(),
+  handleGetCompanyInfo: vi.fn(),
+  handleQuery: vi.fn(),
+  handleListAccounts: vi.fn(),
+  handleGetProfitLoss: vi.fn(),
+  handleGetBalanceSheet: vi.fn(),
+  handleGetTrialBalance: vi.fn(),
+  handleQueryAccountTransactions: vi.fn(),
+  handleAccountPeriodSummary: vi.fn(),
+  handleCreateJournalEntry: vi.fn(),
+  handleGetJournalEntry: vi.fn(),
+  handleEditJournalEntry: vi.fn(),
+  handleCreateBill: vi.fn(),
+  handleGetBill: vi.fn(),
+  handleEditBill: vi.fn(),
+  handleCreateExpense: vi.fn(),
+  handleGetExpense: vi.fn(),
+  handleEditExpense: vi.fn(),
+  handleCreateSalesReceipt: vi.fn(),
+  handleGetSalesReceipt: vi.fn(),
+  handleEditSalesReceipt: vi.fn(),
+  handleCreateInvoice: vi.fn(),
+  handleGetInvoice: vi.fn(),
+  handleEditInvoice: vi.fn(),
+  handleCreateDeposit: vi.fn(),
+  handleGetDeposit: vi.fn(),
+  handleEditDeposit: vi.fn(),
+  handleCreateVendorCredit: vi.fn(),
+  handleGetVendorCredit: vi.fn(),
+  handleEditVendorCredit: vi.fn(),
+  handleCreateBillPayment: vi.fn(),
+  handleGetBillPayment: vi.fn(),
+  handleCreateCustomer: vi.fn(),
+  handleGetCustomer: vi.fn(),
+  handleEditCustomer: vi.fn(),
+  handleDeleteEntity: vi.fn(),
+}));
+
+import { executeTool } from "../index.js";
+import {
+  handleGetCompanyInfo,
+} from "../handlers/index.js";
+
+const mockHandleGetCompanyInfo = vi.mocked(handleGetCompanyInfo);
+
+describe("executeTool", () => {
+  const fakeClient = {} as never;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockGetClient.mockResolvedValue(fakeClient);
+    mockIsAuthError.mockReturnValue(false);
+    mockHandleGetCompanyInfo.mockResolvedValue({
+      content: [{ type: "text", text: "Company Info" }],
+    });
+  });
+
+  it("executes handler successfully on first try", async () => {
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.content[0].text).toBe("Company Info");
+    expect(mockGetClient).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("does not retry on non-auth errors", async () => {
+    mockHandleGetCompanyInfo.mockRejectedValue(new Error("Network timeout"));
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Network timeout");
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+    // Handler was only called once (no retry)
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
+  });
+
+  it("retries after refreshing token on auth error", async () => {
+    // First call fails with auth error
+    mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(new Error("AuthenticationFailed"))
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "Success after retry" }],
+      });
+    mockIsAuthError.mockReturnValue(true);
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.content[0].text).toBe("Success after retry");
+    expect(mockRefreshTokens).toHaveBeenCalledOnce();
+    // getClient called twice (once for initial, once for retry)
+    expect(mockGetClient).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears credentials cache when refresh fails", async () => {
+    mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(new Error("AuthenticationFailed"))
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "Success after cache clear" }],
+      });
+    mockIsAuthError.mockReturnValue(true);
+    mockRefreshTokens.mockRejectedValue(new Error("Refresh failed"));
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(mockRefreshTokens).toHaveBeenCalledOnce();
+    expect(mockClearCredentialsCache).toHaveBeenCalledOnce();
+    // Retry still happens after cache clear
+    expect(result.content[0].text).toBe("Success after cache clear");
+  });
+
+  it("returns error when retry also fails after auth error", async () => {
+    mockHandleGetCompanyInfo.mockRejectedValue(new Error("Still failing"));
+    mockIsAuthError.mockReturnValueOnce(true);
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Error after retry");
+    // Note: Error objects serialize to {} via JSON.stringify (properties not enumerable)
+    // This verifies the retry path was taken and error was wrapped
+  });
+
+  it("throws on unknown tool name", async () => {
+    await expect(executeTool("nonexistent_tool", {})).rejects.toThrow(
+      "Unknown tool: nonexistent_tool"
+    );
+  });
+
+  it("handles object errors by JSON-serializing them", async () => {
+    mockHandleGetCompanyInfo.mockRejectedValue({
+      Fault: { Error: [{ Message: "Business Validation Error" }] },
+    });
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Business Validation Error");
+  });
+
+  it("does not require client for qbo_authenticate", async () => {
+    // Import the mock for handleAuthenticate
+    const { handleAuthenticate } = await import("../handlers/index.js");
+    const mockAuth = vi.mocked(handleAuthenticate);
+    mockAuth.mockResolvedValue({
+      content: [{ type: "text", text: "Auth instructions" }],
+    });
+
+    const result = await executeTool("qbo_authenticate", {});
+
+    expect(result.content[0].text).toBe("Auth instructions");
+    expect(mockGetClient).not.toHaveBeenCalled();
+  });
+});

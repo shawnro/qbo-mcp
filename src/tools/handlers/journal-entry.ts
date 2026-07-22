@@ -51,6 +51,10 @@ export async function handleCreateJournalEntry(
   // Defensive: MCP transports may deliver arrays as JSON strings
   const lines: JournalEntryLine[] = typeof rawLines === "string" ? JSON.parse(rawLines) : rawLines;
 
+  if (!lines || lines.length === 0) {
+    throw new Error("At least one line is required");
+  }
+
   // Get cached accounts and departments (uses TTL-based cache)
   const [acctCache, deptCache] = await Promise.all([
     getAccountCache(client),
