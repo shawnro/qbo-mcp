@@ -10,6 +10,7 @@ import {
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { setOutputMode } from "./utils/output.js";
 import { toolDefinitions, executeTool } from "./tools/index.js";
+import { filterTools } from "./tools/crud-filter.js";
 import { getAuthConfig, validateToken } from "./auth/token-validator.js";
 import { loadProfiles } from "./credentials/index.js";
 
@@ -20,8 +21,9 @@ setOutputMode("http");
 loadProfiles();
 
 // Filter out qbo_authenticate — not relevant for remote/Lambda usage
-const remoteToolDefinitions = toolDefinitions.filter(
-  (t) => t.name !== "qbo_authenticate"
+// Then apply CRUD disable flags
+const remoteToolDefinitions = filterTools(
+  toolDefinitions.filter((t) => t.name !== "qbo_authenticate")
 );
 
 // Load auth config once at module level (cached across warm invocations)

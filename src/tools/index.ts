@@ -2,6 +2,7 @@
 
 import QuickBooks from "node-quickbooks";
 import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
+import { isToolDisabled } from "./crud-filter.js";
 import {
   handleGetCompanyInfo,
   handleQuery,
@@ -93,6 +94,14 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<ToolResult> {
+  // Defense-in-depth: reject disabled tools even if called directly
+  if (isToolDisabled(name)) {
+    return {
+      content: [{ type: "text", text: `Tool "${name}" is disabled by server configuration.` }],
+      isError: true,
+    };
+  }
+
   // Special case: qbo_authenticate doesn't need a QuickBooks client
   if (name === "qbo_authenticate") {
     return handleAuthenticate(args as { authorization_code?: string; realm_id?: string });

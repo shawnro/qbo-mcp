@@ -6,6 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { toolDefinitions, executeTool } from "./tools/index.js";
+import { filterTools } from "./tools/crud-filter.js";
 
 // Create MCP server
 export const server = new Server(
@@ -20,10 +21,10 @@ export const server = new Server(
   }
 );
 
-// Define available tools
+// Define available tools (filtered by CRUD disable flags)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: toolDefinitions,
+    tools: filterTools(toolDefinitions),
   };
 });
 

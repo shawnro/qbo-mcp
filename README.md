@@ -408,6 +408,9 @@ QBO_INLINE_OUTPUT=true
 | `AZURE_KEY_VAULT_URL` | - | Key Vault URI, e.g. `https://myvault.vault.azure.net` (azure mode) |
 | `QBO_COMPANY_ID` | - | Fallback company ID if not in Key Vault secret (azure mode) |
 | `QBO_PROFILES_FILE` | `~/.quickbooks-mcp/profiles.json` | Path to multi-company profiles config |
+| `QBO_DISABLE_CREATE` | `false` | Hide all `create_*` tools (read-only mode for creates) |
+| `QBO_DISABLE_UPDATE` | `false` | Hide all `edit_*` tools (prevent modifications) |
+| `QBO_DISABLE_DELETE` | `false` | Hide `delete_entity` tool (prevent deletions) |
 
 ---
 
