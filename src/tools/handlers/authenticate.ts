@@ -55,7 +55,7 @@ export async function handleAuthenticate(args: AuthenticateArgs): Promise<ToolRe
           `QBO_CLIENT_SECRET=your_client_secret\n` +
           `\`\`\`\n\n` +
           `### Option 2: Create a Credentials File\n\n` +
-          `Create \`~/.quickbooks-mcp/credentials.json\` with:\n` +
+          `Create \`~/.qbo-mcp/credentials.json\` with:\n` +
           `\`\`\`json\n` +
           `{\n` +
           `  "client_id": "your_client_id",\n` +

@@ -64,7 +64,7 @@ if (!profileName) {
 
 // --- Load profiles config ---
 function getProfilesPath() {
-  return process.env.QBO_PROFILES_FILE || join(process.env.HOME || process.env.USERPROFILE, ".quickbooks-mcp", "profiles.json");
+  return process.env.QBO_PROFILES_FILE || join(process.env.HOME || process.env.USERPROFILE, ".qbo-mcp", "profiles.json");
 }
 
 function loadProfiles() {

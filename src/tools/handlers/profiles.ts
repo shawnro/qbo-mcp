@@ -20,7 +20,7 @@ export async function handleListProfiles(): Promise<ToolResult> {
         type: "text",
         text: "No profiles configured. The server is running in single-company mode.\n\n" +
           "To use multiple companies, create a profiles config file at " +
-          "~/.quickbooks-mcp/profiles.json (or set QBO_PROFILES_FILE).",
+          "~/.qbo-mcp/profiles.json (or set QBO_PROFILES_FILE).",
       }],
     };
   }
@@ -57,7 +57,7 @@ export async function handleSwitchProfile(
       content: [{
         type: "text",
         text: "Cannot switch profiles: no profiles config loaded. " +
-          "Create ~/.quickbooks-mcp/profiles.json to enable multi-company support.",
+          "Create ~/.qbo-mcp/profiles.json to enable multi-company support.",
       }],
       isError: true,
     };

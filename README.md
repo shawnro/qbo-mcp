@@ -47,7 +47,7 @@ Store credentials locally for personal use, or in AWS Secrets Manager for shared
 | **Write safety** | Executes immediately | Draft preview by default |
 | **Query approach** | Entity-specific search tools | SQL-like queries across all entities |
 | **Credentials** | Local `.env` file | Local file or AWS Secrets Manager |
-| **Distribution** | Clone from GitHub | `npx quickbooks-mcp` |
+| **Distribution** | Clone from GitHub | `npx qbo-mcp` |
 
 ## Prerequisites
 
@@ -87,7 +87,7 @@ Add to your project's `.mcp.json`:
   "mcpServers": {
     "quickbooks": {
       "command": "npx",
-      "args": ["-y", "quickbooks-mcp"]
+      "args": ["-y", "qbo-mcp"]
     }
   }
 }
@@ -95,7 +95,7 @@ Add to your project's `.mcp.json`:
 
 ### 3. Configure Credentials
 
-Create `~/.quickbooks-mcp/credentials.json`:
+Create `~/.qbo-mcp/credentials.json`:
 
 ```json
 {
@@ -129,7 +129,7 @@ Follow the same steps as Option 1 above.
 
 ```bash
 git clone https://github.com/laf-rge/quickbooks-mcp.git
-cd quickbooks-mcp
+cd qbo-mcp
 npm install
 npm run build
 ```
@@ -143,7 +143,7 @@ Add to your project's `.mcp.json`:
   "mcpServers": {
     "quickbooks": {
       "command": "node",
-      "args": ["/path/to/quickbooks-mcp/dist/index.js"]
+      "args": ["/path/to/qbo-mcp/dist/index.js"]
     }
   }
 }
@@ -151,7 +151,7 @@ Add to your project's `.mcp.json`:
 
 ### 4. Configure Credentials
 
-Create `~/.quickbooks-mcp/credentials.json` with your client credentials (same as Option 1), then run `qbo_authenticate` to complete the OAuth flow.
+Create `~/.qbo-mcp/credentials.json` with your client credentials (same as Option 1), then run `qbo_authenticate` to complete the OAuth flow.
 
 ---
 
@@ -186,7 +186,7 @@ aws ssm put-parameter \
 
 ### 2. Configure the Server
 
-Create a `.env` file in the quickbooks-mcp directory:
+Create a `.env` file in the qbo-mcp directory:
 
 ```bash
 QBO_CREDENTIAL_MODE=aws
@@ -204,7 +204,7 @@ QBO_COMPANY_ID_PARAM=/prod/qbo/company_id
   "mcpServers": {
     "quickbooks": {
       "command": "node",
-      "args": ["/path/to/quickbooks-mcp/dist/index.js"]
+      "args": ["/path/to/qbo-mcp/dist/index.js"]
     }
   }
 }
@@ -261,7 +261,7 @@ az keyvault secret set \
 
 ### 2. Configure the Server
 
-Create a `.env` file in the quickbooks-mcp directory:
+Create a `.env` file in the qbo-mcp directory:
 
 ```bash
 QBO_CREDENTIAL_MODE=azure
@@ -291,7 +291,7 @@ Ensure the identity has **Secret Get** and **Secret Set** permissions on the Key
   "mcpServers": {
     "quickbooks": {
       "command": "node",
-      "args": ["/path/to/quickbooks-mcp/dist/index.js"]
+      "args": ["/path/to/qbo-mcp/dist/index.js"]
     }
   }
 }
@@ -305,7 +305,7 @@ If you manage multiple QuickBooks companies, you can configure named profiles to
 
 ### 1. Create a Profiles Config File
 
-Create `~/.quickbooks-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
+Create `~/.qbo-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
 
 ```json
 {
@@ -364,7 +364,7 @@ Set `QBO_INLINE_OUTPUT=true` to return all responses inline instead.
 
 **Option A — via `.env` file** (recommended for local checkout):
 
-Create a `.env` file in the quickbooks-mcp directory:
+Create a `.env` file in the qbo-mcp directory:
 
 ```bash
 QBO_INLINE_OUTPUT=true
@@ -377,10 +377,10 @@ QBO_INLINE_OUTPUT=true
   "mcpServers": {
     "quickbooks": {
       "command": "npx",
-      "args": ["-y", "quickbooks-mcp"],
+      "args": ["-y", "qbo-mcp"],
       "env": {
         "QBO_CREDENTIAL_MODE": "local",
-        "QBO_CREDENTIAL_FILE": "~/.quickbooks-mcp/credentials.json",
+        "QBO_CREDENTIAL_FILE": "~/.qbo-mcp/credentials.json",
         "QBO_INLINE_OUTPUT": "true"
       }
     }
@@ -399,7 +399,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_CREDENTIAL_MODE` | `local` | Credential storage: `local`, `aws`, or `azure` |
 | `QBO_CLIENT_ID` | - | QuickBooks app Client ID (local mode) |
 | `QBO_CLIENT_SECRET` | - | QuickBooks app Client Secret (local mode) |
-| `QBO_CREDENTIAL_FILE` | `~/.quickbooks-mcp/credentials.json` | Custom credential file path |
+| `QBO_CREDENTIAL_FILE` | `~/.qbo-mcp/credentials.json` | Custom credential file path |
 | `QBO_INLINE_OUTPUT` | `false` | Return responses inline instead of writing to `/tmp` files. Required when using Claude Desktop or plugin environments where file-based output is not accessible to the model. |
 | `QBO_SANDBOX` | `false` | Use QuickBooks sandbox environment |
 | `AWS_REGION` | `us-east-2` | AWS region (aws mode) |
@@ -407,7 +407,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_COMPANY_ID_PARAM` | `/prod/qbo/company_id` | SSM parameter path (aws mode) |
 | `AZURE_KEY_VAULT_URL` | - | Key Vault URI, e.g. `https://myvault.vault.azure.net` (azure mode) |
 | `QBO_COMPANY_ID` | - | Fallback company ID if not in Key Vault secret (azure mode) |
-| `QBO_PROFILES_FILE` | `~/.quickbooks-mcp/profiles.json` | Path to multi-company profiles config |
+| `QBO_PROFILES_FILE` | `~/.qbo-mcp/profiles.json` | Path to multi-company profiles config |
 | `QBO_DISABLE_CREATE` | `false` | Hide all `create_*` tools (read-only mode for creates) |
 | `QBO_DISABLE_UPDATE` | `false` | Hide all `edit_*` tools (prevent modifications) |
 | `QBO_DISABLE_DELETE` | `false` | Hide `delete_entity` tool (prevent deletions) |

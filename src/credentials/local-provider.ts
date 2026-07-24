@@ -6,7 +6,7 @@ import { join, dirname } from "path";
 import type { CredentialProvider, QBCredentials } from "./types.js";
 
 // Default credential file location
-const DEFAULT_CREDENTIAL_PATH = join(homedir(), ".quickbooks-mcp", "credentials.json");
+const DEFAULT_CREDENTIAL_PATH = join(homedir(), ".qbo-mcp", "credentials.json");
 
 /**
  * Get the credential file path from environment or use default
@@ -17,7 +17,7 @@ function getCredentialPath(): string {
 
 /**
  * Local file-based credential provider
- * Stores credentials in ~/.quickbooks-mcp/credentials.json by default
+ * Stores credentials in ~/.qbo-mcp/credentials.json by default
  */
 export class LocalCredentialProvider implements CredentialProvider {
   private credentialPath: string;

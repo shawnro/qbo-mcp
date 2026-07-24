@@ -41,7 +41,7 @@ const MCP_SCOPE = process.env.MCP_AUTH_AUDIENCE && process.env.MCP_AUTH_SCOPE
 // Create MCP server
 function createServer(): Server {
   const server = new Server(
-    { name: "quickbooks-mcp", version: "1.0.0" },
+    { name: "qbo-mcp", version: "1.0.0" },
     { capabilities: { tools: {} } }
   );
 

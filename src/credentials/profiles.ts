@@ -30,10 +30,10 @@ let activeProfileName: string | null = null;
 
 /**
  * Resolve the profiles config file path.
- * Checks QBO_PROFILES_FILE env var, then falls back to ~/.quickbooks-mcp/profiles.json.
+ * Checks QBO_PROFILES_FILE env var, then falls back to ~/.qbo-mcp/profiles.json.
  */
 function getProfilesPath(): string {
-  return process.env.QBO_PROFILES_FILE || join(homedir(), ".quickbooks-mcp", "profiles.json");
+  return process.env.QBO_PROFILES_FILE || join(homedir(), ".qbo-mcp", "profiles.json");
 }
 
 /**

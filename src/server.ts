@@ -11,7 +11,7 @@ import { filterTools } from "./tools/crud-filter.js";
 // Create MCP server
 export const server = new Server(
   {
-    name: "quickbooks-mcp",
+    name: "qbo-mcp",
     version: "1.0.0",
   },
   {
