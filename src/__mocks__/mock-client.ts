@@ -68,6 +68,18 @@ export function createMockClient() {
     getCustomer: vi.fn(),
     updateCustomer: vi.fn(),
 
+    // Class
+    createClass: vi.fn(),
+    getClass: vi.fn(),
+    updateClass: vi.fn(),
+
+    // Attachable
+    createAttachable: vi.fn(),
+    getAttachable: vi.fn(),
+    updateAttachable: vi.fn(),
+    deleteAttachable: vi.fn(),
+    upload: vi.fn(),
+
     // Delete
     deleteJournalEntry: vi.fn(),
     deleteBill: vi.fn(),

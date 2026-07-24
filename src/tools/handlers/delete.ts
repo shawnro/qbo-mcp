@@ -4,7 +4,7 @@ import QuickBooks from "node-quickbooks";
 import { promisify } from "../../client/index.js";
 import { formatDollars, toCents } from "../../utils/index.js";
 
-type EntityType = "journal_entry" | "bill" | "invoice" | "deposit" | "sales_receipt" | "expense" | "vendor_credit" | "bill_payment";
+type EntityType = "journal_entry" | "bill" | "invoice" | "deposit" | "sales_receipt" | "expense" | "vendor_credit" | "bill_payment" | "attachable";
 
 interface EntityConfig {
   getMethod: string;
@@ -126,6 +126,18 @@ const ENTITY_CONFIG: Record<EntityType, EntityConfig> = {
       if (e.DocNumber) lines.push(`  Ref no.: ${e.DocNumber}`);
       if (e.TotalAmt != null) lines.push(`  Total: $${formatDollars(toCents(e.TotalAmt as number))}`);
       if (e.PrivateNote) lines.push(`  Memo: ${e.PrivateNote}`);
+      return lines.join("\n");
+    },
+  },
+  attachable: {
+    getMethod: "getAttachable",
+    deleteMethod: "deleteAttachable",
+    label: "Attachable",
+    formatSummary: (e) => {
+      const lines = [`Attachable #${e.Id}`];
+      if (e.FileName) lines.push(`  File: ${e.FileName}`);
+      if (e.Note) lines.push(`  Note: ${e.Note}`);
+      if (e.ContentType) lines.push(`  Content Type: ${e.ContentType}`);
       return lines.join("\n");
     },
   },

@@ -461,7 +461,15 @@ QBO_INLINE_OUTPUT=true
 | `create_bill_payment` | Pay bills and apply vendor credits (the QBO "check" / pay-bills flow) |
 | `get_bill_payment` | Fetch a bill payment by ID; flags unapplied amounts |
 | **Delete** | |
-| `delete_entity` | Delete any transaction (journal entry, bill, invoice, deposit, sales receipt, expense, vendor credit, bill payment) |
+| `delete_entity` | Delete any transaction (journal entry, bill, invoice, deposit, sales receipt, expense, vendor credit, bill payment, attachable) |
+| **Classes** | |
+| `create_class` | Create a class for categorizing transactions (supports sub-classes) |
+| `get_class` | Fetch a class by ID |
+| `edit_class` | Modify a class (name, active status, parent). Deactivate instead of delete. |
+| **Attachables** | |
+| `create_attachable` | Create an attachable — upload a local file or add a note, optionally linked to a transaction |
+| `get_attachable` | Fetch an attachable by ID (includes download URL for files) |
+| `edit_attachable` | Update attachable metadata (note, category, entity links). Cannot replace files. |
 | **Profiles** | |
 | `list_qbo_profiles` | List all configured company profiles and show which is active |
 | `switch_qbo_profile` | Switch to a different company profile |

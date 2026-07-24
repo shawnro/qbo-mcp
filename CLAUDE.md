@@ -129,3 +129,19 @@ Both builds must pass before committing. After changes, restart Claude Code to r
   - Purchase (Expense): `PaymentType`
 - Department/Location filtering must be done client-side (not in QB queries)
 - See `docs/quickbooks-api-limitations.md` for details
+
+### Classes
+
+- Classes are tracking categories for P&L segmentation (hierarchical, up to 5 levels)
+- QBO infers `SubClass: true` from presence of `ParentRef` — do NOT send it explicitly
+- Classes cannot be deleted — deactivate with `active: false` via `edit_class`
+- Parent resolution accepts name (case-insensitive lookup) or numeric ID
+
+### Attachables
+
+- File upload uses `node-quickbooks` `upload()` method (multipart/form-data)
+- `upload()` has an overloaded signature: pass callback as 4th arg for upload-only, or pass entityType+entityId+callback for upload+link. **Never pass empty strings** for entityType/entityId.
+- `edit_attachable` **replaces** the entire `AttachableRef` array (does not append)
+- File path security: blocks dotfiles, `.env`, `*.pem`, `*.key`, `tokens.json`, `credentials.json`
+- Max file size: 100 MB (QBO limit)
+- Cannot replace uploaded file bytes — must delete and re-create

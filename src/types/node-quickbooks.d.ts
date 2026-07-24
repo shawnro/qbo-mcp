@@ -63,6 +63,8 @@ declare module "node-quickbooks" {
     createCustomer(customer: object, callback: Callback<unknown>): void;
     createVendorCredit(vendorCredit: object, callback: Callback<unknown>): void;
     createBillPayment(billPayment: object, callback: Callback<unknown>): void;
+    createClass(cls: object, callback: Callback<unknown>): void;
+    createAttachable(attachable: object, callback: Callback<unknown>): void;
 
     // Get methods (single entity by ID)
     getJournalEntry(id: string, callback: Callback<unknown>): void;
@@ -74,6 +76,8 @@ declare module "node-quickbooks" {
     getCustomer(id: string, callback: Callback<unknown>): void;
     getVendorCredit(id: string, callback: Callback<unknown>): void;
     getBillPayment(id: string, callback: Callback<unknown>): void;
+    getClass(id: string, callback: Callback<unknown>): void;
+    getAttachable(id: string, callback: Callback<unknown>): void;
 
     // Update methods
     updateJournalEntry(journalEntry: object, callback: Callback<unknown>): void;
@@ -84,6 +88,8 @@ declare module "node-quickbooks" {
     updateDeposit(deposit: object, callback: Callback<unknown>): void;
     updateCustomer(customer: object, callback: Callback<unknown>): void;
     updateVendorCredit(vendorCredit: object, callback: Callback<unknown>): void;
+    updateClass(cls: object, callback: Callback<unknown>): void;
+    updateAttachable(attachable: object, callback: Callback<unknown>): void;
 
     // Delete methods
     deleteJournalEntry(idOrEntity: object | string, callback: Callback<unknown>): void;
@@ -94,6 +100,13 @@ declare module "node-quickbooks" {
     deletePurchase(idOrEntity: object | string, callback: Callback<unknown>): void;
     deleteVendorCredit(idOrEntity: object | string, callback: Callback<unknown>): void;
     deleteBillPayment(idOrEntity: object | string, callback: Callback<unknown>): void;
+    deleteAttachable(idOrEntity: object | string, callback: Callback<unknown>): void;
+
+    // File upload
+    upload(filename: string, contentType: string, stream: unknown, entityType: string, entityId: string, callback: Callback<unknown>): void;
+
+    // Finder methods for Attachables
+    findAttachables(criteria: object | string, callback: Callback<unknown>): void;
 
     // Reports
     reportBalanceSheet(options: object, callback: Callback<unknown>): void;

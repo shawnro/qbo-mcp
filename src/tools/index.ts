@@ -38,6 +38,12 @@ import {
   handleCreateCustomer,
   handleGetCustomer,
   handleEditCustomer,
+  handleCreateClass,
+  handleGetClass,
+  handleEditClass,
+  handleCreateAttachable,
+  handleGetAttachable,
+  handleEditAttachable,
   handleDeleteEntity,
   handleAuthenticate,
   handleListProfiles,
@@ -87,6 +93,12 @@ toolHandlers.set("get_bill_payment", (client, args) => handleGetBillPayment(clie
 toolHandlers.set("create_customer", (client, args) => handleCreateCustomer(client, args as Parameters<typeof handleCreateCustomer>[1]));
 toolHandlers.set("get_customer", (client, args) => handleGetCustomer(client, args as { id: string }));
 toolHandlers.set("edit_customer", (client, args) => handleEditCustomer(client, args as Parameters<typeof handleEditCustomer>[1]));
+toolHandlers.set("create_class", (client, args) => handleCreateClass(client, args as Parameters<typeof handleCreateClass>[1]));
+toolHandlers.set("get_class", (client, args) => handleGetClass(client, args as { id: string }));
+toolHandlers.set("edit_class", (client, args) => handleEditClass(client, args as Parameters<typeof handleEditClass>[1]));
+toolHandlers.set("create_attachable", (client, args) => handleCreateAttachable(client, args as Parameters<typeof handleCreateAttachable>[1]));
+toolHandlers.set("get_attachable", (client, args) => handleGetAttachable(client, args as { id: string }));
+toolHandlers.set("edit_attachable", (client, args) => handleEditAttachable(client, args as Parameters<typeof handleEditAttachable>[1]));
 toolHandlers.set("delete_entity", (client, args) => handleDeleteEntity(client, args as Parameters<typeof handleDeleteEntity>[1]));
 
 // Execute tool with auth retry logic

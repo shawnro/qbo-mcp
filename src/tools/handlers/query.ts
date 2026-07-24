@@ -35,6 +35,7 @@ export async function handleQuery(
     'Company': 'CompanyInfos',
     'Class': 'Classes',
     'TaxAgency': 'TaxAgencies',
+    'Attachable': 'Attachables',
   };
   const plural = pluralMap[entity] || `${entity}s`;
   const finderMethod = `find${plural}` as keyof QuickBooks;

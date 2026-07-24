@@ -23,6 +23,8 @@ export { handleCreateDeposit, handleGetDeposit, handleEditDeposit } from './depo
 export { handleCreateVendorCredit, handleGetVendorCredit, handleEditVendorCredit } from './vendor-credit.js';
 export { handleCreateBillPayment, handleGetBillPayment } from './bill-payment.js';
 export { handleCreateCustomer, handleGetCustomer, handleEditCustomer } from './customer.js';
+export { handleCreateClass, handleGetClass, handleEditClass } from './class.js';
+export { handleCreateAttachable, handleGetAttachable, handleEditAttachable } from './attachable.js';
 export { handleDeleteEntity } from './delete.js';
 export { handleAuthenticate } from './authenticate.js';
 export { handleListProfiles, handleSwitchProfile } from './profiles.js';

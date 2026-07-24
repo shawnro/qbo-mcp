@@ -1440,7 +1440,7 @@ export const toolDefinitions = [
       properties: {
         entity_type: {
           type: "string",
-          enum: ["journal_entry", "bill", "invoice", "deposit", "sales_receipt", "expense", "vendor_credit", "bill_payment"],
+          enum: ["journal_entry", "bill", "invoice", "deposit", "sales_receipt", "expense", "vendor_credit", "bill_payment", "attachable"],
           description: "The type of entity to delete.",
         },
         id: {
@@ -1698,6 +1698,174 @@ export const toolDefinitions = [
         draft: {
           type: "boolean",
           description: "If true, validate and show preview without saving (default: true)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_class",
+    description: "Create a class for categorizing transactions (e.g., business segments, locations, departments). Classes can be hierarchical — use parent_name or parent_id to create sub-classes. Set active=false to create in deactivated state.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Class name (must be unique at its level)",
+        },
+        parent_name: {
+          type: "string",
+          description: "Parent class name to create a sub-class. Looked up by name.",
+        },
+        parent_id: {
+          type: "string",
+          description: "Parent class ID to create a sub-class. Use instead of parent_name if you have the ID.",
+        },
+        active: {
+          type: "boolean",
+          description: "Whether the class is active (default: true)",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, show preview without creating (default: true)",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "get_class",
+    description: "Fetch a single class by ID with full details including SyncToken (needed for edits). Returns name, active status, hierarchy (parent/sub-class), and metadata.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "The class ID",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "edit_class",
+    description: "Modify an existing class. Can update name, active status, and parent. Set active=false to deactivate (QuickBooks does not support deleting classes). Clear parent by passing empty string for parent_name.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Class ID to edit",
+        },
+        name: {
+          type: "string",
+          description: "New class name",
+        },
+        active: {
+          type: "boolean",
+          description: "Set to false to deactivate class",
+        },
+        parent_name: {
+          type: "string",
+          description: "New parent class name. Empty string removes parent (makes top-level).",
+        },
+        parent_id: {
+          type: "string",
+          description: "New parent class ID. Use instead of parent_name if you have the ID.",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, show preview without saving (default: true)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_attachable",
+    description: "Create an attachable — either a file upload or a note. For file uploads, provide file_path to a local file (max 100 MB). For notes, provide note text. At least one of file_path or note is required. Optionally link to a transaction via entity_type and entity_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file_path: {
+          type: "string",
+          description: "Local file path to upload (e.g., receipts, invoices, contracts). Supports PDF, images, Office docs, CSV, TXT.",
+        },
+        note: {
+          type: "string",
+          description: "Note text. For file uploads, this becomes the file description.",
+        },
+        entity_type: {
+          type: "string",
+          description: "Entity type to link to (e.g., 'Invoice', 'Bill', 'Purchase', 'JournalEntry')",
+        },
+        entity_id: {
+          type: "string",
+          description: "Entity ID to link to. Must be used with entity_type.",
+        },
+        include_on_send: {
+          type: "boolean",
+          description: "If true, include this attachment when emailing the linked transaction",
+        },
+        category: {
+          type: "string",
+          description: "Category for the attachable (optional)",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, validate file and show preview without uploading (default: true)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_attachable",
+    description: "Fetch an attachable by ID. Returns file metadata (name, size, content type), note text, download URL (for files), linked entities, and SyncToken for edits.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "The attachable ID",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "edit_attachable",
+    description: "Update an attachable's metadata. Can change note text, category, or set an entity link (replaces all existing links). Cannot replace the uploaded file — to change a file, delete and re-create.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Attachable ID to edit",
+        },
+        note: {
+          type: "string",
+          description: "New note text",
+        },
+        category: {
+          type: "string",
+          description: "New category",
+        },
+        entity_type: {
+          type: "string",
+          description: "Entity type to link to (e.g., 'Invoice', 'Bill'). Replaces all existing links.",
+        },
+        entity_id: {
+          type: "string",
+          description: "Entity ID to link to. Must be used with entity_type. Replaces all existing links.",
+        },
+        include_on_send: {
+          type: "boolean",
+          description: "Include this attachment when emailing the linked transaction",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, show preview without saving (default: true)",
         },
       },
       required: ["id"],
