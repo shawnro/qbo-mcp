@@ -1,4 +1,4 @@
-Publish a new version of quickbooks-mcp to npm and the MCP Registry.
+Publish a new version of qbo-mcp to npm and the MCP Registry.
 
 ## Arguments
 
@@ -60,8 +60,8 @@ Only proceed after the user confirms npm publish succeeded.
 
 Print a summary:
 ```
-Published quickbooks-mcp v{new_version}
-  npm: https://www.npmjs.com/package/quickbooks-mcp
+Published qbo-mcp v{new_version}
+  npm: https://www.npmjs.com/package/qbo-mcp
   MCP Registry: https://registry.modelcontextprotocol.io/
-  GitHub: https://github.com/laf-rge/quickbooks-mcp
+  GitHub: https://github.com/shawnro/qbo-mcp
 ```

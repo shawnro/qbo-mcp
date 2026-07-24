@@ -40,7 +40,7 @@ function getVaultNameFromEnv() {
  */
 function getProfileSecrets() {
   const profilesPath = process.env.QBO_PROFILES_FILE
-    || join(require("os").homedir(), ".quickbooks-mcp", "profiles.json");
+    || join(require("os").homedir(), ".qbo-mcp", "profiles.json");
   if (!existsSync(profilesPath)) return null;
   try {
     const config = JSON.parse(readFileSync(profilesPath, "utf-8"));

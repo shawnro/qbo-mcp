@@ -246,5 +246,5 @@ The Entity `type` defaults to `"VENDOR"` for vendor cache matches. If customer e
 
 ## Backlog Update
 
-After implementation, update `docs/quickbooks-mcp-backlog.md`:
+After implementation, update `docs/qbo-mcp-backlog.md`:
 - Move `create_deposit` from Backlog to Completed under "Create Transaction Tools"

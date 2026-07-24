@@ -3,13 +3,13 @@
   "version": "0.5.2",
   "description": "MCP server for QuickBooks Online API integration",
   "license": "MIT",
-  "mcpName": "io.github.laf-rge/quickbooks-mcp",
-  "author": "laf-rge",
-  "homepage": "https://github.com/laf-rge/quickbooks-mcp",
-  "bugs": "https://github.com/laf-rge/quickbooks-mcp/issues",
+  "mcpName": "io.github.shawnro/qbo-mcp",
+  "author": "shawnro",
+  "homepage": "https://github.com/shawnro/qbo-mcp",
+  "bugs": "https://github.com/shawnro/qbo-mcp/issues",
   "repository": {
     "type": "git",
-    "url": "https://github.com/laf-rge/quickbooks-mcp.git"
+    "url": "https://github.com/shawnro/qbo-mcp.git"
   },
   "type": "module",
   "main": "dist/index.js",

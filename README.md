@@ -128,7 +128,7 @@ Follow the same steps as Option 1 above.
 ### 2. Clone and Build
 
 ```bash
-git clone https://github.com/laf-rge/quickbooks-mcp.git
+git clone https://github.com/shawnro/qbo-mcp.git
 cd qbo-mcp
 npm install
 npm run build

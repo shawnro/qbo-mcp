@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.laf-rge/qbo-mcp",
+  "name": "io.github.shawnro/qbo-mcp",
   "description": "MCP server for QuickBooks Online API integration",
   "repository": {
-    "url": "https://github.com/laf-rge/quickbooks-mcp",
+    "url": "https://github.com/shawnro/qbo-mcp",
     "source": "github"
   },
   "version": "0.5.2",
