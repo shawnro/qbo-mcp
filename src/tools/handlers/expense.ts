@@ -8,6 +8,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { resolveAccountRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
 
 interface CreateExpenseLine {
   account_id?: string;
@@ -59,65 +60,22 @@ export async function handleCreateExpense(
   ]);
 
   // Resolve payment account
-  const lookupAccount = (name: string): { id: string; name: string; acctNum?: string } => {
-    let match = acctCache.byAcctNum.get(name.toLowerCase());
-    if (!match) match = acctCache.byName.get(name.toLowerCase());
-    if (!match) match = acctCache.items.find(a =>
-      a.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase())
-    );
-    if (match) return { id: match.Id, name: match.FullyQualifiedName || match.Name, acctNum: match.AcctNum };
-    throw new Error(`Account not found: "${name}"`);
-  };
-
-  const paymentAcct = lookupAccount(payment_account);
-  const paymentAccountRef = { value: paymentAcct.id, name: paymentAcct.name };
+  const paymentAcct = resolveAccountRef(acctCache, payment_account);
+  const paymentAccountRef = { value: paymentAcct.value, name: paymentAcct.name };
 
   // Resolve vendor/entity (optional)
   let entityRef: { value: string; name: string; type: string } | undefined;
   const entityInput = entity_id || entity_name;
   if (entityInput) {
-    const byId = vendorCacheData.byId.get(entityInput);
-    if (byId) {
-      entityRef = { value: byId.Id, name: byId.DisplayName, type: "Vendor" };
-    } else {
-      const byName = vendorCacheData.byName.get(entityInput.toLowerCase());
-      if (byName) {
-        entityRef = { value: byName.Id, name: byName.DisplayName, type: "Vendor" };
-      } else {
-        const byPartial = vendorCacheData.items.find(v =>
-          v.DisplayName.toLowerCase().includes(entityInput.toLowerCase())
-        );
-        if (byPartial) {
-          entityRef = { value: byPartial.Id, name: byPartial.DisplayName, type: "Vendor" };
-        } else {
-          throw new Error(`Vendor not found: "${entityInput}"`);
-        }
-      }
-    }
+    const vendor = resolveVendorRef(vendorCacheData, entityInput);
+    entityRef = { ...vendor, type: "Vendor" };
   }
 
   // Resolve department (header-level, optional)
   let departmentRef: { value: string; name: string } | undefined;
   const deptInput = department_id || department_name;
   if (deptInput) {
-    const byId = deptCache.byId.get(deptInput);
-    if (byId) {
-      departmentRef = { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
-    } else {
-      const byName = deptCache.byName.get(deptInput.toLowerCase());
-      if (byName) {
-        departmentRef = { value: byName.Id, name: byName.FullyQualifiedName || byName.Name };
-      } else {
-        const byPartial = deptCache.items.find(d =>
-          d.FullyQualifiedName?.toLowerCase().includes(deptInput.toLowerCase())
-        );
-        if (byPartial) {
-          departmentRef = { value: byPartial.Id, name: byPartial.FullyQualifiedName || byPartial.Name };
-        } else {
-          throw new Error(`Department not found: "${deptInput}"`);
-        }
-      }
-    }
+    departmentRef = resolveDepartmentRef(deptCache, deptInput);
   }
 
   // Resolve lines
@@ -127,8 +85,8 @@ export async function handleCreateExpense(
     let accountNum: string | undefined;
 
     if (!accountId && accountName) {
-      const account = lookupAccount(accountName);
-      accountId = account.id;
+      const account = resolveAccountRef(acctCache, accountName);
+      accountId = account.value;
       accountName = account.name;
       accountNum = account.acctNum;
     } else if (!accountId && !accountName) {
@@ -388,48 +346,22 @@ export async function handleEditExpense(
   // Resolve payment account if provided
   if (payment_account !== undefined) {
     const acctCache = await getAccountCache(client);
-    let match = acctCache.byAcctNum.get(payment_account.toLowerCase());
-    if (!match) match = acctCache.byName.get(payment_account.toLowerCase());
-    if (!match) match = acctCache.items.find(a =>
-      a.FullyQualifiedName?.toLowerCase().includes(payment_account.toLowerCase())
-    );
-    if (!match) throw new Error(`Payment account not found: "${payment_account}"`);
-    updated.AccountRef = { value: match.Id, name: match.FullyQualifiedName || match.Name };
+    const resolved = resolveAccountRef(acctCache, payment_account);
+    updated.AccountRef = { value: resolved.value, name: resolved.name };
   }
 
   // Resolve header-level department if provided
   if (department_name !== undefined) {
     const deptCache = await getDepartmentCache(client);
-    let match = deptCache.byName.get(department_name.toLowerCase());
-    if (!match) match = deptCache.items.find(d =>
-      d.FullyQualifiedName?.toLowerCase().includes(department_name.toLowerCase())
-    );
-    if (!match) throw new Error(`Department not found: "${department_name}"`);
-    updated.DepartmentRef = { value: match.Id, name: match.FullyQualifiedName || match.Name };
+    updated.DepartmentRef = resolveDepartmentRef(deptCache, department_name);
   }
 
   // Resolve entity (vendor/payee) if provided
   const entityInput = entity_id || entity_name;
   if (entityInput) {
     const vendorCacheData = await getVendorCache(client);
-    const byId = vendorCacheData.byId.get(entityInput);
-    if (byId) {
-      updated.EntityRef = { value: byId.Id, name: byId.DisplayName, type: "Vendor" };
-    } else {
-      const byName = vendorCacheData.byName.get(entityInput.toLowerCase());
-      if (byName) {
-        updated.EntityRef = { value: byName.Id, name: byName.DisplayName, type: "Vendor" };
-      } else {
-        const byPartial = vendorCacheData.items.find(v =>
-          v.DisplayName.toLowerCase().includes(entityInput.toLowerCase())
-        );
-        if (byPartial) {
-          updated.EntityRef = { value: byPartial.Id, name: byPartial.DisplayName, type: "Vendor" };
-        } else {
-          throw new Error(`Vendor not found: "${entityInput}"`);
-        }
-      }
-    }
+    const vendor = resolveVendorRef(vendorCacheData, entityInput);
+    updated.EntityRef = { ...vendor, type: "Vendor" };
   }
 
   // Process line changes if provided
@@ -438,16 +370,6 @@ export async function handleEditExpense(
 
   if (lineChanges && lineChanges.length > 0) {
     const acctCache = await getAccountCache(client);
-
-    const resolveAcct = (name: string) => {
-      let match = acctCache.byAcctNum.get(name.toLowerCase());
-      if (!match) match = acctCache.byName.get(name.toLowerCase());
-      if (!match) match = acctCache.items.find(a =>
-        a.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase())
-      );
-      if (!match) throw new Error(`Account not found: "${name}"`);
-      return { value: match.Id, name: match.FullyQualifiedName || match.Name };
-    };
 
     for (const change of lineChanges) {
       if (change.line_id) {
@@ -470,7 +392,7 @@ export async function handleEditExpense(
             line.Amount = toDollars(amountCents);
           }
           if (change.description !== undefined) line.Description = change.description;
-          if (change.account_name !== undefined) detail.AccountRef = resolveAcct(change.account_name);
+          if (change.account_name !== undefined) detail.AccountRef = resolveAccountRef(acctCache, change.account_name);
 
           line.AccountBasedExpenseLineDetail = detail;
           line.DetailType = 'AccountBasedExpenseLineDetail';
@@ -490,7 +412,7 @@ export async function handleEditExpense(
           Description: change.description,
           DetailType: 'AccountBasedExpenseLineDetail',
           AccountBasedExpenseLineDetail: {
-            AccountRef: resolveAcct(change.account_name),
+            AccountRef: resolveAccountRef(acctCache, change.account_name),
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);

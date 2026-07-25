@@ -8,7 +8,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, toCents, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import type { AccountCache, DepartmentCache, VendorCache } from "../../types/index.js";
+import { resolveAccountRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
 
 // --- Interfaces ---
 
@@ -55,54 +55,6 @@ interface Deposit {
   DepositToAccountRef?: { value: string; name?: string };
   DepartmentRef?: { value: string; name?: string };
   Line?: DepositLine[];
-}
-
-// --- Shared resolution helpers ---
-
-function resolveAccountRef(
-  acctCache: AccountCache,
-  name: string
-): { value: string; name: string } {
-  let match = acctCache.byAcctNum.get(name.toLowerCase());
-  if (!match) match = acctCache.byName.get(name.toLowerCase());
-  if (!match) match = acctCache.items.find(a =>
-    a.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase())
-  );
-  if (!match) throw new Error(`Account not found: "${name}"`);
-  return { value: match.Id, name: match.FullyQualifiedName || match.Name };
-}
-
-function resolveDepartmentRef(
-  deptCache: DepartmentCache,
-  nameOrId: string
-): { value: string; name: string } {
-  const byId = deptCache.byId.get(nameOrId);
-  if (byId) return { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
-
-  let match = deptCache.byName.get(nameOrId.toLowerCase());
-  if (!match) match = deptCache.items.find(d =>
-    d.FullyQualifiedName?.toLowerCase().includes(nameOrId.toLowerCase())
-  );
-  if (!match) throw new Error(`Department not found: "${nameOrId}"`);
-  return { value: match.Id, name: match.FullyQualifiedName || match.Name };
-}
-
-function resolveEntityRef(
-  vendorCache: VendorCache,
-  nameOrId: string
-): { value: string; name: string; type: string } {
-  const byId = vendorCache.byId.get(nameOrId);
-  if (byId) return { value: byId.Id, name: byId.DisplayName, type: "VENDOR" };
-
-  const byName = vendorCache.byName.get(nameOrId.toLowerCase());
-  if (byName) return { value: byName.Id, name: byName.DisplayName, type: "VENDOR" };
-
-  const byPartial = vendorCache.items.find(v =>
-    v.DisplayName.toLowerCase().includes(nameOrId.toLowerCase())
-  );
-  if (byPartial) return { value: byPartial.Id, name: byPartial.DisplayName, type: "VENDOR" };
-
-  throw new Error(`Vendor not found: "${nameOrId}"`);
 }
 
 // --- Handlers ---
@@ -170,9 +122,11 @@ export async function handleCreateDeposit(
     // Resolve entity if provided
     let entityRef: { value: string; name: string; type: string } | undefined;
     if (line.entity_id) {
-      entityRef = resolveEntityRef(vendorCacheData, line.entity_id);
+      const ref = resolveVendorRef(vendorCacheData, line.entity_id);
+      entityRef = { ...ref, type: "VENDOR" };
     } else if (line.entity_name) {
-      entityRef = resolveEntityRef(vendorCacheData, line.entity_name);
+      const ref = resolveVendorRef(vendorCacheData, line.entity_name);
+      entityRef = { ...ref, type: "VENDOR" };
     }
 
     return {

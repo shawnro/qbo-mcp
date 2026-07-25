@@ -9,6 +9,7 @@ import {
   resolveCustomer,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { resolveAccountRef, resolveDepartmentRef } from "../resolve.js";
 
 interface SalesReceiptLineChange {
   line_id?: string;
@@ -67,13 +68,8 @@ export async function handleCreateSalesReceipt(
   let depositAccountRef: { value: string; name: string } | undefined;
   if (deposit_to_account) {
     const acctCache = await getAccountCache(client);
-    let match = acctCache.byAcctNum.get(deposit_to_account.toLowerCase());
-    if (!match) match = acctCache.byName.get(deposit_to_account.toLowerCase());
-    if (!match) match = acctCache.items.find(a =>
-      a.FullyQualifiedName?.toLowerCase().includes(deposit_to_account.toLowerCase())
-    );
-    if (!match) throw new Error(`Deposit account not found: "${deposit_to_account}"`);
-    depositAccountRef = { value: match.Id, name: match.FullyQualifiedName || match.Name };
+    const resolved = resolveAccountRef(acctCache, deposit_to_account);
+    depositAccountRef = { value: resolved.value, name: resolved.name };
   }
 
   // Resolve department (header-level, optional)
@@ -81,24 +77,7 @@ export async function handleCreateSalesReceipt(
   const deptInput = department_id || department_name;
   if (deptInput) {
     const deptCache = await getDepartmentCache(client);
-    const byId = deptCache.byId.get(deptInput);
-    if (byId) {
-      departmentRef = { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
-    } else {
-      const byName = deptCache.byName.get(deptInput.toLowerCase());
-      if (byName) {
-        departmentRef = { value: byName.Id, name: byName.FullyQualifiedName || byName.Name };
-      } else {
-        const byPartial = deptCache.items.find(d =>
-          d.FullyQualifiedName?.toLowerCase().includes(deptInput.toLowerCase())
-        );
-        if (byPartial) {
-          departmentRef = { value: byPartial.Id, name: byPartial.FullyQualifiedName || byPartial.Name };
-        } else {
-          throw new Error(`Department not found: "${deptInput}"`);
-        }
-      }
-    }
+    departmentRef = resolveDepartmentRef(deptCache, deptInput);
   }
 
   // Resolve lines
@@ -357,26 +336,15 @@ export async function handleEditSalesReceipt(
 
   // Resolve deposit_to_account if provided (needs account cache)
   if (deposit_to_account !== undefined) {
-    const { getAccountCache } = await import("../../client/index.js");
     const acctCache = await getAccountCache(client);
-    let match = acctCache.byAcctNum.get(deposit_to_account.toLowerCase());
-    if (!match) match = acctCache.byName.get(deposit_to_account.toLowerCase());
-    if (!match) match = acctCache.items.find(a =>
-      a.FullyQualifiedName?.toLowerCase().includes(deposit_to_account.toLowerCase())
-    );
-    if (!match) throw new Error(`Deposit account not found: "${deposit_to_account}"`);
-    updated.DepositToAccountRef = { value: match.Id, name: match.FullyQualifiedName || match.Name };
+    const resolved = resolveAccountRef(acctCache, deposit_to_account);
+    updated.DepositToAccountRef = { value: resolved.value, name: resolved.name };
   }
 
   // Resolve header-level department if provided
   if (department_name !== undefined) {
     const deptCache = await getDepartmentCache(client);
-    let match = deptCache.byName.get(department_name.toLowerCase());
-    if (!match) match = deptCache.items.find(d =>
-      d.FullyQualifiedName?.toLowerCase().includes(department_name.toLowerCase())
-    );
-    if (!match) throw new Error(`Department not found: "${department_name}"`);
-    updated.DepartmentRef = { value: match.Id, name: match.FullyQualifiedName || match.Name };
+    updated.DepartmentRef = resolveDepartmentRef(deptCache, department_name);
   }
 
   // Process line changes if provided
