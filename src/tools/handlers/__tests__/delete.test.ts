@@ -145,7 +145,7 @@ describe("handleDeleteEntity", () => {
   });
 
   describe("delete mode (confirm=true)", () => {
-    it("calls deleteMethod with correct Id", async () => {
+    it("passes the ID so the SDK fetches the current SyncToken before deletion", async () => {
       mockSuccess(client.deleteJournalEntry, {});
 
       const result = await handleDeleteEntity(client as never, {
@@ -155,9 +155,8 @@ describe("handleDeleteEntity", () => {
       });
 
       expect(client.deleteJournalEntry).toHaveBeenCalledOnce();
-      // Verify the Id argument shape
       const callArgs = client.deleteJournalEntry.mock.calls[0];
-      expect(callArgs[0]).toEqual({ Id: "42" });
+      expect(callArgs[0]).toBe("42");
       expect(result.content[0].text).toBe("Deleted Journal Entry #42.");
     });
 
@@ -171,7 +170,21 @@ describe("handleDeleteEntity", () => {
       });
 
       expect(client.deleteBillPayment).toHaveBeenCalledOnce();
-      expect(client.deleteBillPayment.mock.calls[0][0]).toEqual({ Id: "99" });
+      expect(client.deleteBillPayment.mock.calls[0][0]).toBe("99");
+    });
+
+    it("passes an attachable ID so the SDK fetches its current SyncToken", async () => {
+      mockSuccess(client.deleteAttachable, {});
+
+      const result = await handleDeleteEntity(client as never, {
+        entity_type: "attachable",
+        id: "77",
+        confirm: true,
+      });
+
+      expect(client.deleteAttachable).toHaveBeenCalledOnce();
+      expect(client.deleteAttachable.mock.calls[0][0]).toBe("77");
+      expect(result.content[0].text).toBe("Deleted Attachable #77.");
     });
 
     it("does not call getMethod when confirming", async () => {
