@@ -8,7 +8,13 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { createResolutionCoordinator, resolveOptionalCustomerRef, toEntityRef } from "../resolve.js";
+import {
+  applyCustomerRefChange,
+  createResolutionCoordinator,
+  hasCustomerRefChange,
+  resolveOptionalCustomerRef,
+  toEntityRef,
+} from "../resolve.js";
 
 interface CreateBillLine {
   account_id?: string;
@@ -22,6 +28,9 @@ interface CreateBillLine {
 interface BillLineChange {
   line_id?: string;
   account_name?: string;
+  customer_id?: string;
+  customer_name?: string;
+  clear_customer?: boolean;
   amount?: number;
   description?: string;
   delete?: boolean;
@@ -306,6 +315,13 @@ export async function handleEditBill(
     PrivateNote?: string;
     DepartmentRef?: { value: string; name?: string };
     VendorRef: { value: string; name?: string };
+    APAccountRef?: { value: string; name?: string };
+    SalesTermRef?: { value: string; name?: string };
+    CurrencyRef?: { value: string; name?: string };
+    ExchangeRate?: number;
+    GlobalTaxCalculation?: string;
+    TxnTaxDetail?: unknown;
+    IncludeInAnnualTPAR?: boolean;
     Line: Array<{
       Id: string;
       Amount: number;
@@ -354,6 +370,13 @@ export async function handleEditBill(
     if (current.DepartmentRef) {
       updated.DepartmentRef = current.DepartmentRef;
     }
+    if (current.APAccountRef) updated.APAccountRef = current.APAccountRef;
+    if (current.SalesTermRef) updated.SalesTermRef = current.SalesTermRef;
+    if (current.CurrencyRef) updated.CurrencyRef = current.CurrencyRef;
+    if (current.ExchangeRate !== undefined) updated.ExchangeRate = current.ExchangeRate;
+    if (current.GlobalTaxCalculation !== undefined) updated.GlobalTaxCalculation = current.GlobalTaxCalculation;
+    if (current.TxnTaxDetail !== undefined) updated.TxnTaxDetail = current.TxnTaxDetail;
+    if (current.IncludeInAnnualTPAR !== undefined) updated.IncludeInAnnualTPAR = current.IncludeInAnnualTPAR;
     // Copy lines and strip read-only fields
     updated.Line = current.Line.map(line => {
       const { LineNum, ...rest } = line as Record<string, unknown>;
@@ -387,9 +410,14 @@ export async function handleEditBill(
           finalLines.splice(lineIndex, 1);
         } else {
           const line = { ...finalLines[lineIndex] };
+          if (hasCustomerRefChange(change) && !line.AccountBasedExpenseLineDetail) {
+            throw new Error(`Line ${change.line_id}: customer/job can only be changed on account-based lines`);
+          }
           const detail = { ...(line.AccountBasedExpenseLineDetail || {}) } as {
             AccountRef: { value: string; name?: string };
             DepartmentRef?: { value: string; name?: string };
+            CustomerRef?: { value: string; name?: string };
+            BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
           };
 
           if (change.amount !== undefined) {
@@ -398,6 +426,7 @@ export async function handleEditBill(
           }
           if (change.description !== undefined) line.Description = change.description;
           if (change.account_name !== undefined) detail.AccountRef = toEntityRef(await resolver.account(change.account_name));
+          await applyCustomerRefChange(resolver, detail, change, `Line ${change.line_id}`);
 
           line.AccountBasedExpenseLineDetail = detail;
           line.DetailType = 'AccountBasedExpenseLineDetail';
@@ -407,9 +436,13 @@ export async function handleEditBill(
         if (!change.amount || !change.account_name) {
           throw new Error('New lines require amount and account_name');
         }
+        if (change.clear_customer) {
+          throw new Error('New lines cannot clear a customer/job assignment');
+        }
 
         // Validate and normalize the amount
         const amountCents = validateAmount(change.amount, `New line for ${change.account_name}`);
+        const customerRef = await resolveOptionalCustomerRef(resolver, change);
 
         // Id omitted for new lines - QB will assign
         const newLine = {
@@ -418,6 +451,10 @@ export async function handleEditBill(
           DetailType: 'AccountBasedExpenseLineDetail',
           AccountBasedExpenseLineDetail: {
             AccountRef: toEntityRef(await resolver.account(change.account_name)),
+            ...(customerRef && {
+              CustomerRef: customerRef,
+              BillableStatus: "NotBillable",
+            }),
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);
@@ -454,7 +491,10 @@ export async function handleEditBill(
         if (detail) {
           const acctName = detail.AccountRef.name || detail.AccountRef.value;
           const deptStr = detail.DepartmentRef?.name ? ` [${detail.DepartmentRef.name}]` : '';
-          previewLines.push(`  ${acctName}${deptStr}: $${line.Amount.toFixed(2)}`);
+          const customerName = detail.CustomerRef?.name || detail.CustomerRef?.value;
+          const customerStr = customerName ? ` [Customer/Job: ${customerName}]` : '';
+          const billableStr = detail.BillableStatus ? ` [${detail.BillableStatus}]` : '';
+          previewLines.push(`  ${acctName}${deptStr}${customerStr}${billableStr}: $${line.Amount.toFixed(2)}`);
         }
       }
     }

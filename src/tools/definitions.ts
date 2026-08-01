@@ -444,7 +444,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_bill",
-    description: "Modify an existing bill. Can update vendor, date, due date, memo, and/or lines. For lines: provide line_id to update existing line, omit to add new line, set delete=true to remove. Note: DepartmentRef is header-level only — lines do not support department.",
+    description: "Modify an existing bill. Can update vendor, date, due date, memo, and/or lines. Account-based lines can preserve, assign, change, or clear a customer/job without changing billable status. Provide line_id to update existing, omit to add new, or set delete=true to remove. Note: DepartmentRef is header-level only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -497,6 +497,18 @@ export const toolDefinitions = [
               description: {
                 type: "string",
                 description: "Line description",
+              },
+              customer_name: {
+                type: "string",
+                description: "Assign or replace the line customer/job by display or fully qualified name. Mutually exclusive with customer_id and clear_customer.",
+              },
+              customer_id: {
+                type: "string",
+                description: "Assign or replace the line customer/job by ID. Mutually exclusive with customer_name and clear_customer.",
+              },
+              clear_customer: {
+                type: "boolean",
+                description: "Set true to remove the line CustomerRef. Rejected for Billable or HasBeenBilled lines and new lines.",
               },
               delete: {
                 type: "boolean",
@@ -1307,7 +1319,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_vendor_credit",
-    description: "Modify an existing vendor credit. Can update vendor, date, memo, ref number, and/or lines. For lines: provide line_id to update existing line, omit line_id to add new line (requires amount and account_name), set delete=true to remove. Note: DepartmentRef is header-level only — lines do not support department.",
+    description: "Modify an existing vendor credit. Can update vendor, date, memo, ref number, and/or lines. Account-based lines can preserve, assign, change, or clear a customer/job without changing billable status. Provide line_id to update existing, omit to add new, or set delete=true to remove. Note: DepartmentRef is header-level only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1352,6 +1364,18 @@ export const toolDefinitions = [
               description: {
                 type: "string",
                 description: "Line description",
+              },
+              customer_name: {
+                type: "string",
+                description: "Assign or replace the line customer/job by display or fully qualified name. Mutually exclusive with customer_id and clear_customer.",
+              },
+              customer_id: {
+                type: "string",
+                description: "Assign or replace the line customer/job by ID. Mutually exclusive with customer_name and clear_customer.",
+              },
+              clear_customer: {
+                type: "boolean",
+                description: "Set true to remove the line CustomerRef. Rejected for Billable or HasBeenBilled lines and new lines.",
               },
               delete: {
                 type: "boolean",

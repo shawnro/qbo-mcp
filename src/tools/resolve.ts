@@ -136,6 +136,48 @@ export async function resolveOptionalCustomerRef(
   return undefined;
 }
 
+export interface CustomerRefChange {
+  customer_name?: string;
+  customer_id?: string;
+  clear_customer?: boolean;
+}
+
+export interface CustomerRefDetail {
+  CustomerRef?: { value: string; name?: string };
+  BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
+}
+
+export function hasCustomerRefChange(change: CustomerRefChange): boolean {
+  return Boolean(change.customer_name?.trim() || change.customer_id?.trim() || change.clear_customer);
+}
+
+export async function applyCustomerRefChange(
+  resolver: ResolutionCoordinator,
+  detail: CustomerRefDetail,
+  change: CustomerRefChange,
+  label: string
+): Promise<void> {
+  const hasAssignment = Boolean(change.customer_name?.trim() || change.customer_id?.trim());
+  if (change.clear_customer && hasAssignment) {
+    throw new Error(`${label}: clear_customer cannot be combined with customer_name or customer_id`);
+  }
+  if (!change.clear_customer && !hasAssignment) return;
+
+  if (detail.BillableStatus === "HasBeenBilled") {
+    throw new Error(`${label}: customer/job cannot be changed after the line has been billed`);
+  }
+
+  if (change.clear_customer) {
+    if (detail.BillableStatus === "Billable") {
+      throw new Error(`${label}: customer/job cannot be cleared while the line is Billable`);
+    }
+    delete detail.CustomerRef;
+    return;
+  }
+
+  detail.CustomerRef = await resolveOptionalCustomerRef(resolver, change);
+}
+
 /**
  * Create an invocation-scoped resolver that retries a cache miss once after a
  * forced refresh. Concurrent misses share one refresh promise per entity type.

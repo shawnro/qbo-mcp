@@ -444,6 +444,10 @@ describe("handleEditBill", () => {
     VendorRef: { value: "100", name: "Office Depot" },
     DepartmentRef: { value: "10", name: "Main Office" },
     APAccountRef: { value: "4", name: "Accounts Payable" },
+    SalesTermRef: { value: "3", name: "Net 30" },
+    CurrencyRef: { value: "USD", name: "United States Dollar" },
+    ExchangeRate: 1,
+    IncludeInAnnualTPAR: false,
     TotalAmt: 150,
     Line: [
       {
@@ -451,7 +455,12 @@ describe("handleEditBill", () => {
         Amount: 150,
         DetailType: "AccountBasedExpenseLineDetail",
         Description: "Supplies",
-        AccountBasedExpenseLineDetail: { AccountRef: { value: "5", name: "Office Supplies" } },
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "5", name: "Office Supplies" },
+          CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          BillableStatus: "NotBillable",
+          TaxCodeRef: { value: "NON" },
+        },
       },
     ],
   };
@@ -463,6 +472,8 @@ describe("handleEditBill", () => {
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
     mockSuccess(client.getBill, existingBill);
   });
 
@@ -493,6 +504,124 @@ describe("handleEditBill", () => {
     const payload = client.updateBill.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
     expect(payload.Line).toBeDefined();
+    expect(payload.Line[0].AccountBasedExpenseLineDetail).toMatchObject({
+      CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+      BillableStatus: "NotBillable",
+      TaxCodeRef: { value: "NON" },
+    });
+    expect(payload.APAccountRef).toEqual(existingBill.APAccountRef);
+    expect(payload.SalesTermRef).toEqual(existingBill.SalesTermRef);
+    expect(payload.CurrencyRef).toEqual(existingBill.CurrencyRef);
+    expect(payload.ExchangeRate).toBe(1);
+    expect(payload.IncludeInAnnualTPAR).toBe(false);
+  });
+
+  it("changes an existing line customer/job by name", async () => {
+    mockSuccess(client.updateBill, { Id: "500", SyncToken: "3" });
+
+    await handleEditBill(client as never, {
+      id: "500",
+      draft: false,
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+    });
+
+    const detail = client.updateBill.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+    expect(detail.TaxCodeRef).toEqual({ value: "NON" });
+  });
+
+  it("changes an existing line customer/job by ID", async () => {
+    mockSuccess(client.updateBill, { Id: "500", SyncToken: "3" });
+
+    await handleEditBill(client as never, {
+      id: "500",
+      draft: false,
+      lines: [{ line_id: "1", customer_id: "301" }],
+    });
+
+    const detail = client.updateBill.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+  });
+
+  it("clears a customer/job from a NotBillable line", async () => {
+    mockSuccess(client.updateBill, { Id: "500", SyncToken: "3" });
+
+    await handleEditBill(client as never, {
+      id: "500",
+      draft: false,
+      lines: [{ line_id: "1", clear_customer: true }],
+    });
+
+    const detail = client.updateBill.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail).not.toHaveProperty("CustomerRef");
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("adds a new NotBillable line with a customer/job", async () => {
+    mockSuccess(client.updateBill, { Id: "500", SyncToken: "3" });
+
+    await handleEditBill(client as never, {
+      id: "500",
+      draft: false,
+      lines: [{ account_name: "Cash", amount: 10, customer_name: "Customer One:Job One" }],
+    });
+
+    const detail = client.updateBill.mock.calls[0][0].Line[1].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("shows the changed customer/job in draft without updating", async () => {
+    const result = await handleEditBill(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.updateBill).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["HasBeenBilled", { customer_name: "Customer One:Job One" }, "after the line has been billed"],
+    ["Billable", { clear_customer: true }, "while the line is Billable"],
+  ] as const)("protects %s customer/job state", async (status, change, message) => {
+    mockSuccess(client.getBill, {
+      ...existingBill,
+      Line: [{
+        ...existingBill.Line[0],
+        AccountBasedExpenseLineDetail: {
+          ...existingBill.Line[0].AccountBasedExpenseLineDetail,
+          BillableStatus: status,
+        },
+      }],
+    });
+
+    await expect(handleEditBill(client as never, {
+      id: "500",
+      draft: false,
+      lines: [{ line_id: "1", ...change }],
+    })).rejects.toThrow(message);
+    expect(client.updateBill).not.toHaveBeenCalled();
+  });
+
+  it("rejects customer mutation on an item-based line", async () => {
+    mockSuccess(client.getBill, {
+      ...existingBill,
+      Line: [{
+        Id: "2",
+        Amount: 50,
+        DetailType: "ItemBasedExpenseLineDetail",
+        ItemBasedExpenseLineDetail: { ItemRef: { value: "10", name: "Widget" } },
+      }],
+    });
+
+    await expect(handleEditBill(client as never, {
+      id: "500",
+      draft: false,
+      lines: [{ line_id: "2", customer_name: "Customer One:Job One" }],
+    })).rejects.toThrow("account-based lines");
+    expect(client.updateBill).not.toHaveBeenCalled();
   });
 
   it("propagates API errors", async () => {

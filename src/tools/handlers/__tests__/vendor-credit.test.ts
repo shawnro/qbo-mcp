@@ -341,19 +341,36 @@ describe("handleEditVendorCredit", () => {
     Id: "500",
     SyncToken: "3",
     VendorRef: { value: "100", name: "Office Depot" },
+    APAccountRef: { value: "4", name: "Accounts Payable" },
+    CurrencyRef: { value: "USD", name: "United States Dollar" },
+    ExchangeRate: 1,
+    IncludeInAnnualTPAR: false,
     TxnDate: "2024-06-15",
     TotalAmt: 200,
     Line: [
-      { Id: "1", Amount: 200, DetailType: "AccountBasedExpenseLineDetail", AccountBasedExpenseLineDetail: { AccountRef: { value: "3", name: "Rent Expense" } } },
+      {
+        Id: "1",
+        Amount: 200,
+        DetailType: "AccountBasedExpenseLineDetail",
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "3", name: "Rent Expense" },
+          CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          BillableStatus: "NotBillable",
+          TaxCodeRef: { value: "NON" },
+        },
+      },
     ],
   };
 
   beforeEach(() => {
     client = createMockClient();
     resetMockClient(client);
+    vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
     mockSuccess(client.getVendorCredit, existingVC);
   });
 
@@ -386,6 +403,90 @@ describe("handleEditVendorCredit", () => {
     expect(client.updateVendorCredit).toHaveBeenCalledOnce();
     const payload = client.updateVendorCredit.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
+    expect(payload.Line[0].AccountBasedExpenseLineDetail).toMatchObject({
+      CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+      BillableStatus: "NotBillable",
+      TaxCodeRef: { value: "NON" },
+    });
+    expect(payload.APAccountRef).toEqual(existingVC.APAccountRef);
+    expect(payload.CurrencyRef).toEqual(existingVC.CurrencyRef);
+    expect(payload.ExchangeRate).toBe(1);
+    expect(payload.IncludeInAnnualTPAR).toBe(false);
+  });
+
+  it("changes an existing line customer/job", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+      draft: false,
+    });
+
+    const detail = client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+    expect(detail.TaxCodeRef).toEqual({ value: "NON" });
+  });
+
+  it("clears a customer/job from a NotBillable line", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", clear_customer: true }],
+      draft: false,
+    });
+
+    const detail = client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail).not.toHaveProperty("CustomerRef");
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("adds a new NotBillable line with a customer/job by ID", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ account_name: "Cash", amount: 25, customer_id: "301" }],
+      draft: false,
+    });
+
+    const detail = client.updateVendorCredit.mock.calls[0][0].Line[1].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("shows the changed customer/job in draft without updating", async () => {
+    const result = await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
+  });
+
+  it("rejects conflicting customer edit inputs", async () => {
+    await expect(handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{
+        line_id: "1",
+        customer_name: "Customer One:Job One",
+        clear_customer: true,
+      }],
+      draft: false,
+    })).rejects.toThrow("cannot be combined");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
+  });
+
+  it("rejects clearing a customer on a new line", async () => {
+    await expect(handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ account_name: "Cash", amount: 25, clear_customer: true }],
+      draft: false,
+    })).rejects.toThrow("New lines cannot clear");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
   });
 
   it("deletes a line when delete=true", async () => {
