@@ -513,6 +513,15 @@ describe("handleEditVendorCredit", () => {
     expect(payload.Line[0].Id).toBe("2");
   });
 
+  it("rejects delete combined with customer clearing", async () => {
+    await expect(handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", delete: true, clear_customer: true }],
+      draft: false,
+    })).rejects.toThrow("delete cannot be combined with customer/job");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
+  });
+
   it("throws when line_id not found", async () => {
     await expect(
       handleEditVendorCredit(client as never, {

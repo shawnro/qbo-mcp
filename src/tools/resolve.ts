@@ -151,6 +151,15 @@ export function hasCustomerRefChange(change: CustomerRefChange): boolean {
   return Boolean(change.customer_name?.trim() || change.customer_id?.trim() || change.clear_customer);
 }
 
+export function assertNoCustomerRefChangeOnDelete(
+  change: CustomerRefChange & { delete?: boolean },
+  label: string
+): void {
+  if (change.delete && hasCustomerRefChange(change)) {
+    throw new Error(`${label}: delete cannot be combined with customer/job assignment or clearing`);
+  }
+}
+
 export async function applyCustomerRefChange(
   resolver: ResolutionCoordinator,
   detail: CustomerRefDetail,

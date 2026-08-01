@@ -10,6 +10,7 @@ import {
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import {
   applyCustomerRefChange,
+  assertNoCustomerRefChangeOnDelete,
   createResolutionCoordinator,
   hasCustomerRefChange,
   resolveOptionalCustomerRef,
@@ -420,6 +421,7 @@ export async function handleEditExpense(
 
   if (lineChanges && lineChanges.length > 0) {
     for (const change of lineChanges) {
+      assertNoCustomerRefChangeOnDelete(change, `Line ${change.line_id || "new"}`);
       if (change.line_id) {
         const lineIndex = finalLines.findIndex(l => l.Id === change.line_id);
         if (lineIndex === -1) {
