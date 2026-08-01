@@ -1,5 +1,31 @@
 // Tool definitions for QuickBooks MCP server
 
+const lineCustomerRefCreateProperties = {
+  customer_name: {
+    type: "string",
+    description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
+  },
+  customer_id: {
+    type: "string",
+    description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
+  },
+};
+
+const lineCustomerRefEditProperties = {
+  customer_name: {
+    type: "string",
+    description: "Assign or replace the line customer/job by display or fully qualified name. Mutually exclusive with customer_id and clear_customer.",
+  },
+  customer_id: {
+    type: "string",
+    description: "Assign or replace the line customer/job by ID. Mutually exclusive with customer_name and clear_customer.",
+  },
+  clear_customer: {
+    type: "boolean",
+    description: "Set true to remove the line CustomerRef. Rejected for Billable or HasBeenBilled lines and new lines.",
+  },
+};
+
 export const toolDefinitions = [
   {
     name: "qbo_authenticate",
@@ -408,14 +434,7 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
-              customer_name: {
-                type: "string",
-                description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
-              },
-              customer_id: {
-                type: "string",
-                description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
-              },
+              ...lineCustomerRefCreateProperties,
             },
             required: ["amount"],
           },
@@ -498,18 +517,7 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description",
               },
-              customer_name: {
-                type: "string",
-                description: "Assign or replace the line customer/job by display or fully qualified name. Mutually exclusive with customer_id and clear_customer.",
-              },
-              customer_id: {
-                type: "string",
-                description: "Assign or replace the line customer/job by ID. Mutually exclusive with customer_name and clear_customer.",
-              },
-              clear_customer: {
-                type: "boolean",
-                description: "Set true to remove the line CustomerRef. Rejected for Billable or HasBeenBilled lines and new lines.",
-              },
+              ...lineCustomerRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
@@ -541,7 +549,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_expense",
-    description: "Modify an existing expense (Purchase). Can update date, memo, payment account, and/or lines. Note: PaymentType (Cash/Check/CreditCard) cannot be changed after creation.",
+    description: "Modify an existing expense (Purchase). Can update date, memo, payment account, vendor/payee, department, and/or lines. Account-based lines can preserve, assign, change, or clear a customer/job without changing billable status. PaymentType cannot be changed after creation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -583,6 +591,7 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description",
               },
+              ...lineCustomerRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
@@ -675,14 +684,7 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
-              customer_name: {
-                type: "string",
-                description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
-              },
-              customer_id: {
-                type: "string",
-                description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
-              },
+              ...lineCustomerRefCreateProperties,
             },
             required: ["amount"],
           },
@@ -1283,14 +1285,7 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
-              customer_name: {
-                type: "string",
-                description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
-              },
-              customer_id: {
-                type: "string",
-                description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
-              },
+              ...lineCustomerRefCreateProperties,
             },
             required: ["amount"],
           },
@@ -1365,18 +1360,7 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description",
               },
-              customer_name: {
-                type: "string",
-                description: "Assign or replace the line customer/job by display or fully qualified name. Mutually exclusive with customer_id and clear_customer.",
-              },
-              customer_id: {
-                type: "string",
-                description: "Assign or replace the line customer/job by ID. Mutually exclusive with customer_name and clear_customer.",
-              },
-              clear_customer: {
-                type: "boolean",
-                description: "Set true to remove the line CustomerRef. Rejected for Billable or HasBeenBilled lines and new lines.",
-              },
+              ...lineCustomerRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
