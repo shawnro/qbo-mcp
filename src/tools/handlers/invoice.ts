@@ -3,9 +3,7 @@
 import QuickBooks from "node-quickbooks";
 import {
   promisify,
-  getDepartmentCache,
   resolveItem,
-  resolveCustomer,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
@@ -61,24 +59,20 @@ export async function handleCreateInvoice(
   if (!lines || lines.length === 0) {
     throw new Error("At least one line is required");
   }
+  const resolver = createResolutionCoordinator(client);
 
   // Resolve customer (required for invoices)
-  if (!customer_id && !customer_name) {
-    throw new Error("Either customer_name or customer_id is required for invoices");
+  if ((!customer_id && !customer_name) || (customer_id && customer_name)) {
+    throw new Error("Provide exactly one of customer_name or customer_id for invoices");
   }
-  let customerRef: { value: string; name: string };
-  if (customer_id) {
-    customerRef = await resolveCustomer(client, customer_id);
-  } else {
-    customerRef = await resolveCustomer(client, customer_name!);
-  }
+  const customerRef = await resolver.customer(
+    customer_id ? { id: customer_id } : { name: customer_name! }
+  );
 
   // Resolve department (header-level, optional)
   let departmentRef: { value: string; name: string } | undefined;
   const deptInput = department_id || department_name;
   if (deptInput) {
-    const deptCache = await getDepartmentCache(client);
-    const resolver = createResolutionCoordinator(client, { department: deptCache });
     departmentRef = await resolver.department(deptInput);
   }
 
@@ -422,6 +416,7 @@ export async function handleEditInvoice(
   if (bill_email !== undefined) updated.BillEmail = { Address: bill_email };
   if (allow_online_credit_card_payment !== undefined) updated.AllowOnlineCreditCardPayment = allow_online_credit_card_payment;
   if (allow_online_ach_payment !== undefined) updated.AllowOnlineACHPayment = allow_online_ach_payment;
+  const resolver = createResolutionCoordinator(client);
 
   // Resolve sales term if provided
   if (sales_term_ref !== undefined) {
@@ -442,14 +437,12 @@ export async function handleEditInvoice(
 
   // Resolve customer if provided
   if (customer_name !== undefined) {
-    const customerRef = await resolveCustomer(client, customer_name);
+    const customerRef = await resolver.customer({ name: customer_name });
     updated.CustomerRef = customerRef;
   }
 
   // Resolve header-level department if provided
   if (department_name !== undefined) {
-    const deptCache = await getDepartmentCache(client);
-    const resolver = createResolutionCoordinator(client, { department: deptCache });
     updated.DepartmentRef = await resolver.department(department_name);
   }
 

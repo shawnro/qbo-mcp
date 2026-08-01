@@ -47,6 +47,7 @@ export interface VendorCache {
 export interface CachedCustomer {
   Id: string;
   DisplayName: string;
+  FullyQualifiedName?: string;
   Active?: boolean;
   fetchedAt: number;   // per-entry TTL for lazy cache
 }

@@ -2,7 +2,13 @@
 // These operate on pre-fetched cache objects and return QB API Ref shapes.
 
 import QuickBooks from "node-quickbooks";
-import { getAccountCache, getDepartmentCache, getVendorCache } from "../client/index.js";
+import {
+  getAccountCache,
+  getDepartmentCache,
+  getVendorCache,
+  resolveCustomer,
+  resolveCustomerById,
+} from "../client/index.js";
 import type { AccountCache, DepartmentCache, VendorCache } from "../types/cache.js";
 
 export interface AccountRef {
@@ -109,7 +115,12 @@ export interface ResolutionCoordinator {
   account(nameOrId: string): Promise<AccountRef>;
   department(nameOrId: string): Promise<EntityRef>;
   vendor(nameOrId: string): Promise<EntityRef>;
+  customer(input: CustomerResolutionInput): Promise<EntityRef>;
 }
+
+export type CustomerResolutionInput =
+  | { id: string; name?: never }
+  | { name: string; id?: never };
 
 /**
  * Create an invocation-scoped resolver that retries a cache miss once after a
@@ -130,6 +141,7 @@ export function createResolutionCoordinator(
   let accountRefresh: Promise<AccountCache> | undefined;
   let departmentRefresh: Promise<DepartmentCache> | undefined;
   let vendorRefresh: Promise<VendorCache> | undefined;
+  const customerResolutions = new Map<string, Promise<EntityRef>>();
 
   const loadAccountCache = async (): Promise<AccountCache> => {
     if (accountCache) return accountCache;
@@ -202,6 +214,24 @@ export function createResolutionCoordinator(
         if (!(error instanceof ResolutionNotFoundError) || error.entity !== "vendor") throw error;
         return resolveVendorRef(await refreshVendorCache(), nameOrId);
       }
+    },
+
+    async customer(input: CustomerResolutionInput): Promise<EntityRef> {
+      const id = input.id?.trim();
+      const name = input.name?.trim();
+      if ((!id && !name) || (id && name)) {
+        throw new Error("Provide exactly one of customer_id or customer_name");
+      }
+
+      const key = id ? `id:${id}` : `name:${name!.toLowerCase()}`;
+      let resolution = customerResolutions.get(key);
+      if (!resolution) {
+        resolution = id
+          ? resolveCustomerById(client, id)
+          : resolveCustomer(client, name!);
+        customerResolutions.set(key, resolution);
+      }
+      return resolution;
     },
   };
 }

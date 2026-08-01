@@ -758,7 +758,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_sales_receipt",
-    description: "Create a sales receipt. Accepts item/customer/department names (will lookup IDs automatically). Lines reference items (products/services) not accounts. Returns receipt details and a link to view in QuickBooks.",
+    description: "Create a sales receipt. Accepts item/customer/department names (will lookup IDs automatically). Provide at most one of customer_name or customer_id. Lines reference items (products/services) not accounts. Returns receipt details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -768,7 +768,7 @@ export const toolDefinitions = [
         },
         customer_name: {
           type: "string",
-          description: "Customer display name (e.g., 'Cash Sales'). Will be looked up to get ID.",
+          description: "Customer display or fully qualified job name (e.g., 'Customer:Job'). Mutually exclusive with customer_id.",
         },
         customer_id: {
           type: "string",
@@ -838,7 +838,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_invoice",
-    description: "Create an invoice. Accepts item/customer/department names (will lookup IDs automatically). Either customer_name or customer_id is REQUIRED — invoices must have a customer. Lines use SalesItemLineDetail (product/service references, not accounts). Returns invoice details and a link to view in QuickBooks.",
+    description: "Create an invoice. Accepts item/customer/department names (will lookup IDs automatically). Exactly one of customer_name or customer_id is REQUIRED — invoices must have a customer. Lines use SalesItemLineDetail (product/service references, not accounts). Returns invoice details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -848,7 +848,7 @@ export const toolDefinitions = [
         },
         customer_name: {
           type: "string",
-          description: "Customer display name (e.g., 'Cash Sales'). Will be looked up to get ID.",
+          description: "Customer display or fully qualified job name (e.g., 'Customer:Job'). Mutually exclusive with customer_id.",
         },
         customer_id: {
           type: "string",
