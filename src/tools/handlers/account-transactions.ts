@@ -10,7 +10,7 @@ import { toCents, sumCents, toDollars, outputReport, isHttpMode } from "../../ut
 import { PaginationParams } from "../../types/index.js";
 import { paginatedQuery, extractAccountLines } from "../../query/index.js";
 import { TransactionLine } from "../../types/index.js";
-import { resolveDepartmentRef } from "../resolve.js";
+import { createResolutionCoordinator } from "../resolve.js";
 
 // Group transactions by unique transaction key (type:txnId)
 interface GroupedTransaction {
@@ -73,7 +73,8 @@ export async function handleQueryAccountTransactions(
   let resolvedDepartmentName: string | undefined;
   if (department) {
     const deptCache = await getDepartmentCache(client);
-    const ref = resolveDepartmentRef(deptCache, department);
+    const resolver = createResolutionCoordinator(client, { department: deptCache });
+    const ref = await resolver.department(department);
     resolvedDepartmentId = ref.value;
     resolvedDepartmentName = ref.name;
   }

@@ -330,3 +330,123 @@ describe("TTL and caching behavior", () => {
     expect(client.findAccounts).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("forced cache refresh", () => {
+  it("bypasses the account cache without waiting for TTL expiry", async () => {
+    seedAccounts();
+
+    await getAccountCache(client as never);
+    await getAccountCache(client as never, { forceRefresh: true });
+
+    expect(client.findAccounts).toHaveBeenCalledTimes(2);
+  });
+
+  it("bypasses the department cache without waiting for TTL expiry", async () => {
+    seedDepartments();
+
+    await getDepartmentCache(client as never);
+    await getDepartmentCache(client as never, { forceRefresh: true });
+
+    expect(client.findDepartments).toHaveBeenCalledTimes(2);
+  });
+
+  it("bypasses the vendor cache without waiting for TTL expiry", async () => {
+    seedVendors();
+
+    await getVendorCache(client as never);
+    await getVendorCache(client as never, { forceRefresh: true });
+
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("stale cache recovery", () => {
+  it("finds an account added after the initial cache snapshot", async () => {
+    let callCount = 0;
+    client.findAccounts.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, result: unknown) => void;
+      callCount++;
+      cb(null, {
+        QueryResponse: {
+          Account: callCount === 1
+            ? [{ Id: "1", Name: "Existing Account", FullyQualifiedName: "Existing Account" }]
+            : [
+                { Id: "1", Name: "Existing Account", FullyQualifiedName: "Existing Account" },
+                { Id: "2", Name: "New Account", FullyQualifiedName: "New Account" },
+              ],
+        },
+      });
+    });
+
+    await getAccountCache(client as never);
+    const account = await resolveAccount(client as never, "New Account");
+
+    expect(account.Id).toBe("2");
+    expect(client.findAccounts).toHaveBeenCalledTimes(2);
+  });
+
+  it("finds a department added after the initial cache snapshot", async () => {
+    let callCount = 0;
+    client.findDepartments.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, result: unknown) => void;
+      callCount++;
+      cb(null, {
+        QueryResponse: {
+          Department: callCount === 1
+            ? [{ Id: "10", Name: "Existing Department", FullyQualifiedName: "Existing Department" }]
+            : [
+                { Id: "10", Name: "Existing Department", FullyQualifiedName: "Existing Department" },
+                { Id: "20", Name: "New Department", FullyQualifiedName: "New Department" },
+              ],
+        },
+      });
+    });
+
+    await getDepartmentCache(client as never);
+    const id = await resolveDepartmentId(client as never, "New Department");
+
+    expect(id).toBe("20");
+    expect(client.findDepartments).toHaveBeenCalledTimes(2);
+  });
+
+  it("finds a vendor added after the initial cache snapshot", async () => {
+    let callCount = 0;
+    client.findVendors.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, result: unknown) => void;
+      callCount++;
+      cb(null, {
+        QueryResponse: {
+          Vendor: callCount === 1
+            ? [{ Id: "100", DisplayName: "Existing Vendor" }]
+            : [
+                { Id: "100", DisplayName: "Existing Vendor" },
+                { Id: "200", DisplayName: "New Vendor" },
+              ],
+        },
+      });
+    });
+
+    await getVendorCache(client as never);
+    const vendor = await resolveVendor(client as never, "New Vendor");
+
+    expect(vendor).toEqual({ value: "200", name: "New Vendor" });
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates a refresh API error without retrying again", async () => {
+    let callCount = 0;
+    client.findVendors.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, result?: unknown) => void;
+      callCount++;
+      if (callCount === 1) {
+        cb(null, { QueryResponse: { Vendor: [{ Id: "100", DisplayName: "Existing Vendor" }] } });
+      } else {
+        cb(new Error("Network timeout"));
+      }
+    });
+
+    await getVendorCache(client as never);
+    await expect(resolveVendor(client as never, "Missing Vendor")).rejects.toThrow("Network timeout");
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
+  });
+});

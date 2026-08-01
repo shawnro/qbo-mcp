@@ -8,7 +8,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { resolveAccountRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
+import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
 
 interface CreateExpenseLine {
   account_id?: string;
@@ -58,16 +58,21 @@ export async function handleCreateExpense(
     getDepartmentCache(client),
     getVendorCache(client),
   ]);
+  const resolver = createResolutionCoordinator(client, {
+    account: acctCache,
+    department: deptCache,
+    vendor: vendorCacheData,
+  });
 
   // Resolve payment account
-  const paymentAcct = resolveAccountRef(acctCache, payment_account);
+  const paymentAcct = await resolver.account(payment_account);
   const paymentAccountRef = { value: paymentAcct.value, name: paymentAcct.name };
 
   // Resolve vendor/entity (optional)
   let entityRef: { value: string; name: string; type: string } | undefined;
   const entityInput = entity_id || entity_name;
   if (entityInput) {
-    const vendor = resolveVendorRef(vendorCacheData, entityInput);
+    const vendor = await resolver.vendor(entityInput);
     entityRef = { ...vendor, type: "Vendor" };
   }
 
@@ -75,17 +80,17 @@ export async function handleCreateExpense(
   let departmentRef: { value: string; name: string } | undefined;
   const deptInput = department_id || department_name;
   if (deptInput) {
-    departmentRef = resolveDepartmentRef(deptCache, deptInput);
+    departmentRef = await resolver.department(deptInput);
   }
 
   // Resolve lines
-  const resolvedLines = lines.map((line) => {
+  const resolvedLines = await Promise.all(lines.map(async (line) => {
     let accountId = line.account_id;
     let accountName = line.account_name;
     let accountNum: string | undefined;
 
     if (!accountId && accountName) {
-      const account = resolveAccountRef(acctCache, accountName);
+      const account = await resolver.account(accountName);
       accountId = account.value;
       accountName = account.name;
       accountNum = account.acctNum;
@@ -103,7 +108,7 @@ export async function handleCreateExpense(
       amount_cents: amountCents,
       amount: toDollars(amountCents),
     };
-  });
+  }));
 
   // Calculate total
   const totalCents = sumCents(resolvedLines.map(l => l.amount_cents));
@@ -302,6 +307,7 @@ export async function handleEditExpense(
       };
     }>;
   };
+  const resolver = createResolutionCoordinator(client);
 
   // Determine if we're modifying lines - requires full update (not sparse)
   const needsFullUpdate = lineChanges && lineChanges.length > 0;
@@ -345,22 +351,19 @@ export async function handleEditExpense(
 
   // Resolve payment account if provided
   if (payment_account !== undefined) {
-    const acctCache = await getAccountCache(client);
-    const resolved = resolveAccountRef(acctCache, payment_account);
+    const resolved = await resolver.account(payment_account);
     updated.AccountRef = { value: resolved.value, name: resolved.name };
   }
 
   // Resolve header-level department if provided
   if (department_name !== undefined) {
-    const deptCache = await getDepartmentCache(client);
-    updated.DepartmentRef = resolveDepartmentRef(deptCache, department_name);
+    updated.DepartmentRef = await resolver.department(department_name);
   }
 
   // Resolve entity (vendor/payee) if provided
   const entityInput = entity_id || entity_name;
   if (entityInput) {
-    const vendorCacheData = await getVendorCache(client);
-    const vendor = resolveVendorRef(vendorCacheData, entityInput);
+    const vendor = await resolver.vendor(entityInput);
     updated.EntityRef = { ...vendor, type: "Vendor" };
   }
 
@@ -369,8 +372,6 @@ export async function handleEditExpense(
   let finalLines = [...((updated.Line as typeof current.Line) || current.Line)];
 
   if (lineChanges && lineChanges.length > 0) {
-    const acctCache = await getAccountCache(client);
-
     for (const change of lineChanges) {
       if (change.line_id) {
         const lineIndex = finalLines.findIndex(l => l.Id === change.line_id);
@@ -392,7 +393,7 @@ export async function handleEditExpense(
             line.Amount = toDollars(amountCents);
           }
           if (change.description !== undefined) line.Description = change.description;
-          if (change.account_name !== undefined) detail.AccountRef = resolveAccountRef(acctCache, change.account_name);
+          if (change.account_name !== undefined) detail.AccountRef = toEntityRef(await resolver.account(change.account_name));
 
           line.AccountBasedExpenseLineDetail = detail;
           line.DetailType = 'AccountBasedExpenseLineDetail';
@@ -412,7 +413,7 @@ export async function handleEditExpense(
           Description: change.description,
           DetailType: 'AccountBasedExpenseLineDetail',
           AccountBasedExpenseLineDetail: {
-            AccountRef: resolveAccountRef(acctCache, change.account_name),
+            AccountRef: toEntityRef(await resolver.account(change.account_name)),
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);

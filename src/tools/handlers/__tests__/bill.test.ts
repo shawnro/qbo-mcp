@@ -46,6 +46,18 @@ const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 
+function createVendorCacheWithNewVendor() {
+  const cache = createMockVendorCache();
+  const vendor = { Id: "200", DisplayName: "New Vendor" };
+  return {
+    ...cache,
+    items: [...cache.items, vendor],
+    byId: new Map(cache.byId).set(vendor.Id, vendor),
+    byName: new Map(cache.byName).set(vendor.DisplayName.toLowerCase(), vendor),
+    fetchedAt: Date.now(),
+  };
+}
+
 describe("handleCreateBill", () => {
   let client: ReturnType<typeof createMockClient>;
 
@@ -71,6 +83,24 @@ describe("handleCreateBill", () => {
     expect(client.createBill).not.toHaveBeenCalled();
   });
 
+  it("returns preview with stale vendor cache in default draft mode", async () => {
+    mockGetVendorCache
+      .mockResolvedValueOnce(createMockVendorCache() as never)
+      .mockResolvedValueOnce(createVendorCacheWithNewVendor() as never);
+
+    const result = await handleCreateBill(client as never, {
+      vendor_name: "New Vendor",
+      txn_date: "2026-01-01",
+      lines: [{ account_name: "Cash", amount: 10 }],
+    });
+
+    expect(result.content[0].text).toContain("DRAFT");
+    expect(result.content[0].text).toContain("New Vendor");
+    expect(client.createBill).not.toHaveBeenCalled();
+    expect(mockGetVendorCache).toHaveBeenCalledTimes(2);
+    expect(mockGetVendorCache).toHaveBeenLastCalledWith(client, { forceRefresh: true });
+  });
+
   it("creates bill with minimal fields when draft=false", async () => {
     mockSuccess(client.createBill, { Id: "500", DocNumber: "B-001" });
 
@@ -83,6 +113,46 @@ describe("handleCreateBill", () => {
 
     expect(result.content[0].text).toContain("Bill Created");
     expect(client.createBill).toHaveBeenCalledOnce();
+    expect(mockGetVendorCache).toHaveBeenCalledOnce();
+    expect(mockGetVendorCache).toHaveBeenCalledWith(client);
+  });
+
+  it("refreshes a stale vendor cache and creates by vendor name", async () => {
+    mockGetVendorCache
+      .mockResolvedValueOnce(createMockVendorCache() as never)
+      .mockResolvedValueOnce(createVendorCacheWithNewVendor() as never);
+    mockSuccess(client.createBill, { Id: "504" });
+
+    await handleCreateBill(client as never, {
+      vendor_name: "New Vendor",
+      txn_date: "2026-01-01",
+      draft: false,
+      lines: [{ account_name: "Cash", amount: 10 }],
+    });
+
+    const payload = client.createBill.mock.calls[0][0];
+    expect(payload.VendorRef).toEqual({ value: "200", name: "New Vendor" });
+    expect(mockGetVendorCache).toHaveBeenCalledTimes(2);
+    expect(mockGetVendorCache).toHaveBeenLastCalledWith(client, { forceRefresh: true });
+  });
+
+  it("refreshes a stale vendor cache and creates by vendor ID", async () => {
+    mockGetVendorCache
+      .mockResolvedValueOnce(createMockVendorCache() as never)
+      .mockResolvedValueOnce(createVendorCacheWithNewVendor() as never);
+    mockSuccess(client.createBill, { Id: "505" });
+
+    await handleCreateBill(client as never, {
+      vendor_id: "200",
+      txn_date: "2026-01-01",
+      draft: false,
+      lines: [{ account_name: "Cash", amount: 10 }],
+    });
+
+    const payload = client.createBill.mock.calls[0][0];
+    expect(payload.VendorRef).toEqual({ value: "200", name: "New Vendor" });
+    expect(mockGetVendorCache).toHaveBeenCalledTimes(2);
+    expect(mockGetVendorCache).toHaveBeenLastCalledWith(client, { forceRefresh: true });
   });
 
   it("creates with all optional fields", async () => {
@@ -155,6 +225,8 @@ describe("handleCreateBill", () => {
         lines: [{ account_name: "Cash", amount: 10 }],
       })
     ).rejects.toThrow('Vendor not found: "Nonexistent Vendor"');
+    expect(mockGetVendorCache).toHaveBeenCalledTimes(2);
+    expect(mockGetVendorCache).toHaveBeenLastCalledWith(client, { forceRefresh: true });
   });
 
   it("throws when neither vendor_name nor vendor_id provided", async () => {

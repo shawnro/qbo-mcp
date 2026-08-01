@@ -45,6 +45,30 @@ const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 
+function createAccountCacheWithNewAccounts() {
+  const cache = createMockAccountCache();
+  const accounts = [
+    { Id: "200", Name: "New Income One", FullyQualifiedName: "New Income One", AcctNum: "7100", AccountType: "Income", CurrentBalance: 0 },
+    { Id: "201", Name: "New Income Two", FullyQualifiedName: "New Income Two", AcctNum: "7200", AccountType: "Income", CurrentBalance: 0 },
+  ];
+  const byId = new Map(cache.byId);
+  const byName = new Map(cache.byName);
+  const byAcctNum = new Map(cache.byAcctNum);
+  for (const account of accounts) {
+    byId.set(account.Id, account);
+    byName.set(account.Name.toLowerCase(), account);
+    byAcctNum.set(account.AcctNum, account);
+  }
+  return {
+    ...cache,
+    items: [...cache.items, ...accounts],
+    byId,
+    byName,
+    byAcctNum,
+    fetchedAt: Date.now(),
+  };
+}
+
 describe("handleCreateDeposit", () => {
   let client: ReturnType<typeof createMockClient>;
 
@@ -96,7 +120,7 @@ describe("handleCreateDeposit", () => {
     const payload = client.createDeposit.mock.calls[0][0];
     const line = payload.Line[0];
     expect(line.DetailType).toBe("DepositLineDetail");
-    expect(line.DepositLineDetail.AccountRef).toEqual({ value: "2", name: "Tips", acctNum: "4100" });
+    expect(line.DepositLineDetail.AccountRef).toEqual({ value: "2", name: "Tips" });
     expect(line.DepositLineDetail.Entity).toBeDefined();
     expect(line.DepositLineDetail.Entity.value).toBe("100"); // Office Depot
   });
@@ -112,7 +136,7 @@ describe("handleCreateDeposit", () => {
     });
 
     const payload = client.createDeposit.mock.calls[0][0];
-    expect(payload.DepositToAccountRef).toEqual({ value: "1", name: "Cash", acctNum: "1000" });
+    expect(payload.DepositToAccountRef).toEqual({ value: "1", name: "Cash" });
   });
 
   it("includes DepartmentRef when provided", async () => {
@@ -150,6 +174,30 @@ describe("handleCreateDeposit", () => {
     expect(payload.Line[1].Amount).toBe(250.50);
     expect(payload.Line[2].Amount).toBe(49.50);
     expect(result.content[0].text).toContain("$400.00");
+  });
+
+  it("shares one account refresh across lines and preserves line order", async () => {
+    mockGetAccountCache
+      .mockResolvedValueOnce(createMockAccountCache() as never)
+      .mockResolvedValueOnce(createAccountCacheWithNewAccounts() as never);
+    mockSuccess(client.createDeposit, { Id: "805" });
+
+    await handleCreateDeposit(client as never, {
+      deposit_to_account: "Cash",
+      txn_date: "2026-05-01",
+      draft: false,
+      lines: [
+        { account_name: "New Income One", amount: 10 },
+        { account_name: "New Income Two", amount: 20 },
+      ],
+    });
+
+    const payload = client.createDeposit.mock.calls[0][0];
+    expect(payload.Line.map((line: { DepositLineDetail: { AccountRef: { value: string } } }) =>
+      line.DepositLineDetail.AccountRef.value
+    )).toEqual(["200", "201"]);
+    expect(mockGetAccountCache).toHaveBeenCalledTimes(2);
+    expect(mockGetAccountCache).toHaveBeenLastCalledWith(client, { forceRefresh: true });
   });
 
   it("throws when account not found", async () => {

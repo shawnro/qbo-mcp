@@ -8,7 +8,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, toCents, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { resolveAccountRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
+import { createResolutionCoordinator, ResolutionNotFoundError, toEntityRef } from "../resolve.js";
 
 // --- Interfaces ---
 
@@ -86,32 +86,39 @@ export async function handleCreateDeposit(
     getDepartmentCache(client),
     getVendorCache(client),
   ]);
+  const resolver = createResolutionCoordinator(client, {
+    account: acctCache,
+    department: deptCache,
+    vendor: vendorCacheData,
+  });
 
   // Resolve deposit_to_account
-  const depositToRef = resolveAccountRef(acctCache, deposit_to_account);
+  const depositToRef = await resolver.account(deposit_to_account);
 
   // Resolve header-level department
   let departmentRef: { value: string; name: string } | undefined;
   const deptInput = department_id || department_name;
   if (deptInput) {
-    departmentRef = resolveDepartmentRef(deptCache, deptInput);
+    departmentRef = await resolver.department(deptInput);
   }
 
   // Resolve lines
-  const resolvedLines = lines.map((line, i) => {
+  const resolvedLines = await Promise.all(lines.map(async (line, i) => {
     const label = `Line ${i + 1}`;
 
     // Resolve account
     let accountRef: { value: string; name: string };
     if (line.account_id) {
-      const byId = acctCache.byId.get(line.account_id);
-      if (byId) {
-        accountRef = { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
-      } else {
-        throw new Error(`${label}: Account ID not found: "${line.account_id}"`);
+      try {
+        accountRef = await resolver.account(line.account_id);
+      } catch (error) {
+        if (error instanceof ResolutionNotFoundError && error.entity === "account") {
+          throw new Error(`${label}: Account ID not found: "${line.account_id}"`);
+        }
+        throw error;
       }
     } else if (line.account_name) {
-      accountRef = resolveAccountRef(acctCache, line.account_name);
+      accountRef = await resolver.account(line.account_name);
     } else {
       throw new Error(`${label}: Either account_name or account_id is required`);
     }
@@ -122,10 +129,10 @@ export async function handleCreateDeposit(
     // Resolve entity if provided
     let entityRef: { value: string; name: string; type: string } | undefined;
     if (line.entity_id) {
-      const ref = resolveVendorRef(vendorCacheData, line.entity_id);
+      const ref = await resolver.vendor(line.entity_id);
       entityRef = { ...ref, type: "VENDOR" };
     } else if (line.entity_name) {
-      const ref = resolveVendorRef(vendorCacheData, line.entity_name);
+      const ref = await resolver.vendor(line.entity_name);
       entityRef = { ...ref, type: "VENDOR" };
     }
 
@@ -136,20 +143,20 @@ export async function handleCreateDeposit(
       description: line.description,
       entityRef,
     };
-  });
+  }));
 
   // Calculate total for display
   const totalCents = sumCents(resolvedLines.map(l => l.amountCents));
 
   // Build QB deposit object
   const depositObject: Record<string, unknown> = {
-    DepositToAccountRef: depositToRef,
+    DepositToAccountRef: toEntityRef(depositToRef),
     TxnDate: txn_date,
     ...(departmentRef && { DepartmentRef: departmentRef }),
     ...(memo && { PrivateNote: memo }),
     Line: resolvedLines.map(line => {
       const depositLineDetail: Record<string, unknown> = {
-        AccountRef: line.accountRef,
+        AccountRef: toEntityRef(line.accountRef),
       };
       if (line.entityRef) {
         depositLineDetail.Entity = line.entityRef;
@@ -333,16 +340,20 @@ export async function handleEditDeposit(
     needsAcctCache ? getAccountCache(client) : Promise.resolve(null),
     needsDeptCache ? getDepartmentCache(client) : Promise.resolve(null),
   ]);
+  const resolver = createResolutionCoordinator(client, {
+    ...(acctCache && { account: acctCache }),
+    ...(deptCache && { department: deptCache }),
+  });
 
   // Resolve deposit_to_account if provided
   if (deposit_to_account !== undefined) {
-    const ref = resolveAccountRef(acctCache!, deposit_to_account);
-    updated.DepositToAccountRef = ref;
+    const ref = await resolver.account(deposit_to_account);
+    updated.DepositToAccountRef = toEntityRef(ref);
   }
 
   // Resolve header-level department if provided
   if (department_name !== undefined) {
-    const ref = resolveDepartmentRef(deptCache!, department_name);
+    const ref = await resolver.department(department_name);
     updated.DepartmentRef = ref;
   }
 
@@ -378,7 +389,7 @@ export async function handleEditDeposit(
         line.Amount = toDollars(amountCents);
         line.DepositLineDetail = {
           ...line.DepositLineDetail,
-          AccountRef: resolveAccountRef(acctCache!, input.account_name),
+          AccountRef: toEntityRef(await resolver.account(input.account_name)),
         };
       } else {
         // Create new line
@@ -386,7 +397,7 @@ export async function handleEditDeposit(
           Amount: toDollars(amountCents),
           DetailType: 'DepositLineDetail',
           DepositLineDetail: {
-            AccountRef: resolveAccountRef(acctCache!, input.account_name),
+            AccountRef: toEntityRef(await resolver.account(input.account_name)),
           },
         };
       }

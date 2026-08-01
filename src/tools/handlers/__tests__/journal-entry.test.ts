@@ -49,6 +49,30 @@ import { getAccountCache, getDepartmentCache } from "../../../client/index.js";
 const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 
+function createAccountCacheWithNewAccounts() {
+  const cache = createMockAccountCache();
+  const accounts = [
+    { Id: "200", Name: "New Debit Account", FullyQualifiedName: "New Debit Account", AcctNum: "7100", AccountType: "Expense", CurrentBalance: 0 },
+    { Id: "201", Name: "New Credit Account", FullyQualifiedName: "New Credit Account", AcctNum: "7200", AccountType: "Income", CurrentBalance: 0 },
+  ];
+  const byId = new Map(cache.byId);
+  const byName = new Map(cache.byName);
+  const byAcctNum = new Map(cache.byAcctNum);
+  for (const account of accounts) {
+    byId.set(account.Id, account);
+    byName.set(account.Name.toLowerCase(), account);
+    byAcctNum.set(account.AcctNum, account);
+  }
+  return {
+    ...cache,
+    items: [...cache.items, ...accounts],
+    byId,
+    byName,
+    byAcctNum,
+    fetchedAt: Date.now(),
+  };
+}
+
 describe("handleCreateJournalEntry", () => {
   let client: ReturnType<typeof createMockClient>;
 
@@ -112,6 +136,29 @@ describe("handleCreateJournalEntry", () => {
     expect(result.content[0].text).toContain("Journal Entry Created");
     expect(result.content[0].text).toContain("JE-001");
     expect(client.createJournalEntry).toHaveBeenCalledOnce();
+  });
+
+  it("shares one account refresh across lines and preserves line order", async () => {
+    mockGetAccountCache
+      .mockResolvedValueOnce(createMockAccountCache() as never)
+      .mockResolvedValueOnce(createAccountCacheWithNewAccounts() as never);
+    mockSuccess(client.createJournalEntry, { Id: "124", DocNumber: "JE-002" });
+
+    await handleCreateJournalEntry(client as never, {
+      txn_date: "2026-01-15",
+      draft: false,
+      lines: [
+        { account_name: "New Debit Account", amount: 100, posting_type: "Debit" },
+        { account_name: "New Credit Account", amount: 100, posting_type: "Credit" },
+      ],
+    });
+
+    const payload = client.createJournalEntry.mock.calls[0][0];
+    expect(payload.Line.map((line: { JournalEntryLineDetail: { AccountRef: { value: string } } }) =>
+      line.JournalEntryLineDetail.AccountRef.value
+    )).toEqual(["200", "201"]);
+    expect(mockGetAccountCache).toHaveBeenCalledTimes(2);
+    expect(mockGetAccountCache).toHaveBeenLastCalledWith(client, { forceRefresh: true });
   });
 
   // --- Create success (all optional fields) ---

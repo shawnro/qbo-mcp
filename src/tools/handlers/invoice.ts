@@ -3,13 +3,12 @@
 import QuickBooks from "node-quickbooks";
 import {
   promisify,
-  getAccountCache,
   getDepartmentCache,
   resolveItem,
   resolveCustomer,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { resolveDepartmentRef } from "../resolve.js";
+import { createResolutionCoordinator } from "../resolve.js";
 
 interface InvoiceLineChange {
   line_id?: string;
@@ -79,7 +78,8 @@ export async function handleCreateInvoice(
   const deptInput = department_id || department_name;
   if (deptInput) {
     const deptCache = await getDepartmentCache(client);
-    departmentRef = resolveDepartmentRef(deptCache, deptInput);
+    const resolver = createResolutionCoordinator(client, { department: deptCache });
+    departmentRef = await resolver.department(deptInput);
   }
 
   // Resolve sales term (optional)
@@ -449,7 +449,8 @@ export async function handleEditInvoice(
   // Resolve header-level department if provided
   if (department_name !== undefined) {
     const deptCache = await getDepartmentCache(client);
-    updated.DepartmentRef = resolveDepartmentRef(deptCache, department_name);
+    const resolver = createResolutionCoordinator(client, { department: deptCache });
+    updated.DepartmentRef = await resolver.department(department_name);
   }
 
   // Process line changes if provided
