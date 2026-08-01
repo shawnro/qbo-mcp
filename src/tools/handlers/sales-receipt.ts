@@ -3,13 +3,11 @@
 import QuickBooks from "node-quickbooks";
 import {
   promisify,
-  getAccountCache,
-  getDepartmentCache,
   resolveItem,
   resolveCustomer,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { resolveAccountRef, resolveDepartmentRef } from "../resolve.js";
+import { createResolutionCoordinator } from "../resolve.js";
 
 interface SalesReceiptLineChange {
   line_id?: string;
@@ -55,6 +53,7 @@ export async function handleCreateSalesReceipt(
   if (!lines || lines.length === 0) {
     throw new Error("At least one line is required");
   }
+  const resolver = createResolutionCoordinator(client);
 
   // Resolve customer (optional)
   let customerRef: { value: string; name: string } | undefined;
@@ -67,8 +66,7 @@ export async function handleCreateSalesReceipt(
   // Resolve deposit account (optional)
   let depositAccountRef: { value: string; name: string } | undefined;
   if (deposit_to_account) {
-    const acctCache = await getAccountCache(client);
-    const resolved = resolveAccountRef(acctCache, deposit_to_account);
+    const resolved = await resolver.account(deposit_to_account);
     depositAccountRef = { value: resolved.value, name: resolved.name };
   }
 
@@ -76,8 +74,7 @@ export async function handleCreateSalesReceipt(
   let departmentRef: { value: string; name: string } | undefined;
   const deptInput = department_id || department_name;
   if (deptInput) {
-    const deptCache = await getDepartmentCache(client);
-    departmentRef = resolveDepartmentRef(deptCache, deptInput);
+    departmentRef = await resolver.department(deptInput);
   }
 
   // Resolve lines
@@ -333,18 +330,17 @@ export async function handleEditSalesReceipt(
 
   if (txn_date !== undefined) updated.TxnDate = txn_date;
   if (memo !== undefined) updated.PrivateNote = memo;
+  const resolver = createResolutionCoordinator(client);
 
   // Resolve deposit_to_account if provided (needs account cache)
   if (deposit_to_account !== undefined) {
-    const acctCache = await getAccountCache(client);
-    const resolved = resolveAccountRef(acctCache, deposit_to_account);
+    const resolved = await resolver.account(deposit_to_account);
     updated.DepositToAccountRef = { value: resolved.value, name: resolved.name };
   }
 
   // Resolve header-level department if provided
   if (department_name !== undefined) {
-    const deptCache = await getDepartmentCache(client);
-    updated.DepartmentRef = resolveDepartmentRef(deptCache, department_name);
+    updated.DepartmentRef = await resolver.department(department_name);
   }
 
   // Process line changes if provided

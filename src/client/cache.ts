@@ -17,6 +17,10 @@ import {
 // Cache TTL (15 minutes)
 const LOOKUP_CACHE_TTL_MS = 15 * 60 * 1000;
 
+export interface LookupCacheOptions {
+  forceRefresh?: boolean;
+}
+
 // Module-level cache state
 let departmentCache: DepartmentCache | null = null;
 let accountCache: AccountCache | null = null;
@@ -45,8 +49,11 @@ function extractQueryResults<T>(result: unknown, entityKey: string): T[] {
   return Array.isArray(entities) ? entities : [];
 }
 
-export async function getDepartmentCache(client: QuickBooks): Promise<DepartmentCache> {
-  if (departmentCache && (Date.now() - departmentCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+export async function getDepartmentCache(
+  client: QuickBooks,
+  options: LookupCacheOptions = {}
+): Promise<DepartmentCache> {
+  if (!options.forceRefresh && departmentCache && (Date.now() - departmentCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
     return departmentCache;
   }
 
@@ -64,8 +71,11 @@ export async function getDepartmentCache(client: QuickBooks): Promise<Department
   return departmentCache;
 }
 
-export async function getAccountCache(client: QuickBooks): Promise<AccountCache> {
-  if (accountCache && (Date.now() - accountCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+export async function getAccountCache(
+  client: QuickBooks,
+  options: LookupCacheOptions = {}
+): Promise<AccountCache> {
+  if (!options.forceRefresh && accountCache && (Date.now() - accountCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
     return accountCache;
   }
 
@@ -89,31 +99,28 @@ export async function getAccountCache(client: QuickBooks): Promise<AccountCache>
 
 // Resolve account by name, AcctNum, or ID using cache
 export async function resolveAccount(client: QuickBooks, account: string): Promise<CachedAccount> {
-  const cache = await getAccountCache(client);
+  const findAccount = (cache: AccountCache): CachedAccount | undefined => {
+    const lower = account.toLowerCase();
+    return cache.byId.get(account)
+      || cache.byAcctNum.get(lower)
+      || cache.byName.get(lower)
+      || cache.items.find(a => a.FullyQualifiedName?.toLowerCase().includes(lower));
+  };
 
-  // Try exact ID match
-  const byId = cache.byId.get(account);
-  if (byId) return byId;
+  let match = findAccount(await getAccountCache(client));
+  if (match) return match;
 
-  // Try exact AcctNum match (case-insensitive)
-  const byAcctNum = cache.byAcctNum.get(account.toLowerCase());
-  if (byAcctNum) return byAcctNum;
-
-  // Try exact name match (case-insensitive)
-  const byName = cache.byName.get(account.toLowerCase());
-  if (byName) return byName;
-
-  // Try partial FullyQualifiedName match
-  const byPartial = cache.items.find(a =>
-    a.FullyQualifiedName?.toLowerCase().includes(account.toLowerCase())
-  );
-  if (byPartial) return byPartial;
+  match = findAccount(await getAccountCache(client, { forceRefresh: true }));
+  if (match) return match;
 
   throw new Error(`Account not found: "${account}". Try using account name, number (AcctNum), or ID.`);
 }
 
-export async function getVendorCache(client: QuickBooks): Promise<VendorCache> {
-  if (vendorCache && (Date.now() - vendorCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+export async function getVendorCache(
+  client: QuickBooks,
+  options: LookupCacheOptions = {}
+): Promise<VendorCache> {
+  if (!options.forceRefresh && vendorCache && (Date.now() - vendorCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
     return vendorCache;
   }
 
@@ -134,21 +141,18 @@ export async function getVendorCache(client: QuickBooks): Promise<VendorCache> {
 // Resolve vendor by name or ID using cache
 // Returns { value, name } ref object for QuickBooks API
 export async function resolveVendor(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
-  const cache = await getVendorCache(client);
+  const findVendor = (cache: VendorCache): CachedVendor | undefined => {
+    const lower = nameOrId.toLowerCase();
+    return cache.byId.get(nameOrId)
+      || cache.byName.get(lower)
+      || cache.items.find(v => v.DisplayName.toLowerCase().includes(lower));
+  };
 
-  // Try exact ID match
-  const byId = cache.byId.get(nameOrId);
-  if (byId) return { value: byId.Id, name: byId.DisplayName };
+  let match = findVendor(await getVendorCache(client));
+  if (match) return { value: match.Id, name: match.DisplayName };
 
-  // Try exact name match (case-insensitive)
-  const byName = cache.byName.get(nameOrId.toLowerCase());
-  if (byName) return { value: byName.Id, name: byName.DisplayName };
-
-  // Try partial name match
-  const byPartial = cache.items.find(v =>
-    v.DisplayName.toLowerCase().includes(nameOrId.toLowerCase())
-  );
-  if (byPartial) return { value: byPartial.Id, name: byPartial.DisplayName };
+  match = findVendor(await getVendorCache(client, { forceRefresh: true }));
+  if (match) return { value: match.Id, name: match.DisplayName };
 
   throw new Error(`Vendor not found: "${nameOrId}". Try using vendor display name or ID.`);
 }
@@ -207,21 +211,18 @@ export async function resolveItem(client: QuickBooks, nameOrId: string): Promise
 // Helper to resolve department name to ID using cache
 // Accepts: internal ID (e.g., "5"), name (e.g., "20400"), or partial match
 export async function resolveDepartmentId(client: QuickBooks, department: string): Promise<string> {
-  const cache = await getDepartmentCache(client);
+  const findDepartment = (cache: DepartmentCache): CachedDepartment | undefined => {
+    const lower = department.toLowerCase();
+    return cache.byId.get(department)
+      || cache.byName.get(lower)
+      || cache.items.find(d => d.FullyQualifiedName?.toLowerCase().includes(lower));
+  };
 
-  // Try exact ID match first
-  const byId = cache.byId.get(department);
-  if (byId) return byId.Id;
+  let match = findDepartment(await getDepartmentCache(client));
+  if (match) return match.Id;
 
-  // Try exact name match (case-insensitive)
-  const byName = cache.byName.get(department.toLowerCase());
-  if (byName) return byName.Id;
-
-  // Try partial/fuzzy match on FullyQualifiedName
-  const byPartial = cache.items.find(d =>
-    d.FullyQualifiedName?.toLowerCase().includes(department.toLowerCase())
-  );
-  if (byPartial) return byPartial.Id;
+  match = findDepartment(await getDepartmentCache(client, { forceRefresh: true }));
+  if (match) return match.Id;
 
   // If nothing found, return as-is (let API handle error)
   return department;

@@ -1,6 +1,8 @@
 // Shared entity resolution helpers for tool handlers.
 // These operate on pre-fetched cache objects and return QB API Ref shapes.
 
+import QuickBooks from "node-quickbooks";
+import { getAccountCache, getDepartmentCache, getVendorCache } from "../client/index.js";
 import type { AccountCache, DepartmentCache, VendorCache } from "../types/cache.js";
 
 export interface AccountRef {
@@ -12,6 +14,22 @@ export interface AccountRef {
 export interface EntityRef {
   value: string;
   name: string;
+}
+
+export function toEntityRef(ref: AccountRef): EntityRef {
+  return { value: ref.value, name: ref.name };
+}
+
+type ResolutionEntity = "account" | "department" | "vendor";
+
+export class ResolutionNotFoundError extends Error {
+  constructor(
+    readonly entity: ResolutionEntity,
+    message: string
+  ) {
+    super(message);
+    this.name = "ResolutionNotFoundError";
+  }
 }
 
 /**
@@ -32,7 +50,7 @@ export function resolveAccountRef(cache: AccountCache, nameOrId: string): Accoun
       a.FullyQualifiedName?.toLowerCase() === lower
     );
   }
-  if (!match) throw new Error(`Account not found: "${nameOrId}"`);
+  if (!match) throw new ResolutionNotFoundError("account", `Account not found: "${nameOrId}"`);
 
   return {
     value: match.Id,
@@ -56,7 +74,7 @@ export function resolveDepartmentRef(cache: DepartmentCache, nameOrId: string): 
       d.FullyQualifiedName?.toLowerCase().includes(lower)
     );
   }
-  if (!match) throw new Error(`Department not found: "${nameOrId}"`);
+  if (!match) throw new ResolutionNotFoundError("department", `Department not found: "${nameOrId}"`);
 
   return { value: match.Id, name: match.FullyQualifiedName || match.Name };
 }
@@ -78,5 +96,112 @@ export function resolveVendorRef(cache: VendorCache, nameOrId: string): EntityRe
   );
   if (byPartial) return { value: byPartial.Id, name: byPartial.DisplayName };
 
-  throw new Error(`Vendor not found: "${nameOrId}"`);
+  throw new ResolutionNotFoundError("vendor", `Vendor not found: "${nameOrId}"`);
+}
+
+export interface ResolutionCaches {
+  account?: AccountCache;
+  department?: DepartmentCache;
+  vendor?: VendorCache;
+}
+
+export interface ResolutionCoordinator {
+  account(nameOrId: string): Promise<AccountRef>;
+  department(nameOrId: string): Promise<EntityRef>;
+  vendor(nameOrId: string): Promise<EntityRef>;
+}
+
+/**
+ * Create an invocation-scoped resolver that retries a cache miss once after a
+ * forced refresh. Concurrent misses share one refresh promise per entity type.
+ */
+export function createResolutionCoordinator(
+  client: QuickBooks,
+  caches: ResolutionCaches = {}
+): ResolutionCoordinator {
+  let accountCache = caches.account;
+  let departmentCache = caches.department;
+  let vendorCache = caches.vendor;
+
+  let accountLoad: Promise<AccountCache> | undefined;
+  let departmentLoad: Promise<DepartmentCache> | undefined;
+  let vendorLoad: Promise<VendorCache> | undefined;
+
+  let accountRefresh: Promise<AccountCache> | undefined;
+  let departmentRefresh: Promise<DepartmentCache> | undefined;
+  let vendorRefresh: Promise<VendorCache> | undefined;
+
+  const loadAccountCache = async (): Promise<AccountCache> => {
+    if (accountCache) return accountCache;
+    accountLoad ??= getAccountCache(client);
+    accountCache = await accountLoad;
+    return accountCache;
+  };
+
+  const loadDepartmentCache = async (): Promise<DepartmentCache> => {
+    if (departmentCache) return departmentCache;
+    departmentLoad ??= getDepartmentCache(client);
+    departmentCache = await departmentLoad;
+    return departmentCache;
+  };
+
+  const loadVendorCache = async (): Promise<VendorCache> => {
+    if (vendorCache) return vendorCache;
+    vendorLoad ??= getVendorCache(client);
+    vendorCache = await vendorLoad;
+    return vendorCache;
+  };
+
+  const refreshAccountCache = (): Promise<AccountCache> => {
+    accountRefresh ??= getAccountCache(client, { forceRefresh: true }).then(cache => {
+      accountCache = cache;
+      return cache;
+    });
+    return accountRefresh;
+  };
+
+  const refreshDepartmentCache = (): Promise<DepartmentCache> => {
+    departmentRefresh ??= getDepartmentCache(client, { forceRefresh: true }).then(cache => {
+      departmentCache = cache;
+      return cache;
+    });
+    return departmentRefresh;
+  };
+
+  const refreshVendorCache = (): Promise<VendorCache> => {
+    vendorRefresh ??= getVendorCache(client, { forceRefresh: true }).then(cache => {
+      vendorCache = cache;
+      return cache;
+    });
+    return vendorRefresh;
+  };
+
+  return {
+    async account(nameOrId: string): Promise<AccountRef> {
+      try {
+        return resolveAccountRef(await loadAccountCache(), nameOrId);
+      } catch (error) {
+        if (!(error instanceof ResolutionNotFoundError) || error.entity !== "account") throw error;
+        return resolveAccountRef(await refreshAccountCache(), nameOrId);
+      }
+    },
+
+    async department(nameOrId: string): Promise<EntityRef> {
+      try {
+        return resolveDepartmentRef(await loadDepartmentCache(), nameOrId);
+      } catch (error) {
+        if (!(error instanceof ResolutionNotFoundError) || error.entity !== "department") throw error;
+        return resolveDepartmentRef(await refreshDepartmentCache(), nameOrId);
+      }
+    },
+
+    async vendor(nameOrId: string): Promise<EntityRef> {
+      try {
+        return resolveVendorRef(await loadVendorCache(), nameOrId);
+      } catch (error) {
+        if (!(error instanceof ResolutionNotFoundError) || error.entity !== "vendor") throw error;
+        return resolveVendorRef(await refreshVendorCache(), nameOrId);
+      }
+    },
+  };
 }

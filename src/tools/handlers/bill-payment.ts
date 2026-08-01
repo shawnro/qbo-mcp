@@ -12,7 +12,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toCents, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { resolveAccountRef, resolveVendorRef } from "../resolve.js";
+import { createResolutionCoordinator } from "../resolve.js";
 
 interface BillPaymentBillInput {
   bill_id: string;
@@ -61,19 +61,23 @@ export async function handleCreateBillPayment(
     getAccountCache(client),
     getVendorCache(client),
   ]);
+  const resolver = createResolutionCoordinator(client, {
+    account: acctCache,
+    vendor: vendorCacheData,
+  });
 
   // Resolve vendor
   let vendorRef: { value: string; name: string };
   if (vendor_id) {
-    vendorRef = resolveVendorRef(vendorCacheData, vendor_id);
+    vendorRef = await resolver.vendor(vendor_id);
   } else if (vendor_name) {
-    vendorRef = resolveVendorRef(vendorCacheData, vendor_name);
+    vendorRef = await resolver.vendor(vendor_name);
   } else {
     throw new Error("Either vendor_name or vendor_id is required");
   }
 
   // Resolve bank account
-  const bankAcct = resolveAccountRef(acctCache, payment_account);
+  const bankAcct = await resolver.account(payment_account);
   const bankAccountRef = { value: bankAcct.value, name: bankAcct.name };
 
   // Fetch each bill: validates it exists, belongs to the vendor, and supplies

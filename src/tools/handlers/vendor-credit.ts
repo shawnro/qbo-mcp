@@ -8,7 +8,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { resolveAccountRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
+import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
 
 interface CreateVendorCreditLine {
   account_id?: string;
@@ -56,13 +56,18 @@ export async function handleCreateVendorCredit(
     getDepartmentCache(client),
     getVendorCache(client),
   ]);
+  const resolver = createResolutionCoordinator(client, {
+    account: acctCache,
+    department: deptCache,
+    vendor: vendorCacheData,
+  });
 
   // Resolve vendor
   let vendorRef: { value: string; name: string };
   if (vendor_id) {
-    vendorRef = resolveVendorRef(vendorCacheData, vendor_id);
+    vendorRef = await resolver.vendor(vendor_id);
   } else if (vendor_name) {
-    vendorRef = resolveVendorRef(vendorCacheData, vendor_name);
+    vendorRef = await resolver.vendor(vendor_name);
   } else {
     throw new Error("Either vendor_name or vendor_id is required");
   }
@@ -71,24 +76,24 @@ export async function handleCreateVendorCredit(
   let departmentRef: { value: string; name: string } | undefined;
   const deptInput = department_id || department_name;
   if (deptInput) {
-    departmentRef = resolveDepartmentRef(deptCache, deptInput);
+    departmentRef = await resolver.department(deptInput);
   }
 
   // Resolve AP account if specified
   let apAccountRef: { value: string; name: string } | undefined;
   if (ap_account) {
-    const acct = resolveAccountRef(acctCache, ap_account);
+    const acct = await resolver.account(ap_account);
     apAccountRef = { value: acct.value, name: acct.name };
   }
 
   // Resolve lines
-  const resolvedLines = lines.map((line) => {
+  const resolvedLines = await Promise.all(lines.map(async (line) => {
     let accountId = line.account_id;
     let accountName = line.account_name;
     let accountNum: string | undefined;
 
     if (!accountId && accountName) {
-      const account = resolveAccountRef(acctCache, accountName);
+      const account = await resolver.account(accountName);
       accountId = account.value;
       accountName = account.name;
       accountNum = account.acctNum;
@@ -106,7 +111,7 @@ export async function handleCreateVendorCredit(
       amount_cents: amountCents,
       amount: toDollars(amountCents),
     };
-  });
+  }));
 
   // Calculate total
   const totalCents = sumCents(resolvedLines.map(l => l.amount_cents));
@@ -286,6 +291,7 @@ export async function handleEditVendorCredit(
       };
     }>;
   };
+  const resolver = createResolutionCoordinator(client);
 
   // Determine if we're modifying lines - requires full update (not sparse)
   const needsFullUpdate = lineChanges && lineChanges.length > 0;
@@ -319,8 +325,7 @@ export async function handleEditVendorCredit(
 
   // Resolve vendor if changing
   if (vendor_name) {
-    const vendorCacheData = await getVendorCache(client);
-    vendorRef = resolveVendorRef(vendorCacheData, vendor_name);
+    vendorRef = await resolver.vendor(vendor_name);
     updated.VendorRef = vendorRef;
   }
 
@@ -332,8 +337,6 @@ export async function handleEditVendorCredit(
   let finalLines = [...((updated.Line as typeof current.Line) || current.Line)];
 
   if (lineChanges && lineChanges.length > 0) {
-    const acctCache = await getAccountCache(client);
-
     for (const change of lineChanges) {
       if (change.line_id) {
         const lineIndex = finalLines.findIndex(l => l.Id === change.line_id);
@@ -355,7 +358,7 @@ export async function handleEditVendorCredit(
             line.Amount = toDollars(amountCents);
           }
           if (change.description !== undefined) line.Description = change.description;
-          if (change.account_name !== undefined) detail.AccountRef = resolveAccountRef(acctCache, change.account_name);
+          if (change.account_name !== undefined) detail.AccountRef = toEntityRef(await resolver.account(change.account_name));
 
           line.AccountBasedExpenseLineDetail = detail;
           line.DetailType = 'AccountBasedExpenseLineDetail';
@@ -373,7 +376,7 @@ export async function handleEditVendorCredit(
           Description: change.description,
           DetailType: 'AccountBasedExpenseLineDetail',
           AccountBasedExpenseLineDetail: {
-            AccountRef: resolveAccountRef(acctCache, change.account_name),
+            AccountRef: toEntityRef(await resolver.account(change.account_name)),
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);

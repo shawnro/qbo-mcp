@@ -15,7 +15,7 @@ import {
   outputReport,
   getQboUrl,
 } from "../../utils/index.js";
-import { resolveAccountRef, resolveDepartmentRef } from "../resolve.js";
+import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
 
 interface JournalEntryLine {
   account_id?: string;
@@ -61,9 +61,13 @@ export async function handleCreateJournalEntry(
     getAccountCache(client),
     getDepartmentCache(client)
   ]);
+  const resolver = createResolutionCoordinator(client, {
+    account: acctCache,
+    department: deptCache,
+  });
 
   // Resolve account and department names to IDs (all lookups are from cache)
-  const resolvedLines = lines.map((line) => {
+  const resolvedLines = await Promise.all(lines.map(async (line) => {
     let accountId = line.account_id;
     let accountName = line.account_name;
     let accountNum: string | undefined;
@@ -72,7 +76,7 @@ export async function handleCreateJournalEntry(
 
     // Resolve account
     if (!accountId && accountName) {
-      const account = resolveAccountRef(acctCache, accountName);
+      const account = await resolver.account(accountName);
       accountId = account.value;
       accountName = account.name;
       accountNum = account.acctNum;
@@ -82,7 +86,7 @@ export async function handleCreateJournalEntry(
 
     // Resolve department
     if (!departmentId && departmentName) {
-      const dept = resolveDepartmentRef(deptCache, departmentName);
+      const dept = await resolver.department(departmentName);
       departmentId = dept.value;
       departmentName = dept.name;
     }
@@ -101,7 +105,7 @@ export async function handleCreateJournalEntry(
       // Normalize amount to exactly 2 decimal places
       amount: toDollars(amountCents)
     };
-  });
+  }));
 
   // Validate debits = credits using cents (exact integer comparison)
   const totalDebitsCents = sumCents(
@@ -330,6 +334,10 @@ export async function handleEditJournalEntry(
       getAccountCache(client),
       getDepartmentCache(client)
     ]);
+    const resolver = createResolutionCoordinator(client, {
+      account: acctCache,
+      department: deptCache,
+    });
 
     for (const change of lineChanges) {
       if (change.line_id) {
@@ -354,8 +362,8 @@ export async function handleEditJournalEntry(
           }
           if (change.description !== undefined) line.Description = change.description;
           if (change.posting_type !== undefined) detail.PostingType = change.posting_type;
-          if (change.account_name !== undefined) detail.AccountRef = resolveAccountRef(acctCache, change.account_name);
-          if (change.department_name !== undefined) detail.DepartmentRef = resolveDepartmentRef(deptCache, change.department_name);
+          if (change.account_name !== undefined) detail.AccountRef = toEntityRef(await resolver.account(change.account_name));
+          if (change.department_name !== undefined) detail.DepartmentRef = await resolver.department(change.department_name);
 
           line.JournalEntryLineDetail = detail;
           finalLines[lineIndex] = line;
@@ -376,8 +384,8 @@ export async function handleEditJournalEntry(
           DetailType: 'JournalEntryLineDetail',
           JournalEntryLineDetail: {
             PostingType: change.posting_type,
-        AccountRef: resolveAccountRef(acctCache, change.account_name),
-          ...(change.department_name && { DepartmentRef: resolveDepartmentRef(deptCache, change.department_name) })
+            AccountRef: toEntityRef(await resolver.account(change.account_name)),
+            ...(change.department_name && { DepartmentRef: await resolver.department(change.department_name) })
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);
