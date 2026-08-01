@@ -364,6 +364,7 @@ describe("handleEditExpense", () => {
     PaymentMethodRef: { value: "5", name: "Visa" },
     Credit: false,
     IncludeInAnnualTPAR: false,
+    LinkedTxn: [{ TxnId: "901", TxnType: "ReimburseCharge", TxnLineId: "1" }],
     TotalAmt: 45.99,
     Line: [
       {
@@ -426,6 +427,7 @@ describe("handleEditExpense", () => {
     expect(payload.PaymentMethodRef).toEqual(existingExpense.PaymentMethodRef);
     expect(payload.Credit).toBe(false);
     expect(payload.IncludeInAnnualTPAR).toBe(false);
+    expect(payload.LinkedTxn).toEqual(existingExpense.LinkedTxn);
     expect(payload.Line[0].AccountBasedExpenseLineDetail).toMatchObject({
       CustomerRef: { value: "299", name: "Original Customer:Original Job" },
       BillableStatus: "NotBillable",

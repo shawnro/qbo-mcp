@@ -448,6 +448,7 @@ describe("handleEditBill", () => {
     CurrencyRef: { value: "USD", name: "United States Dollar" },
     ExchangeRate: 1,
     IncludeInAnnualTPAR: false,
+    LinkedTxn: [{ TxnId: "900", TxnType: "BillPaymentCheck", TxnLineId: "1" }],
     TotalAmt: 150,
     Line: [
       {
@@ -514,6 +515,7 @@ describe("handleEditBill", () => {
     expect(payload.CurrencyRef).toEqual(existingBill.CurrencyRef);
     expect(payload.ExchangeRate).toBe(1);
     expect(payload.IncludeInAnnualTPAR).toBe(false);
+    expect(payload.LinkedTxn).toEqual(existingBill.LinkedTxn);
   });
 
   it("changes an existing line customer/job by name", async () => {

@@ -345,6 +345,7 @@ describe("handleEditVendorCredit", () => {
     CurrencyRef: { value: "USD", name: "United States Dollar" },
     ExchangeRate: 1,
     IncludeInAnnualTPAR: false,
+    LinkedTxn: [{ TxnId: "902", TxnType: "ReimburseCharge", TxnLineId: "1" }],
     TxnDate: "2024-06-15",
     TotalAmt: 200,
     Line: [
@@ -412,6 +413,7 @@ describe("handleEditVendorCredit", () => {
     expect(payload.CurrencyRef).toEqual(existingVC.CurrencyRef);
     expect(payload.ExchangeRate).toBe(1);
     expect(payload.IncludeInAnnualTPAR).toBe(false);
+    expect(payload.LinkedTxn).toEqual(existingVC.LinkedTxn);
   });
 
   it("changes an existing line customer/job", async () => {

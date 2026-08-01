@@ -322,6 +322,7 @@ export async function handleEditBill(
     GlobalTaxCalculation?: string;
     TxnTaxDetail?: unknown;
     IncludeInAnnualTPAR?: boolean;
+    LinkedTxn?: Array<{ TxnId: string; TxnType: string; TxnLineId?: string }>;
     Line: Array<{
       Id: string;
       Amount: number;
@@ -377,6 +378,7 @@ export async function handleEditBill(
     if (current.GlobalTaxCalculation !== undefined) updated.GlobalTaxCalculation = current.GlobalTaxCalculation;
     if (current.TxnTaxDetail !== undefined) updated.TxnTaxDetail = current.TxnTaxDetail;
     if (current.IncludeInAnnualTPAR !== undefined) updated.IncludeInAnnualTPAR = current.IncludeInAnnualTPAR;
+    if (current.LinkedTxn) updated.LinkedTxn = current.LinkedTxn;
     // Copy lines and strip read-only fields
     updated.Line = current.Line.map(line => {
       const { LineNum, ...rest } = line as Record<string, unknown>;
