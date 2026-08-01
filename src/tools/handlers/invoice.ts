@@ -9,6 +9,7 @@ import {
   resolveCustomer,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { resolveDepartmentRef } from "../resolve.js";
 
 interface InvoiceLineChange {
   line_id?: string;
@@ -78,24 +79,7 @@ export async function handleCreateInvoice(
   const deptInput = department_id || department_name;
   if (deptInput) {
     const deptCache = await getDepartmentCache(client);
-    const byId = deptCache.byId.get(deptInput);
-    if (byId) {
-      departmentRef = { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
-    } else {
-      const byName = deptCache.byName.get(deptInput.toLowerCase());
-      if (byName) {
-        departmentRef = { value: byName.Id, name: byName.FullyQualifiedName || byName.Name };
-      } else {
-        const byPartial = deptCache.items.find(d =>
-          d.FullyQualifiedName?.toLowerCase().includes(deptInput.toLowerCase())
-        );
-        if (byPartial) {
-          departmentRef = { value: byPartial.Id, name: byPartial.FullyQualifiedName || byPartial.Name };
-        } else {
-          throw new Error(`Department not found: "${deptInput}"`);
-        }
-      }
-    }
+    departmentRef = resolveDepartmentRef(deptCache, deptInput);
   }
 
   // Resolve sales term (optional)
@@ -465,12 +449,7 @@ export async function handleEditInvoice(
   // Resolve header-level department if provided
   if (department_name !== undefined) {
     const deptCache = await getDepartmentCache(client);
-    let match = deptCache.byName.get(department_name.toLowerCase());
-    if (!match) match = deptCache.items.find(d =>
-      d.FullyQualifiedName?.toLowerCase().includes(department_name.toLowerCase())
-    );
-    if (!match) throw new Error(`Department not found: "${department_name}"`);
-    updated.DepartmentRef = { value: match.Id, name: match.FullyQualifiedName || match.Name };
+    updated.DepartmentRef = resolveDepartmentRef(deptCache, department_name);
   }
 
   // Process line changes if provided

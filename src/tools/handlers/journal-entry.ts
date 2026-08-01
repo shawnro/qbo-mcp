@@ -15,6 +15,7 @@ import {
   outputReport,
   getQboUrl,
 } from "../../utils/index.js";
+import { resolveAccountRef, resolveDepartmentRef } from "../resolve.js";
 
 interface JournalEntryLine {
   account_id?: string;
@@ -61,48 +62,6 @@ export async function handleCreateJournalEntry(
     getDepartmentCache(client)
   ]);
 
-  // Helper to lookup account by name or AcctNum from cache
-  const lookupAccount = (name: string): { id: string; name: string; acctNum?: string } => {
-    // Try exact AcctNum match (case-insensitive)
-    let match = acctCache.byAcctNum.get(name.toLowerCase());
-
-    // Try exact name match (case-insensitive)
-    if (!match) {
-      match = acctCache.byName.get(name.toLowerCase());
-    }
-
-    // Try partial match on FullyQualifiedName
-    if (!match) {
-      match = acctCache.items.find(a =>
-        a.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase()) ||
-        a.FullyQualifiedName?.toLowerCase() === name.toLowerCase()
-      );
-    }
-
-    if (match) {
-      return { id: match.Id, name: match.FullyQualifiedName || match.Name, acctNum: match.AcctNum };
-    }
-    throw new Error(`Account not found: "${name}"`);
-  };
-
-  // Helper to lookup department by name from cache
-  const lookupDepartment = (name: string): { id: string; name: string } => {
-    // Try exact name match (case-insensitive)
-    let match = deptCache.byName.get(name.toLowerCase());
-
-    // Try partial match on FullyQualifiedName
-    if (!match) {
-      match = deptCache.items.find(d =>
-        d.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase())
-      );
-    }
-
-    if (match) {
-      return { id: match.Id, name: match.FullyQualifiedName || match.Name };
-    }
-    throw new Error(`Department not found: "${name}"`);
-  };
-
   // Resolve account and department names to IDs (all lookups are from cache)
   const resolvedLines = lines.map((line) => {
     let accountId = line.account_id;
@@ -113,8 +72,8 @@ export async function handleCreateJournalEntry(
 
     // Resolve account
     if (!accountId && accountName) {
-      const account = lookupAccount(accountName);
-      accountId = account.id;
+      const account = resolveAccountRef(acctCache, accountName);
+      accountId = account.value;
       accountName = account.name;
       accountNum = account.acctNum;
     } else if (!accountId && !accountName) {
@@ -123,8 +82,8 @@ export async function handleCreateJournalEntry(
 
     // Resolve department
     if (!departmentId && departmentName) {
-      const dept = lookupDepartment(departmentName);
-      departmentId = dept.id;
+      const dept = resolveDepartmentRef(deptCache, departmentName);
+      departmentId = dept.value;
       departmentName = dept.name;
     }
 
@@ -372,27 +331,6 @@ export async function handleEditJournalEntry(
       getDepartmentCache(client)
     ]);
 
-    // Helper to resolve account
-    const resolveAcct = (name: string) => {
-      let match = acctCache.byAcctNum.get(name.toLowerCase());
-      if (!match) match = acctCache.byName.get(name.toLowerCase());
-      if (!match) match = acctCache.items.find(a =>
-        a.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase())
-      );
-      if (!match) throw new Error(`Account not found: "${name}"`);
-      return { value: match.Id, name: match.FullyQualifiedName || match.Name };
-    };
-
-    // Helper to resolve department
-    const resolveDept = (name: string) => {
-      let match = deptCache.byName.get(name.toLowerCase());
-      if (!match) match = deptCache.items.find(d =>
-        d.FullyQualifiedName?.toLowerCase().includes(name.toLowerCase())
-      );
-      if (!match) throw new Error(`Department not found: "${name}"`);
-      return { value: match.Id, name: match.FullyQualifiedName || match.Name };
-    };
-
     for (const change of lineChanges) {
       if (change.line_id) {
         // Find existing line
@@ -416,8 +354,8 @@ export async function handleEditJournalEntry(
           }
           if (change.description !== undefined) line.Description = change.description;
           if (change.posting_type !== undefined) detail.PostingType = change.posting_type;
-          if (change.account_name !== undefined) detail.AccountRef = resolveAcct(change.account_name);
-          if (change.department_name !== undefined) detail.DepartmentRef = resolveDept(change.department_name);
+          if (change.account_name !== undefined) detail.AccountRef = resolveAccountRef(acctCache, change.account_name);
+          if (change.department_name !== undefined) detail.DepartmentRef = resolveDepartmentRef(deptCache, change.department_name);
 
           line.JournalEntryLineDetail = detail;
           finalLines[lineIndex] = line;
@@ -438,8 +376,8 @@ export async function handleEditJournalEntry(
           DetailType: 'JournalEntryLineDetail',
           JournalEntryLineDetail: {
             PostingType: change.posting_type,
-            AccountRef: resolveAcct(change.account_name),
-            ...(change.department_name && { DepartmentRef: resolveDept(change.department_name) })
+        AccountRef: resolveAccountRef(acctCache, change.account_name),
+          ...(change.department_name && { DepartmentRef: resolveDepartmentRef(deptCache, change.department_name) })
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);

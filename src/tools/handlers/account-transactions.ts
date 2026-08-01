@@ -10,6 +10,7 @@ import { toCents, sumCents, toDollars, outputReport, isHttpMode } from "../../ut
 import { PaginationParams } from "../../types/index.js";
 import { paginatedQuery, extractAccountLines } from "../../query/index.js";
 import { TransactionLine } from "../../types/index.js";
+import { resolveDepartmentRef } from "../resolve.js";
 
 // Group transactions by unique transaction key (type:txnId)
 interface GroupedTransaction {
@@ -72,28 +73,9 @@ export async function handleQueryAccountTransactions(
   let resolvedDepartmentName: string | undefined;
   if (department) {
     const deptCache = await getDepartmentCache(client);
-
-    // Try exact ID match
-    let deptMatch = deptCache.byId.get(department);
-
-    // Try exact name match (case-insensitive)
-    if (!deptMatch) {
-      deptMatch = deptCache.byName.get(department.toLowerCase());
-    }
-
-    // Try partial match on FullyQualifiedName
-    if (!deptMatch) {
-      deptMatch = deptCache.items.find(d =>
-        d.FullyQualifiedName?.toLowerCase().includes(department.toLowerCase())
-      );
-    }
-
-    if (deptMatch) {
-      resolvedDepartmentId = deptMatch.Id;
-      resolvedDepartmentName = deptMatch.Name;
-    } else {
-      throw new Error(`Department not found: "${department}"`);
-    }
+    const ref = resolveDepartmentRef(deptCache, department);
+    resolvedDepartmentId = ref.value;
+    resolvedDepartmentName = ref.name;
   }
 
   // Build date range

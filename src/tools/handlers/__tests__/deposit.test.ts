@@ -96,7 +96,7 @@ describe("handleCreateDeposit", () => {
     const payload = client.createDeposit.mock.calls[0][0];
     const line = payload.Line[0];
     expect(line.DetailType).toBe("DepositLineDetail");
-    expect(line.DepositLineDetail.AccountRef).toEqual({ value: "2", name: "Tips" });
+    expect(line.DepositLineDetail.AccountRef).toEqual({ value: "2", name: "Tips", acctNum: "4100" });
     expect(line.DepositLineDetail.Entity).toBeDefined();
     expect(line.DepositLineDetail.Entity.value).toBe("100"); // Office Depot
   });
@@ -112,7 +112,7 @@ describe("handleCreateDeposit", () => {
     });
 
     const payload = client.createDeposit.mock.calls[0][0];
-    expect(payload.DepositToAccountRef).toEqual({ value: "1", name: "Cash" });
+    expect(payload.DepositToAccountRef).toEqual({ value: "1", name: "Cash", acctNum: "1000" });
   });
 
   it("includes DepartmentRef when provided", async () => {
