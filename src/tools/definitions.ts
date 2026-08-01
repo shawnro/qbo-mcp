@@ -346,7 +346,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_bill",
-    description: "Create a vendor bill. Accepts vendor/account/department names (will lookup IDs automatically). Note: DepartmentRef is header-level only — for multi-department splits, create separate bills (one per department). Returns bill details and a link to view in QuickBooks.",
+    description: "Create a vendor bill. Accepts vendor/account/department names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Note: DepartmentRef is header-level only — for multi-department splits, create separate bills (one per department). Returns bill details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -408,6 +408,14 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
+              customer_name: {
+                type: "string",
+                description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
+              },
+              customer_id: {
+                type: "string",
+                description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
+              },
             },
             required: ["amount"],
           },
@@ -422,7 +430,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_bill",
-    description: "Fetch a single bill by ID with full details including SyncToken (needed for edits). Returns vendor, date, due date, amount, AP account, line details.",
+    description: "Fetch a single bill by ID with full details including SyncToken (needed for edits). Returns vendor, date, due date, amount, AP account, and line details including customer/job and billable status when present.",
     inputSchema: {
       type: "object",
       properties: {
@@ -507,7 +515,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_expense",
-    description: "Fetch a single expense (Purchase) by ID with full details including SyncToken. Covers Expenses, Checks, and Credit Card charges. Returns payment type, account, date, amount, line details.",
+    description: "Fetch a single expense (Purchase) by ID with full details including SyncToken. Covers Expenses, Checks, and Credit Card charges. Returns payment type, account, date, amount, and line details including customer/job and billable status when present.",
     inputSchema: {
       type: "object",
       properties: {
@@ -592,7 +600,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_expense",
-    description: "Create an expense (Purchase). Accepts account/department/vendor names (will lookup IDs automatically). Covers Cash, Check, and Credit Card payment types. Note: PaymentType cannot be changed after creation. DepartmentRef is header-level only. Returns expense details and a link to view in QuickBooks.",
+    description: "Create an expense (Purchase). Accepts account/department/vendor names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Covers Cash, Check, and Credit Card payment types. Note: PaymentType cannot be changed after creation. DepartmentRef is header-level only. Returns expense details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -654,6 +662,14 @@ export const toolDefinitions = [
               description: {
                 type: "string",
                 description: "Line description (optional)",
+              },
+              customer_name: {
+                type: "string",
+                description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
+              },
+              customer_id: {
+                type: "string",
+                description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
               },
             },
             required: ["amount"],
@@ -1197,7 +1213,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_vendor_credit",
-    description: "Create a vendor credit. Accepts vendor/account/department names (will lookup IDs automatically). Lines represent credit amounts applied to expense accounts. Returns credit details and a link to view in QuickBooks.",
+    description: "Create a vendor credit. Accepts vendor/account/department names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Lines represent credit amounts applied to expense accounts. Returns credit details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1255,6 +1271,14 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
+              customer_name: {
+                type: "string",
+                description: "Optional customer display or fully qualified job name for this line (e.g., 'Customer:Job'). Mutually exclusive with customer_id. Does not make the line billable.",
+              },
+              customer_id: {
+                type: "string",
+                description: "Optional customer/job ID for this line. Mutually exclusive with customer_name. Does not make the line billable.",
+              },
             },
             required: ["amount"],
           },
@@ -1269,7 +1293,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_vendor_credit",
-    description: "Fetch a single vendor credit by ID with full details including SyncToken (needed for edits). Returns vendor, date, memo, ref number, AP account, and line details showing expense accounts and amounts.",
+    description: "Fetch a single vendor credit by ID with full details including SyncToken (needed for edits). Returns vendor, date, memo, ref number, AP account, and line details including expense account, customer/job, billable status, and amount.",
     inputSchema: {
       type: "object",
       properties: {

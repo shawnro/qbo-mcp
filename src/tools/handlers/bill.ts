@@ -8,11 +8,13 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
+import { createResolutionCoordinator, resolveOptionalCustomerRef, toEntityRef } from "../resolve.js";
 
 interface CreateBillLine {
   account_id?: string;
   account_name?: string;
+  customer_id?: string;
+  customer_name?: string;
   amount: number;
   description?: string;
 }
@@ -103,6 +105,7 @@ export async function handleCreateBill(
     }
 
     const amountCents = validateAmount(line.amount, `Line ${accountName || accountId}`);
+    const customerRef = await resolveOptionalCustomerRef(resolver, line);
 
     return {
       ...line,
@@ -111,6 +114,7 @@ export async function handleCreateBill(
       account_num: accountNum,
       amount_cents: amountCents,
       amount: toDollars(amountCents),
+      customer_ref: customerRef,
     };
   }));
 
@@ -135,6 +139,7 @@ export async function handleCreateBill(
           value: line.account_id,
           name: line.account_name,
         },
+        ...(line.customer_ref && { CustomerRef: line.customer_ref }),
         BillableStatus: "NotBillable",
       },
     })),
@@ -160,7 +165,7 @@ export async function handleCreateBill(
       "",
       "Lines:",
       ...resolvedLines.map(l =>
-        `  ${formatAccount(l)}: $${l.amount.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
+        `  ${formatAccount(l)}${l.customer_ref ? ` [Customer/Job: ${l.customer_ref.name}]` : ""}: $${l.amount.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
       ),
       "",
       "Set draft=false to create this bill.",
@@ -220,6 +225,8 @@ export async function handleGetBill(
       AccountBasedExpenseLineDetail?: {
         AccountRef: { value: string; name?: string };
         DepartmentRef?: { value: string; name?: string };
+        CustomerRef?: { value: string; name?: string };
+        BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
       };
       ItemBasedExpenseLineDetail?: {
         ItemRef: { value: string; name?: string };
@@ -252,8 +259,11 @@ export async function handleGetBill(
       const detail = line.AccountBasedExpenseLineDetail;
       const acctName = detail.AccountRef.name || detail.AccountRef.value;
       const deptStr = detail.DepartmentRef?.name ? ` [${detail.DepartmentRef.name}]` : '';
+      const customerName = detail.CustomerRef?.name || detail.CustomerRef?.value;
+      const customerStr = customerName ? ` [Customer/Job: ${customerName}]` : '';
+      const billableStr = detail.BillableStatus ? ` [${detail.BillableStatus}]` : '';
       const descStr = line.Description ? ` "${line.Description}"` : '';
-      lines.push(`  Line ${line.Id}: ${acctName}${deptStr} $${line.Amount.toFixed(2)}${descStr}`);
+      lines.push(`  Line ${line.Id}: ${acctName}${deptStr}${customerStr}${billableStr} $${line.Amount.toFixed(2)}${descStr}`);
     } else if (line.ItemBasedExpenseLineDetail) {
       const detail = line.ItemBasedExpenseLineDetail;
       const itemName = detail.ItemRef.name || detail.ItemRef.value;
@@ -304,6 +314,8 @@ export async function handleEditBill(
       AccountBasedExpenseLineDetail?: {
         AccountRef: { value: string; name?: string };
         DepartmentRef?: { value: string; name?: string };
+        CustomerRef?: { value: string; name?: string };
+        BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
       };
     }>;
   };

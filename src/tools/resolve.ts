@@ -122,6 +122,20 @@ export type CustomerResolutionInput =
   | { id: string; name?: never }
   | { name: string; id?: never };
 
+export async function resolveOptionalCustomerRef(
+  resolver: ResolutionCoordinator,
+  input: { customer_name?: string; customer_id?: string }
+): Promise<EntityRef | undefined> {
+  const name = input.customer_name?.trim();
+  const id = input.customer_id?.trim();
+  if (name && id) {
+    throw new Error("Provide only one of customer_name or customer_id per line");
+  }
+  if (id) return resolver.customer({ id });
+  if (name) return resolver.customer({ name });
+  return undefined;
+}
+
 /**
  * Create an invocation-scoped resolver that retries a cache miss once after a
  * forced refresh. Concurrent misses share one refresh promise per entity type.

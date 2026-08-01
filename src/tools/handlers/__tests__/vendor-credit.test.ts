@@ -20,6 +20,8 @@ vi.mock("../../../client/index.js", () => ({
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveVendor: vi.fn(),
+    resolveCustomer: vi.fn(),
+    resolveCustomerById: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
     refreshTokens: vi.fn(),
@@ -46,11 +48,19 @@ import {
   handleGetVendorCredit,
   handleEditVendorCredit,
 } from "../vendor-credit.js";
-import { getAccountCache, getDepartmentCache, getVendorCache } from "../../../client/index.js";
+import {
+  getAccountCache,
+  getDepartmentCache,
+  getVendorCache,
+  resolveCustomer,
+  resolveCustomerById,
+} from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
+const mockResolveCustomer = vi.mocked(resolveCustomer);
+const mockResolveCustomerById = vi.mocked(resolveCustomerById);
 
 describe("handleCreateVendorCredit", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -62,6 +72,8 @@ describe("handleCreateVendorCredit", () => {
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
   });
 
   it("returns preview in draft mode", async () => {
@@ -88,6 +100,67 @@ describe("handleCreateVendorCredit", () => {
     });
 
     expect(client.createVendorCredit).toHaveBeenCalledOnce();
+    expect(client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail)
+      .not.toHaveProperty("CustomerRef");
+  });
+
+  it("assigns a line customer/job by name without making it billable", async () => {
+    mockSuccess(client.createVendorCredit, { Id: "501" });
+
+    await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{
+        account_name: "Office Supplies",
+        customer_name: "Customer One:Job One",
+        amount: 75.50,
+      }],
+      draft: false,
+    });
+
+    const detail = client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("assigns a line customer/job by ID", async () => {
+    mockSuccess(client.createVendorCredit, { Id: "502" });
+
+    await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{ account_name: "Cash", customer_id: "301", amount: 25 }],
+      draft: false,
+    });
+
+    const detail = client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+    expect(mockResolveCustomerById).toHaveBeenCalledWith(client, "301");
+  });
+
+  it("shows a line customer/job in the default draft preview", async () => {
+    const result = await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{ account_name: "Cash", customer_name: "Customer One:Job One", amount: 25 }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.createVendorCredit).not.toHaveBeenCalled();
+  });
+
+  it("rejects customer_name and customer_id on the same line", async () => {
+    await expect(handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{
+        account_name: "Cash",
+        customer_name: "Customer One:Job One",
+        customer_id: "301",
+        amount: 25,
+      }],
+    })).rejects.toThrow("only one");
+    expect(client.createVendorCredit).not.toHaveBeenCalled();
   });
 
   it("builds correct payload with VendorRef", async () => {
@@ -227,6 +300,30 @@ describe("handleGetVendorCredit", () => {
     const result = await handleGetVendorCredit(client as never, { id: "500" });
     expect(result.content[0].text).toContain("Office Depot");
     expect(client.getVendorCredit).toHaveBeenCalledOnce();
+  });
+
+  it("shows line customer/job and billable status", async () => {
+    mockSuccess(client.getVendorCredit, {
+      Id: "500",
+      SyncToken: "3",
+      TxnDate: "2024-06-15",
+      VendorRef: { value: "100", name: "Office Depot" },
+      TotalAmt: 25,
+      Line: [{
+        Id: "1",
+        Amount: 25,
+        DetailType: "AccountBasedExpenseLineDetail",
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "5", name: "Office Supplies" },
+          CustomerRef: { value: "300", name: "Customer One:Job One" },
+          BillableStatus: "NotBillable",
+        },
+      }],
+    });
+
+    const result = await handleGetVendorCredit(client as never, { id: "500" });
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(result.content[0].text).toContain("NotBillable");
   });
 
   it("propagates API errors", async () => {
