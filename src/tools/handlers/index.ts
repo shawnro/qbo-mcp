@@ -22,6 +22,12 @@ export { handleCreateInvoice, handleGetInvoice, handleEditInvoice } from './invo
 export { handleCreateDeposit, handleGetDeposit, handleEditDeposit } from './deposit.js';
 export { handleCreateVendorCredit, handleGetVendorCredit, handleEditVendorCredit } from './vendor-credit.js';
 export { handleCreateBillPayment, handleGetBillPayment } from './bill-payment.js';
+export {
+  handleCreateVendor,
+  handleGetVendor,
+  handleEditVendor,
+  handleDeactivateVendor,
+} from './vendor.js';
 export { handleCreateCustomer, handleGetCustomer, handleEditCustomer } from './customer.js';
 export { handleCreateClass, handleGetClass, handleEditClass } from './class.js';
 export { handleCreateAttachable, handleGetAttachable, handleEditAttachable } from './attachable.js';

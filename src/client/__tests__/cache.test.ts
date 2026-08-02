@@ -464,6 +464,33 @@ describe("TTL and caching behavior", () => {
     expect(client.findItems).toHaveBeenCalledOnce();
     expect(client.findCustomers).toHaveBeenCalledOnce();
   });
+
+  it("does not cache an in-flight Vendor snapshot completed after invalidation", async () => {
+    let resolveFirstLookup: ((result: unknown) => void) | undefined;
+    client.findVendors
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args[args.length - 1] as (error: Error | null, result: unknown) => void;
+        resolveFirstLookup = (result) => callback(null, result);
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args[args.length - 1] as (error: Error | null, result: unknown) => void;
+        callback(null, {
+          QueryResponse: { Vendor: [{ Id: "101", DisplayName: "Fresh Vendor" }] },
+        });
+      });
+
+    const staleLookup = getVendorCache(client as never);
+    clearVendorCache();
+    resolveFirstLookup!({
+      QueryResponse: { Vendor: [{ Id: "100", DisplayName: "Stale Vendor" }] },
+    });
+    await staleLookup;
+
+    const refreshed = await getVendorCache(client as never);
+    expect(refreshed.byId.has("101")).toBe(true);
+    expect(refreshed.byId.has("100")).toBe(false);
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("forced cache refresh", () => {

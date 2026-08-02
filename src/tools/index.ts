@@ -36,6 +36,10 @@ import {
   handleEditVendorCredit,
   handleCreateBillPayment,
   handleGetBillPayment,
+  handleCreateVendor,
+  handleGetVendor,
+  handleEditVendor,
+  handleDeactivateVendor,
   handleCreateCustomer,
   handleGetCustomer,
   handleEditCustomer,
@@ -91,6 +95,10 @@ toolHandlers.set("get_vendor_credit", (client, args) => handleGetVendorCredit(cl
 toolHandlers.set("edit_vendor_credit", (client, args) => handleEditVendorCredit(client, args as Parameters<typeof handleEditVendorCredit>[1]));
 toolHandlers.set("create_bill_payment", (client, args) => handleCreateBillPayment(client, args as Parameters<typeof handleCreateBillPayment>[1]));
 toolHandlers.set("get_bill_payment", (client, args) => handleGetBillPayment(client, args as { id: string }));
+toolHandlers.set("create_vendor", (client, args) => handleCreateVendor(client, args as unknown as Parameters<typeof handleCreateVendor>[1]));
+toolHandlers.set("get_vendor", (client, args) => handleGetVendor(client, args as { id: string }));
+toolHandlers.set("edit_vendor", (client, args) => handleEditVendor(client, args as unknown as Parameters<typeof handleEditVendor>[1]));
+toolHandlers.set("deactivate_vendor", (client, args) => handleDeactivateVendor(client, args as Parameters<typeof handleDeactivateVendor>[1]));
 toolHandlers.set("create_customer", (client, args) => handleCreateCustomer(client, args as Parameters<typeof handleCreateCustomer>[1]));
 toolHandlers.set("get_customer", (client, args) => handleGetCustomer(client, args as { id: string }));
 toolHandlers.set("edit_customer", (client, args) => handleEditCustomer(client, args as Parameters<typeof handleEditCustomer>[1]));

@@ -460,6 +460,11 @@ QBO_INLINE_OUTPUT=true
 | **Bill Payments** | |
 | `create_bill_payment` | Pay bills and apply vendor credits (the QBO "check" / pay-bills flow) |
 | `get_bill_payment` | Fetch a bill payment by ID; flags unapplied amounts |
+| **Vendors** | |
+| `create_vendor` | Create a vendor master record with contact, address, terms, account number, and 1099 details |
+| `get_vendor` | Fetch a vendor by ID with SyncToken, contact details, balance, active state, and metadata |
+| `edit_vendor` | Modify vendor details, explicitly clear optional values, or reactivate an inactive vendor |
+| `deactivate_vendor` | Safely deactivate a vendor while preserving historical transactions; draft-first and reversible |
 | **Delete** | |
 | `delete_entity` | Delete any transaction (journal entry, bill, invoice, deposit, sales receipt, expense, vendor credit, bill payment, attachable) |
 | **Classes** | |

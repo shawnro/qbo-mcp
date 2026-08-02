@@ -25,6 +25,7 @@ export interface LookupCacheOptions {
 let departmentCache: DepartmentCache | null = null;
 let accountCache: AccountCache | null = null;
 let vendorCache: VendorCache | null = null;
+let vendorCacheGeneration = 0;
 // Item cache: lazy per-entry lookup (not bulk-loaded like others)
 const itemCacheById = new Map<string, CachedItem>();
 const itemCacheByName = new Map<string, CachedItem>(); // lowercase key
@@ -34,6 +35,7 @@ const customerCacheByName = new Map<string, CachedCustomer>(); // lowercase key
 
 export function clearVendorCache(): void {
   vendorCache = null;
+  vendorCacheGeneration++;
 }
 
 export function clearLookupCache(): void {
@@ -128,6 +130,7 @@ export async function getVendorCache(
     return vendorCache;
   }
 
+  const generation = vendorCacheGeneration;
   const result = await promisify<unknown>((cb) => client.findVendors({ fetchAll: true }, cb));
   const items = extractQueryResults<CachedVendor>(result, 'Vendor');
 
@@ -138,8 +141,11 @@ export async function getVendorCache(
     byName.set(vendor.DisplayName.toLowerCase(), vendor);
   }
 
-  vendorCache = { items, byId, byName, fetchedAt: Date.now() };
-  return vendorCache;
+  const refreshed = { items, byId, byName, fetchedAt: Date.now() };
+  if (generation === vendorCacheGeneration) {
+    vendorCache = refreshed;
+  }
+  return refreshed;
 }
 
 // Resolve vendor by name or ID using cache

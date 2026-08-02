@@ -52,6 +52,10 @@ vi.mock("../../tools/handlers/index.js", () => ({
   handleEditVendorCredit: vi.fn(),
   handleCreateBillPayment: vi.fn(),
   handleGetBillPayment: vi.fn(),
+  handleCreateVendor: vi.fn(),
+  handleGetVendor: vi.fn(),
+  handleEditVendor: vi.fn(),
+  handleDeactivateVendor: vi.fn(),
   handleCreateCustomer: vi.fn(),
   handleGetCustomer: vi.fn(),
   handleEditCustomer: vi.fn(),
@@ -60,10 +64,14 @@ vi.mock("../../tools/handlers/index.js", () => ({
 
 import { executeTool } from "../index.js";
 import {
+  handleCreateVendor,
   handleGetCompanyInfo,
+  handleGetVendor,
 } from "../handlers/index.js";
 
+const mockHandleCreateVendor = vi.mocked(handleCreateVendor);
 const mockHandleGetCompanyInfo = vi.mocked(handleGetCompanyInfo);
+const mockHandleGetVendor = vi.mocked(handleGetVendor);
 
 describe("executeTool", () => {
   const fakeClient = {} as never;
@@ -76,6 +84,9 @@ describe("executeTool", () => {
     mockHandleGetCompanyInfo.mockResolvedValue({
       content: [{ type: "text", text: "Company Info" }],
     });
+    mockHandleGetVendor.mockResolvedValue({
+      content: [{ type: "text", text: "Vendor Info" }],
+    });
   });
 
   it("executes handler successfully on first try", async () => {
@@ -83,6 +94,33 @@ describe("executeTool", () => {
 
     expect(result.content[0].text).toBe("Company Info");
     expect(mockGetClient).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("routes Vendor tools through the registry", async () => {
+    const result = await executeTool("get_vendor", { id: "42" });
+
+    expect(result.content[0].text).toBe("Vendor Info");
+    expect(mockHandleGetVendor).toHaveBeenCalledWith(fakeClient, { id: "42" });
+  });
+
+  it("does not auth-retry a partial Vendor creation result", async () => {
+    mockHandleCreateVendor.mockResolvedValue({
+      content: [{
+        type: "text",
+        text: "Vendor Acme (ID: 42) was created, but default terms could not be applied: HTTP 401: Unauthorized",
+      }],
+      isError: true,
+    });
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+      terms_ref: "Net 30",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
     expect(mockRefreshTokens).not.toHaveBeenCalled();
   });
 

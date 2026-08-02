@@ -26,6 +26,101 @@ const lineCustomerRefEditProperties = {
   },
 };
 
+const addressSchemaProperties = {
+  line1: { type: "string" },
+  line2: { type: "string" },
+  line3: { type: "string" },
+  line4: { type: "string" },
+  line5: { type: "string" },
+  city: { type: "string" },
+  country_sub_division_code: { type: "string", description: "State/province code" },
+  postal_code: { type: "string" },
+  country: { type: "string" },
+  lat: { type: "string" },
+  long: { type: "string" },
+};
+
+const vendorWriteProperties = {
+  display_name: {
+    type: "string",
+    maxLength: 500,
+    description: "Vendor display name. Required on create and unique across QBO vendors, customers, and employees. Cannot contain colon, tab, or newline characters.",
+  },
+  title: {
+    type: "string",
+    maxLength: 16,
+    description: "Personal title, maximum 16 characters (optional)",
+  },
+  given_name: {
+    type: "string",
+    maxLength: 100,
+    description: "First/given name, maximum 100 characters (optional)",
+  },
+  middle_name: {
+    type: "string",
+    maxLength: 100,
+    description: "Middle name, maximum 100 characters (optional)",
+  },
+  family_name: {
+    type: "string",
+    maxLength: 100,
+    description: "Last/family name, maximum 100 characters (optional)",
+  },
+  suffix: {
+    type: "string",
+    maxLength: 16,
+    description: "Name suffix, maximum 16 characters (optional)",
+  },
+  company_name: {
+    type: "string",
+    maxLength: 100,
+    description: "Company name, maximum 100 characters (optional)",
+  },
+  print_on_check_name: {
+    type: "string",
+    maxLength: 100,
+    description: "Name printed on checks, maximum 100 characters (optional; defaults from display name)",
+  },
+  email: {
+    type: "string",
+    description: "Primary email address. Must contain @ and a domain (optional).",
+  },
+  phone: {
+    type: "string",
+    description: "Primary phone number (optional)",
+  },
+  mobile: {
+    type: "string",
+    description: "Mobile phone number (optional)",
+  },
+  fax: {
+    type: "string",
+    description: "Fax number (optional)",
+  },
+  web_address: {
+    type: "string",
+    description: "Website URI (optional)",
+  },
+  bill_address: {
+    type: "object",
+    description: "Default billing address (optional)",
+    properties: addressSchemaProperties,
+  },
+  vendor_1099: {
+    type: "boolean",
+    description: "Whether this vendor is an independent contractor tracked for US 1099 reporting (optional)",
+  },
+  account_number: {
+    type: "string",
+    maxLength: 100,
+    description: "Account number associated with this vendor, maximum 100 characters (optional)",
+  },
+  terms_ref: {
+    type: "string",
+    description: "Default payment term name or ID, such as 'Net 30'. Auto-resolved to a QBO Term (optional).",
+  },
+};
+
 export const toolDefinitions = [
   {
     name: "qbo_authenticate",
@@ -1469,6 +1564,108 @@ export const toolDefinitions = [
         id: {
           type: "string",
           description: "The bill payment ID",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_vendor",
+    description: "Create a QBO vendor master record. Supports identity, contact, billing address, payment terms, account number, and 1099 status. Defaults to draft mode so the vendor is previewed before creation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...vendorWriteProperties,
+        draft: {
+          type: "boolean",
+          description: "If true, validate and preview without creating (default: true)",
+        },
+      },
+      required: ["display_name"],
+    },
+  },
+  {
+    name: "get_vendor",
+    description: "Fetch a Vendor by ID with SyncToken, identity, contact details, billing address, terms, 1099 status, account number, balance, active state, currency, metadata, and a QBO link.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Vendor ID",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "edit_vendor",
+    description: "Modify a Vendor using its latest QBO SyncToken. Omitted fields are preserved. Use explicit clear_* directives to remove optional contact, address, terms, or account-number values. Defaults to draft mode. Set active=true to reactivate a vendor.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Vendor ID to edit",
+        },
+        ...vendorWriteProperties,
+        active: {
+          type: "boolean",
+          description: "Set true to reactivate or false to deactivate. Prefer deactivate_vendor for an explicit deactivation preview.",
+        },
+        clear_email: {
+          type: "boolean",
+          description: "Set true to remove the primary email. Do not combine with email.",
+        },
+        clear_phone: {
+          type: "boolean",
+          description: "Set true to remove the primary phone. Do not combine with phone.",
+        },
+        clear_mobile: {
+          type: "boolean",
+          description: "Set true to remove the mobile phone. Do not combine with mobile.",
+        },
+        clear_fax: {
+          type: "boolean",
+          description: "Set true to remove the fax number. Do not combine with fax.",
+        },
+        clear_web_address: {
+          type: "boolean",
+          description: "Set true to remove the website. Do not combine with web_address.",
+        },
+        clear_bill_address: {
+          type: "boolean",
+          description: "Set true to remove the billing address. Do not combine with bill_address.",
+        },
+        clear_terms: {
+          type: "boolean",
+          description: "Set true to remove the default payment terms. Do not combine with terms_ref.",
+        },
+        clear_account_number: {
+          type: "boolean",
+          description: "Set true to remove the vendor account number. Do not combine with account_number.",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, validate and preview without saving (default: true)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "deactivate_vendor",
+    description: "Safely deactivate a Vendor using its latest QBO SyncToken. Historical transactions remain unchanged, and the vendor can be reactivated with edit_vendor active=true. Defaults to draft mode.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Vendor ID to deactivate",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, preview without deactivating (default: true)",
         },
       },
       required: ["id"],
