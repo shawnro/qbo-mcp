@@ -14,6 +14,10 @@ describe("getCrudCategory", () => {
     expect(getCrudCategory("edit_customer")).toBe("update");
   });
 
+  it("categorizes deactivate_ tools as update", () => {
+    expect(getCrudCategory("deactivate_vendor")).toBe("update");
+  });
+
   it("categorizes delete_ tools as delete", () => {
     expect(getCrudCategory("delete_entity")).toBe("delete");
   });
@@ -60,6 +64,7 @@ describe("isToolDisabled", () => {
 
     expect(isToolDisabled("edit_bill")).toBe(true);
     expect(isToolDisabled("edit_expense")).toBe(true);
+    expect(isToolDisabled("deactivate_vendor")).toBe(true);
   });
 
   it("disables delete tools when QBO_DISABLE_DELETE=true", () => {
@@ -95,6 +100,7 @@ describe("filterTools", () => {
     { name: "list_accounts" },
     { name: "create_invoice" },
     { name: "edit_invoice" },
+    { name: "deactivate_vendor" },
   ];
 
   beforeEach(() => {
@@ -129,6 +135,7 @@ describe("filterTools", () => {
 
     expect(names).not.toContain("edit_bill");
     expect(names).not.toContain("edit_invoice");
+    expect(names).not.toContain("deactivate_vendor");
     expect(names).not.toContain("delete_entity");
     expect(names).toContain("create_bill");
     expect(names).toContain("query");

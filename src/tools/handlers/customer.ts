@@ -3,65 +3,13 @@
 import QuickBooks from "node-quickbooks";
 import { promisify, resolveCustomer } from "../../client/index.js";
 import { outputReport, getQboUrl } from "../../utils/index.js";
-
-interface AddressInput {
-  line1?: string;
-  line2?: string;
-  line3?: string;
-  line4?: string;
-  line5?: string;
-  city?: string;
-  country_sub_division_code?: string;
-  postal_code?: string;
-  country?: string;
-  lat?: string;
-  long?: string;
-}
-
-interface QBAddress {
-  Line1?: string;
-  Line2?: string;
-  Line3?: string;
-  Line4?: string;
-  Line5?: string;
-  City?: string;
-  CountrySubDivisionCode?: string;
-  PostalCode?: string;
-  Country?: string;
-  Lat?: string;
-  Long?: string;
-}
-
-function buildQBAddress(input: AddressInput): QBAddress {
-  const addr: QBAddress = {};
-  if (input.line1) addr.Line1 = input.line1;
-  if (input.line2) addr.Line2 = input.line2;
-  if (input.line3) addr.Line3 = input.line3;
-  if (input.line4) addr.Line4 = input.line4;
-  if (input.line5) addr.Line5 = input.line5;
-  if (input.city) addr.City = input.city;
-  if (input.country_sub_division_code) addr.CountrySubDivisionCode = input.country_sub_division_code;
-  if (input.postal_code) addr.PostalCode = input.postal_code;
-  if (input.country) addr.Country = input.country;
-  if (input.lat) addr.Lat = input.lat;
-  if (input.long) addr.Long = input.long;
-  return addr;
-}
-
-function formatAddress(addr: QBAddress | undefined, label: string): string[] {
-  if (!addr) return [`${label}: (none)`];
-  const parts: string[] = [];
-  for (const key of ['Line1', 'Line2', 'Line3', 'Line4', 'Line5'] as const) {
-    if (addr[key]) parts.push(addr[key]!);
-  }
-  if (addr.City || addr.CountrySubDivisionCode || addr.PostalCode) {
-    const cityState = [addr.City, addr.CountrySubDivisionCode].filter(Boolean).join(', ');
-    parts.push([cityState, addr.PostalCode].filter(Boolean).join(' '));
-  }
-  if (addr.Country) parts.push(addr.Country);
-  if (parts.length === 0) return [`${label}: (none)`];
-  return [`${label}:`, ...parts.map(p => `  ${p}`)];
-}
+import {
+  AddressInput,
+  QBAddress,
+  buildQBAddress,
+  formatAddress,
+  resolveTermRef,
+} from "../entity-fields.js";
 
 // QB Customer object shape (relevant fields)
 interface QBCustomer {
@@ -155,20 +103,9 @@ export async function handleCreateCustomer(
   // Resolve sales term
   let salesTermName: string | undefined;
   if (sales_term_ref) {
-    const terms = await promisify<{ QueryResponse: { Term?: Array<{ Id: string; Name: string }> } }>((cb) =>
-      (client as unknown as Record<string, Function>).findTerms(cb)
-    );
-    const termList = terms.QueryResponse?.Term || [];
-    const match = termList.find(t =>
-      t.Name.toLowerCase() === sales_term_ref.toLowerCase() ||
-      t.Id === sales_term_ref
-    );
-    if (!match) {
-      const available = termList.map(t => t.Name).join(', ');
-      throw new Error(`Term not found: "${sales_term_ref}". Available: ${available}`);
-    }
-    customerObj.SalesTermRef = { value: match.Id, name: match.Name };
-    salesTermName = match.Name;
+    const termRef = await resolveTermRef(client, sales_term_ref);
+    customerObj.SalesTermRef = termRef;
+    salesTermName = termRef.name;
   }
 
   if (draft) {
@@ -338,19 +275,7 @@ export async function handleEditCustomer(
 
   // Resolve sales term if provided
   if (sales_term_ref !== undefined) {
-    const terms = await promisify<{ QueryResponse: { Term?: Array<{ Id: string; Name: string }> } }>((cb) =>
-      (client as unknown as Record<string, Function>).findTerms(cb)
-    );
-    const termList = terms.QueryResponse?.Term || [];
-    const match = termList.find(t =>
-      t.Name.toLowerCase() === sales_term_ref.toLowerCase() ||
-      t.Id === sales_term_ref
-    );
-    if (!match) {
-      const available = termList.map(t => t.Name).join(', ');
-      throw new Error(`Term not found: "${sales_term_ref}". Available: ${available}`);
-    }
-    updated.SalesTermRef = { value: match.Id, name: match.Name };
+    updated.SalesTermRef = await resolveTermRef(client, sales_term_ref);
   }
 
   const qboUrl = getQboUrl("customer", id)!;

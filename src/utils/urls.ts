@@ -16,6 +16,7 @@ const TXN_URL_MAP: Record<string, string> = {
 // Name entities use nameId= instead of txnId=
 const NAME_URL_MAP: Record<string, string> = {
   customer: "customerdetail",
+  vendor: "vendordetail",
 };
 
 export function getQboUrl(entityType: string, id: string): string | null {

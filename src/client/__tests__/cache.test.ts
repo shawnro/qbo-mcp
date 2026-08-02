@@ -17,6 +17,7 @@ const client = createMockClient();
 // Import after mock setup so module-level state is clean per-test
 import {
   clearLookupCache,
+  clearVendorCache,
   getAccountCache,
   getDepartmentCache,
   getVendorCache,
@@ -426,6 +427,69 @@ describe("TTL and caching behavior", () => {
 
     await resolveAccount(client as never, "1");
     expect(client.findAccounts).toHaveBeenCalledTimes(2);
+  });
+
+  it("clearVendorCache refreshes vendors without clearing unrelated caches", async () => {
+    seedAccounts();
+    seedDepartments();
+    seedVendors();
+    mockSuccess(client.findItems, {
+      QueryResponse: { Item: [{ Id: "200", Name: "Widget", Active: true }] },
+    });
+    mockSuccess(client.findCustomers, {
+      QueryResponse: { Customer: [{ Id: "300", DisplayName: "Acme", Active: true }] },
+    });
+
+    await Promise.all([
+      resolveAccount(client as never, "1"),
+      resolveDepartmentId(client as never, "10"),
+      resolveVendor(client as never, "100"),
+      resolveItem(client as never, "Widget"),
+      resolveCustomer(client as never, "Acme"),
+    ]);
+
+    clearVendorCache();
+
+    await Promise.all([
+      resolveAccount(client as never, "1"),
+      resolveDepartmentId(client as never, "10"),
+      resolveVendor(client as never, "100"),
+      resolveItem(client as never, "Widget"),
+      resolveCustomer(client as never, "Acme"),
+    ]);
+
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
+    expect(client.findAccounts).toHaveBeenCalledOnce();
+    expect(client.findDepartments).toHaveBeenCalledOnce();
+    expect(client.findItems).toHaveBeenCalledOnce();
+    expect(client.findCustomers).toHaveBeenCalledOnce();
+  });
+
+  it("does not cache an in-flight Vendor snapshot completed after invalidation", async () => {
+    let resolveFirstLookup: ((result: unknown) => void) | undefined;
+    client.findVendors
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args[args.length - 1] as (error: Error | null, result: unknown) => void;
+        resolveFirstLookup = (result) => callback(null, result);
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const callback = args[args.length - 1] as (error: Error | null, result: unknown) => void;
+        callback(null, {
+          QueryResponse: { Vendor: [{ Id: "101", DisplayName: "Fresh Vendor" }] },
+        });
+      });
+
+    const staleLookup = getVendorCache(client as never);
+    clearVendorCache();
+    resolveFirstLookup!({
+      QueryResponse: { Vendor: [{ Id: "100", DisplayName: "Stale Vendor" }] },
+    });
+    await staleLookup;
+
+    const refreshed = await getVendorCache(client as never);
+    expect(refreshed.byId.has("101")).toBe(true);
+    expect(refreshed.byId.has("100")).toBe(false);
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
   });
 });
 

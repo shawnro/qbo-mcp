@@ -52,6 +52,8 @@ declare module "node-quickbooks" {
     findClasses(criteria: object | string, callback: Callback<unknown>): void;
     findTaxAgencies(criteria: object | string, callback: Callback<unknown>): void;
     findCompanyInfos(criteria: object | string, callback: Callback<unknown>): void;
+    findTerms(callback: Callback<unknown>): void;
+    findTerms(criteria: object | string, callback: Callback<unknown>): void;
 
     // Create methods
     createBill(bill: object, callback: Callback<unknown>): void;
@@ -61,6 +63,7 @@ declare module "node-quickbooks" {
     createSalesReceipt(salesReceipt: object, callback: Callback<unknown>): void;
     createInvoice(invoice: object, callback: Callback<unknown>): void;
     createCustomer(customer: object, callback: Callback<unknown>): void;
+    createVendor(vendor: object, callback: Callback<unknown>): void;
     createVendorCredit(vendorCredit: object, callback: Callback<unknown>): void;
     createBillPayment(billPayment: object, callback: Callback<unknown>): void;
     createClass(cls: object, callback: Callback<unknown>): void;
@@ -74,6 +77,7 @@ declare module "node-quickbooks" {
     getInvoice(id: string, callback: Callback<unknown>): void;
     getDeposit(id: string, callback: Callback<unknown>): void;
     getCustomer(id: string, callback: Callback<unknown>): void;
+    getVendor(id: string, callback: Callback<unknown>): void;
     getVendorCredit(id: string, callback: Callback<unknown>): void;
     getBillPayment(id: string, callback: Callback<unknown>): void;
     getClass(id: string, callback: Callback<unknown>): void;
@@ -87,6 +91,7 @@ declare module "node-quickbooks" {
     updateInvoice(invoice: object, callback: Callback<unknown>): void;
     updateDeposit(deposit: object, callback: Callback<unknown>): void;
     updateCustomer(customer: object, callback: Callback<unknown>): void;
+    updateVendor(vendor: object, callback: Callback<unknown>): void;
     updateVendorCredit(vendorCredit: object, callback: Callback<unknown>): void;
     updateClass(cls: object, callback: Callback<unknown>): void;
     updateAttachable(attachable: object, callback: Callback<unknown>): void;

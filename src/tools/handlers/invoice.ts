@@ -7,6 +7,7 @@ import {
 } from "../../client/index.js";
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
+import { resolveTermRef } from "../entity-fields.js";
 
 interface InvoiceLineChange {
   line_id?: string;
@@ -80,19 +81,7 @@ export async function handleCreateInvoice(
   // Resolve sales term (optional)
   let salesTermRef: { value: string; name: string } | undefined;
   if (sales_term_ref) {
-    const terms = await promisify<{ QueryResponse: { Term?: Array<{ Id: string; Name: string }> } }>((cb) =>
-      (client as unknown as Record<string, Function>).findTerms(cb)
-    );
-    const termList = terms.QueryResponse?.Term || [];
-    const match = termList.find(t =>
-      t.Name.toLowerCase() === sales_term_ref.toLowerCase() ||
-      t.Id === sales_term_ref
-    );
-    if (!match) {
-      const available = termList.map(t => t.Name).join(', ');
-      throw new Error(`Term not found: "${sales_term_ref}". Available: ${available}`);
-    }
-    salesTermRef = { value: match.Id, name: match.Name };
+    salesTermRef = await resolveTermRef(client, sales_term_ref);
   }
 
   // Resolve lines
@@ -421,19 +410,7 @@ export async function handleEditInvoice(
 
   // Resolve sales term if provided
   if (sales_term_ref !== undefined) {
-    const terms = await promisify<{ QueryResponse: { Term?: Array<{ Id: string; Name: string }> } }>((cb) =>
-      (client as unknown as Record<string, Function>).findTerms(cb)
-    );
-    const termList = terms.QueryResponse?.Term || [];
-    const match = termList.find(t =>
-      t.Name.toLowerCase() === sales_term_ref.toLowerCase() ||
-      t.Id === sales_term_ref
-    );
-    if (!match) {
-      const available = termList.map(t => t.Name).join(', ');
-      throw new Error(`Term not found: "${sales_term_ref}". Available: ${available}`);
-    }
-    updated.SalesTermRef = { value: match.Id, name: match.Name };
+    updated.SalesTermRef = await resolveTermRef(client, sales_term_ref);
   }
 
   // Resolve customer if provided

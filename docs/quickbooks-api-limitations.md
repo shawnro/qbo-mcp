@@ -120,8 +120,21 @@ Customer/job assignment, replacement, and clearing were validated against dispos
 
 For edits, omission preserves the current reference, customer name/ID replaces it, and `clear_customer: true` removes it through full-update omission. Customer mutation is intentionally unsupported on item-based expense lines.
 
+## Vendor Master Data
+
+QBO Vendor names are shared with customers and employees: `DisplayName` must be unique across all three entity types. QBO also rejects colons, tabs, and newlines in display and personal-name fields. The Vendor tools validate documented field lengths and name characters locally, while QBO remains authoritative for cross-entity uniqueness.
+
+Vendor edits fetch the current entity immediately before preview or commit and use its latest `SyncToken`. Updates are sparse, so omitted fields are preserved. Removing optional contact, address, terms, or account-number values requires an explicit `clear_*` directive rather than omission.
+
+Vendors are not hard-deleted. `deactivate_vendor` sets `Active: false`, preserves historical transactions, and warns about the current open balance in draft mode. Deactivation is reversible through `edit_vendor` with `active: true`.
+
+Sandbox validation confirmed that sparse Vendor clears require empty values rather than JSON `null`: `{}` for wrapped contact/address fields, `{ value: "" }` for `TermRef`, and `""` for `AcctNum`. QBO silently ignores `TermRef` during Vendor creation, so `create_vendor` applies requested default terms in a follow-up sparse update using the newly returned ID and SyncToken.
+
+If that follow-up terms update fails, the tool returns a non-retriable partial-success result containing the created Vendor ID and instructions to use `edit_vendor`; it does not retry the create operation. `get_vendor` allowlists supported fields before inline output and excludes tax identifiers, payment-bank details, and other unsupported Vendor data from model context.
+
 ## References
 
 - [Data Queries - Intuit Developer](https://developer.intuit.com/app/developer/qbo/docs/learn/explore-the-quickbooks-online-api/data-queries)
 - [Deep Dive into QuickBooks Online Data Queries](https://blogs.intuit.com/2017/02/08/deep-dive-sql-queries/)
 - [Purchase API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/Purchase)
+- [Vendor API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/vendor)
