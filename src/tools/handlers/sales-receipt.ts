@@ -5,7 +5,7 @@ import {
   promisify,
   resolveItem,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
 
 interface SalesReceiptLineChange {
@@ -48,6 +48,7 @@ export async function handleCreateSalesReceipt(
     deposit_to_account, department_name, department_id,
     memo, doc_number, lines, draft = true,
   } = args;
+  validateDocNumber(doc_number);
 
   if (!lines || lines.length === 0) {
     throw new Error("At least one line is required");

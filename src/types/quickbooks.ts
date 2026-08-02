@@ -6,14 +6,25 @@ export interface QBRef {
   name?: string;
 }
 
+export interface QBErrorEntry {
+  code?: string;
+  Code?: string;
+  message?: string;
+  Message?: string;
+  detail?: string;
+  Detail?: string;
+  element?: string;
+  Element?: string;
+}
+
 // QuickBooks API error structure
 // QB API returns capitalized Fault.Error, but node-quickbooks may use lowercase
 export interface QBError {
   Fault?: {
-    Error?: Array<{ code?: string; Code?: string; message?: string; Message?: string; Detail?: string; detail?: string }>;
+    Error?: QBErrorEntry[];
   };
   fault?: {
-    error?: Array<{ code?: string; Code?: string; message?: string; Message?: string; Detail?: string; detail?: string }>;
+    error?: QBErrorEntry[];
   };
 }
 
@@ -34,16 +45,51 @@ export function isQBError(error: unknown): error is QBError {
   return false;
 }
 
+// Locate a QBO Fault returned directly or wrapped in an Axios response.
+export function unwrapQBError(error: unknown): QBError | undefined {
+  if (isQBError(error)) return error;
+  if (typeof error !== 'object' || error === null) return undefined;
+
+  const response = (error as Record<string, unknown>).response;
+  if (typeof response !== 'object' || response === null) return undefined;
+
+  const data = (response as Record<string, unknown>).data;
+  return isQBError(data) ? data : undefined;
+}
+
 // Extract normalized error info from a QB error (casing-safe)
-export function extractQBErrorInfo(error: QBError): { code?: string; message?: string; detail?: string } {
-  const errors = error.Fault?.Error ?? error.fault?.error;
+export function extractQBErrorInfo(error: unknown): {
+  code?: string;
+  message?: string;
+  detail?: string;
+  element?: string;
+} {
+  const qbError = unwrapQBError(error);
+  const errors = qbError?.Fault?.Error ?? qbError?.fault?.error;
   if (!errors || errors.length === 0) return {};
   const first = errors[0];
   return {
     code: first.Code ?? first.code,
     message: first.Message ?? first.message,
     detail: first.Detail ?? first.detail,
+    element: first.Element ?? first.element,
   };
+}
+
+// Read an HTTP status without traversing or serializing request metadata.
+export function extractHttpStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const record = error as Record<string, unknown>;
+  const response = typeof record.response === 'object' && record.response !== null
+    ? record.response as Record<string, unknown>
+    : undefined;
+  const candidates = [record.statusCode, record.status, response?.status];
+
+  for (const status of candidates) {
+    if (typeof status === 'number' && Number.isInteger(status)) return status;
+    if (typeof status === 'string' && /^\d{3}$/.test(status)) return Number(status);
+  }
+  return undefined;
 }
 
 // QuickBooks entity base

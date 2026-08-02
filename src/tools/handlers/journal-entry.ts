@@ -14,6 +14,7 @@ import {
   formatDollars,
   outputReport,
   getQboUrl,
+  validateDocNumber,
 } from "../../utils/index.js";
 import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
 
@@ -48,6 +49,7 @@ export async function handleCreateJournalEntry(
   }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { txn_date, memo, lines: rawLines, draft = true, doc_number } = args;
+  validateDocNumber(doc_number);
 
   // Defensive: MCP transports may deliver arrays as JSON strings
   const lines: JournalEntryLine[] = typeof rawLines === "string" ? JSON.parse(rawLines) : rawLines;
@@ -266,6 +268,7 @@ export async function handleEditJournalEntry(
   }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id, txn_date, memo, doc_number, lines: rawLineChanges, draft = true } = args;
+  validateDocNumber(doc_number);
 
   // Defensive: MCP transports may deliver arrays as JSON strings
   const lineChanges: JournalEntryLineChange[] | undefined =

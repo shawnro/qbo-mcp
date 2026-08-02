@@ -5,6 +5,8 @@
 // which produces opaque errors. This module provides just-in-time guidance
 // in error responses.
 
+import { formatQBOError } from '../utils/errors.js';
+
 // Fields that can be used in WHERE clauses for each entity type
 const FILTERABLE_FIELDS: Record<string, string[]> = {
   Purchase: [
@@ -128,7 +130,7 @@ export function buildQueryErrorMessage(
   // 5. Append raw error if not already covered
   if (rawError && !message && !detail) {
     lines.push('');
-    lines.push('Raw error: ' + (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)));
+    lines.push('Raw error: ' + formatQBOError(rawError));
   }
 
   return lines.join('\n');

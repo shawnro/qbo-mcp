@@ -91,7 +91,7 @@ describe("executeTool", () => {
     const result = await executeTool("get_company_info", {});
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Network timeout");
+    expect(result.content[0].text).toBe("Error: Network timeout");
     expect(mockRefreshTokens).not.toHaveBeenCalled();
     // Handler was only called once (no retry)
     expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
@@ -133,16 +133,32 @@ describe("executeTool", () => {
   });
 
   it("returns error when retry also fails after auth error", async () => {
-    mockHandleGetCompanyInfo.mockRejectedValue(new Error("Still failing"));
+    mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(new Error("AuthenticationFailed"))
+      .mockRejectedValueOnce({
+        response: {
+          status: 400,
+          data: {
+            Fault: {
+              Error: [{
+                Code: "2050",
+                Message: "String length is invalid",
+                Element: "DocNumber",
+              }],
+            },
+          },
+        },
+      });
     mockIsAuthError.mockReturnValueOnce(true);
     mockRefreshTokens.mockResolvedValue(undefined);
 
     const result = await executeTool("get_company_info", {});
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Error after retry");
-    // Note: Error objects serialize to {} via JSON.stringify (properties not enumerable)
-    // This verifies the retry path was taken and error was wrapped
+    expect(result.content[0].text).toBe(
+      "Error after retry: QBO error 2050: String length is invalid (DocNumber)"
+    );
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(2);
   });
 
   it("throws on unknown tool name", async () => {
@@ -151,15 +167,50 @@ describe("executeTool", () => {
     );
   });
 
-  it("handles object errors by JSON-serializing them", async () => {
+  it("formats direct QBO Fault details", async () => {
     mockHandleGetCompanyInfo.mockRejectedValue({
-      Fault: { Error: [{ Message: "Business Validation Error" }] },
+      Fault: {
+        Error: [{
+          Code: "2050",
+          Message: "String length specified does not match supported length",
+          Detail: "The supplied string is too long",
+          Element: "DocNumber",
+        }],
+      },
     });
 
     const result = await executeTool("get_company_info", {});
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Business Validation Error");
+    expect(result.content[0].text).toBe(
+      "Error: QBO error 2050: String length specified does not match supported length — " +
+      "The supplied string is too long (DocNumber)"
+    );
+  });
+
+  it("safely formats a QBO Fault nested in an Axios error", async () => {
+    const axiosError = Object.assign(new Error("Request failed with status code 400"), {
+      response: {
+        status: 400,
+        headers: { "set-cookie": "synthetic-cookie-secret" },
+        data: {
+          Fault: {
+            Error: [{ Code: "6000", Message: "Business Validation Error" }],
+          },
+        },
+      },
+      config: {
+        headers: { Authorization: "Bearer synthetic-access-token" },
+      },
+    });
+    mockHandleGetCompanyInfo.mockRejectedValue(axiosError);
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe("Error: QBO error 6000: Business Validation Error");
+    expect(result.content[0].text).not.toContain("synthetic-access-token");
+    expect(result.content[0].text).not.toContain("synthetic-cookie-secret");
   });
 
   it("does not require client for qbo_authenticate", async () => {

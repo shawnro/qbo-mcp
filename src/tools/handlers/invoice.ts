@@ -5,7 +5,7 @@ import {
   promisify,
   resolveItem,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
 
 interface InvoiceLineChange {
@@ -55,6 +55,7 @@ export async function handleCreateInvoice(
     allow_online_credit_card_payment, allow_online_ach_payment,
     doc_number, lines, draft = true,
   } = args;
+  validateDocNumber(doc_number);
 
   if (!lines || lines.length === 0) {
     throw new Error("At least one line is required");

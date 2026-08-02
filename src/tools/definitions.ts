@@ -282,7 +282,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Journal number (shown as 'Journal no.' in QuickBooks). If not specified, QuickBooks will auto-assign the next number.",
+          maxLength: 21,
+          description: "Journal number, maximum 21 characters (shown as 'Journal no.' in QuickBooks). If not specified, QuickBooks will auto-assign the next number.",
         },
       },
       required: ["txn_date", "lines"],
@@ -322,7 +323,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "New journal number (optional)",
+          maxLength: 21,
+          description: "New journal number, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -410,7 +412,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the bill (optional)",
+          maxLength: 21,
+          description: "Reference number for the bill, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -493,7 +496,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the bill (optional)",
+          maxLength: 21,
+          description: "Reference number for the bill, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -660,7 +664,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the expense (optional)",
+          maxLength: 21,
+          description: "Reference number for the expense, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -822,7 +827,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the sales receipt (optional)",
+          maxLength: 21,
+          description: "Reference number for the sales receipt, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -922,7 +928,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the invoice (optional)",
+          maxLength: 21,
+          description: "Reference number for the invoice, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -1261,7 +1268,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the vendor credit (optional)",
+          maxLength: 21,
+          description: "Reference number for the vendor credit, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -1336,7 +1344,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "New reference number (optional)",
+          maxLength: 21,
+          description: "New reference number, maximum 21 characters (optional)",
         },
         lines: {
           type: "array",
@@ -1404,7 +1413,8 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number, e.g., check number or EFT reference (optional)",
+          maxLength: 21,
+          description: "Reference number, maximum 21 characters, e.g., check number or EFT reference (optional)",
         },
         bills: {
           type: "array",

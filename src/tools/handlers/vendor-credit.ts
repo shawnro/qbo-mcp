@@ -7,7 +7,7 @@ import {
   getDepartmentCache,
   getVendorCache,
 } from "../../client/index.js";
-import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import {
   applyCustomerRefChange,
   assertNoCustomerRefChangeOnDelete,
@@ -57,6 +57,7 @@ export async function handleCreateVendorCredit(
     department_name, department_id, ap_account,
     memo, doc_number, lines, draft = true,
   } = args;
+  validateDocNumber(doc_number);
 
   if (!lines || lines.length === 0) {
     throw new Error("At least one line is required");
@@ -288,6 +289,7 @@ export async function handleEditVendorCredit(
   }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id, vendor_name, txn_date, memo, doc_number, lines: lineChanges, draft = true } = args;
+  validateDocNumber(doc_number);
 
   // Fetch current VendorCredit
   const current = await promisify<unknown>((cb) =>

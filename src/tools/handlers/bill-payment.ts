@@ -11,7 +11,7 @@ import {
   getAccountCache,
   getVendorCache,
 } from "../../client/index.js";
-import { validateAmount, toCents, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
+import { validateAmount, validateDocNumber, toCents, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
 
 interface BillPaymentBillInput {
@@ -51,6 +51,7 @@ export async function handleCreateBillPayment(
     vendor_name, vendor_id, payment_account, txn_date,
     memo, doc_number, bills, credits = [], draft = true,
   } = args;
+  validateDocNumber(doc_number);
 
   if (!bills || bills.length === 0) {
     throw new Error("At least one bill is required");
