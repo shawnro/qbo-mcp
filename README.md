@@ -489,7 +489,7 @@ Account-based lines on bills, expenses, and vendor credits can be associated wit
 
 Customer/job tracking is independent from QBO's billable-expense workflow. New tagged lines remain `NotBillable`, writable `BillableStatus` is not exposed, `HasBeenBilled` lines cannot be reassigned, and a `Billable` line cannot have its customer cleared.
 
-Line edits use QBO full updates. The handlers preserve required header references, linked transactions, currency/tax fields, and untouched nested line metadata. Expense customer assignment and clearing were validated against a disposable QBO sandbox transaction, including vendor, payment account, department, and line metadata preservation.
+Line edits use QBO full updates. The handlers preserve required header references, linked transactions, currency/tax fields, and untouched nested line metadata. Customer/job creation, replacement, and clearing were validated with disposable QBO sandbox bills, expenses, and vendor credits; unrelated header and line metadata remained unchanged.
 
 ---
 

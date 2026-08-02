@@ -104,7 +104,7 @@ QBO expenses (Purchases) only support **one department at the header level**. Yo
 - **Use a reclassification JE** to move amounts between departments after the fact.
 - **Use the bill-splitting workflow** (frontend) to create separate per-department bills from a single vendor invoice.
 
-`edit_expense` line updates preserve header `AccountRef`, `EntityRef`, `DepartmentRef`, currency/tax metadata, linked transactions, and untouched line-detail fields. This was validated with customer assignment and clearing against a disposable QBO sandbox expense.
+`edit_expense` line updates preserve header `AccountRef`, `EntityRef`, `DepartmentRef`, currency/tax metadata, linked transactions, and untouched line-detail fields. Customer assignment, replacement, and clearing were validated against disposable QBO sandbox bills, expenses, and vendor credits.
 
 ### Line-Level Customer/Job Tracking
 

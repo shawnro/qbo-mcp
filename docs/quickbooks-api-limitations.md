@@ -112,7 +112,7 @@ Line changes require a full update (`sparse: false`); QBO does not support spars
 - `LinkedTxn` relationships
 - Untouched nested line details such as `TaxCodeRef`, `CustomerRef`, and `BillableStatus`
 
-Customer/job assignment, replacement, and clearing were validated against a disposable QBO sandbox expense. The vendor/payee, payment account, department, document fields, line account/amount/description, billable status, and total all remained unchanged across full updates.
+Customer/job assignment, replacement, and clearing were validated against disposable QBO sandbox bills, expenses, and vendor credits. Required header references, document fields, line account/amount/description, billable status, totals, and balances remained unchanged across full updates.
 
 ### Account-Line Customer and Job References
 
