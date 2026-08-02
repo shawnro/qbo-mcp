@@ -17,6 +17,7 @@ const client = createMockClient();
 // Import after mock setup so module-level state is clean per-test
 import {
   clearLookupCache,
+  clearVendorCache,
   getAccountCache,
   getDepartmentCache,
   getVendorCache,
@@ -426,6 +427,42 @@ describe("TTL and caching behavior", () => {
 
     await resolveAccount(client as never, "1");
     expect(client.findAccounts).toHaveBeenCalledTimes(2);
+  });
+
+  it("clearVendorCache refreshes vendors without clearing unrelated caches", async () => {
+    seedAccounts();
+    seedDepartments();
+    seedVendors();
+    mockSuccess(client.findItems, {
+      QueryResponse: { Item: [{ Id: "200", Name: "Widget", Active: true }] },
+    });
+    mockSuccess(client.findCustomers, {
+      QueryResponse: { Customer: [{ Id: "300", DisplayName: "Acme", Active: true }] },
+    });
+
+    await Promise.all([
+      resolveAccount(client as never, "1"),
+      resolveDepartmentId(client as never, "10"),
+      resolveVendor(client as never, "100"),
+      resolveItem(client as never, "Widget"),
+      resolveCustomer(client as never, "Acme"),
+    ]);
+
+    clearVendorCache();
+
+    await Promise.all([
+      resolveAccount(client as never, "1"),
+      resolveDepartmentId(client as never, "10"),
+      resolveVendor(client as never, "100"),
+      resolveItem(client as never, "Widget"),
+      resolveCustomer(client as never, "Acme"),
+    ]);
+
+    expect(client.findVendors).toHaveBeenCalledTimes(2);
+    expect(client.findAccounts).toHaveBeenCalledOnce();
+    expect(client.findDepartments).toHaveBeenCalledOnce();
+    expect(client.findItems).toHaveBeenCalledOnce();
+    expect(client.findCustomers).toHaveBeenCalledOnce();
   });
 });
 

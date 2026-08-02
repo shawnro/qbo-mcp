@@ -70,6 +70,7 @@ describe("executeTool", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    delete process.env.QBO_DISABLE_UPDATE;
     mockGetClient.mockResolvedValue(fakeClient);
     mockIsAuthError.mockReturnValue(false);
     mockHandleGetCompanyInfo.mockResolvedValue({
@@ -165,6 +166,16 @@ describe("executeTool", () => {
     await expect(executeTool("nonexistent_tool", {})).rejects.toThrow(
       "Unknown tool: nonexistent_tool"
     );
+  });
+
+  it("rejects deactivate tools when updates are disabled before handler lookup", async () => {
+    process.env.QBO_DISABLE_UPDATE = "true";
+
+    const result = await executeTool("deactivate_vendor", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("disabled by server configuration");
+    expect(mockGetClient).not.toHaveBeenCalled();
   });
 
   it("formats direct QBO Fault details", async () => {

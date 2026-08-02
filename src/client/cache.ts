@@ -32,10 +32,14 @@ const itemCacheByName = new Map<string, CachedItem>(); // lowercase key
 const customerCacheById = new Map<string, CachedCustomer>();
 const customerCacheByName = new Map<string, CachedCustomer>(); // lowercase key
 
+export function clearVendorCache(): void {
+  vendorCache = null;
+}
+
 export function clearLookupCache(): void {
   departmentCache = null;
   accountCache = null;
-  vendorCache = null;
+  clearVendorCache();
   itemCacheById.clear();
   itemCacheByName.clear();
   customerCacheById.clear();

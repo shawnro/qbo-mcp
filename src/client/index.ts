@@ -10,6 +10,7 @@ export {
 } from './auth.js';
 export {
   clearLookupCache,
+  clearVendorCache,
   getDepartmentCache,
   getAccountCache,
   getVendorCache,

@@ -1,6 +1,6 @@
 // CRUD disable flags — filter tools based on environment variables
 // QBO_DISABLE_CREATE=true  → hides all create_* tools
-// QBO_DISABLE_UPDATE=true  → hides all edit_* tools
+// QBO_DISABLE_UPDATE=true  → hides all edit_* and deactivate_* tools
 // QBO_DISABLE_DELETE=true  → hides delete_entity tool
 
 type CrudCategory = "create" | "update" | "delete" | "read";
@@ -8,6 +8,7 @@ type CrudCategory = "create" | "update" | "delete" | "read";
 const PREFIX_MAP: Array<[string, CrudCategory]> = [
   ["create_", "create"],
   ["edit_", "update"],
+  ["deactivate_", "update"],
   ["delete_", "delete"],
 ];
 
