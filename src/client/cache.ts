@@ -228,29 +228,93 @@ export async function resolveDepartmentId(client: QuickBooks, department: string
   return department;
 }
 
-// Resolve customer by name or ID using lazy per-entry cache
-// Unlike vendor/account caches, customers are fetched on demand (companies can have thousands)
-export async function resolveCustomer(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
-  // Check cache first (with TTL)
-  const cached = customerCacheById.get(nameOrId) || customerCacheByName.get(nameOrId.toLowerCase());
+function cacheCustomer(customer: {
+  Id: string;
+  DisplayName: string;
+  FullyQualifiedName?: string;
+  Active?: boolean;
+}): CachedCustomer {
+  const entry: CachedCustomer = {
+    ...customer,
+    fetchedAt: Date.now(),
+  };
+  customerCacheById.set(entry.Id, entry);
+  customerCacheByName.set(entry.DisplayName.toLowerCase(), entry);
+  if (entry.FullyQualifiedName) {
+    customerCacheByName.set(entry.FullyQualifiedName.toLowerCase(), entry);
+  }
+  return entry;
+}
+
+function customerRef(customer: CachedCustomer): { value: string; name: string } {
+  return {
+    value: customer.Id,
+    name: customer.FullyQualifiedName || customer.DisplayName,
+  };
+}
+
+// Resolve customer by ID using direct read and lazy per-entry cache.
+export async function resolveCustomerById(
+  client: QuickBooks,
+  id: string
+): Promise<{ value: string; name: string }> {
+  const cached = customerCacheById.get(id);
   if (cached && (Date.now() - cached.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
-    return { value: cached.Id, name: cached.DisplayName };
+    return customerRef(cached);
   }
 
-  // Query QB for this specific customer — exact DisplayName match first
+  const customer = await promisify<unknown>((cb) => client.getCustomer(id, cb)) as {
+    Id?: string;
+    DisplayName?: string;
+    FullyQualifiedName?: string;
+    Active?: boolean;
+  };
+
+  if (!customer.Id || !customer.DisplayName || customer.Active === false) {
+    throw new Error(`Customer not found or inactive: "${id}".`);
+  }
+
+  return customerRef(cacheCustomer({
+    Id: customer.Id,
+    DisplayName: customer.DisplayName,
+    FullyQualifiedName: customer.FullyQualifiedName,
+    Active: customer.Active,
+  }));
+}
+
+// Resolve customer by display name or hierarchical FullyQualifiedName using
+// lazy per-entry cache. Unlike bulk caches, customers are fetched on demand
+// because companies can have thousands.
+export async function resolveCustomer(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
+  // Check cache first (with TTL)
+  const cached = customerCacheByName.get(nameOrId.toLowerCase());
+  if (cached && (Date.now() - cached.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+    return customerRef(cached);
+  }
+
+  // DisplayName cannot contain a colon, so hierarchical input unambiguously
+  // targets FullyQualifiedName (for example, "Customer:Job").
+  const nameField = nameOrId.includes(':') ? 'FullyQualifiedName' : 'DisplayName';
+
+  // Query QB for this specific customer/job — exact match first.
   const result = await promisify<unknown>((cb) =>
     client.findCustomers([
-      { field: 'DisplayName', value: nameOrId, operator: '=' },
+      { field: nameField, value: nameOrId, operator: '=' },
       { field: 'Active', value: true, operator: '=' },
     ], cb)
   );
-  let customers = extractQueryResults<{ Id: string; DisplayName: string; Active?: boolean }>(result, 'Customer');
+  let customers = extractQueryResults<{
+    Id: string;
+    DisplayName: string;
+    FullyQualifiedName?: string;
+    Active?: boolean;
+  }>(result, 'Customer');
 
   // If no exact match, try LIKE for partial matching
   if (customers.length === 0) {
     const partialResult = await promisify<unknown>((cb) =>
       client.findCustomers([
-        { field: 'DisplayName', value: `%${nameOrId}%`, operator: 'LIKE' },
+        { field: nameField, value: `%${nameOrId}%`, operator: 'LIKE' },
         { field: 'Active', value: true, operator: '=' },
       ], cb)
     );
@@ -261,16 +325,17 @@ export async function resolveCustomer(client: QuickBooks, nameOrId: string): Pro
     throw new Error(`Customer not found: "${nameOrId}". Try using the exact customer display name or ID.`);
   }
 
-  // Use first match and cache it
-  const customer = customers[0];
-  const entry: CachedCustomer = {
-    Id: customer.Id,
-    DisplayName: customer.DisplayName,
-    Active: customer.Active,
-    fetchedAt: Date.now(),
-  };
-  customerCacheById.set(customer.Id, entry);
-  customerCacheByName.set(customer.DisplayName.toLowerCase(), entry);
+  if (customers.length > 1) {
+    const matches = customers
+      .slice(0, 5)
+      .map(customer => customer.FullyQualifiedName || customer.DisplayName)
+      .join(', ');
+    throw new Error(
+      `Customer name is ambiguous: "${nameOrId}". ` +
+      `Use an exact display/fully qualified name or ID. Matches: ${matches}`
+    );
+  }
 
-  return { value: customer.Id, name: customer.DisplayName };
+  // Use first match and cache it
+  return customerRef(cacheCustomer(customers[0]));
 }

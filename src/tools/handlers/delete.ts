@@ -173,7 +173,9 @@ export async function handleDeleteEntity(
 
   // Execute delete
   await promisify<unknown>((cb) =>
-    (client as any)[config.deleteMethod]({ Id: id }, cb)
+    // node-quickbooks accepts an ID and fetches the complete entity first,
+    // ensuring the required current SyncToken is included in the delete.
+    (client as any)[config.deleteMethod](id, cb)
   );
 
   return {

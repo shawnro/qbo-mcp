@@ -4,7 +4,6 @@ import QuickBooks from "node-quickbooks";
 import {
   promisify,
   resolveItem,
-  resolveCustomer,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
@@ -57,10 +56,13 @@ export async function handleCreateSalesReceipt(
 
   // Resolve customer (optional)
   let customerRef: { value: string; name: string } | undefined;
+  if (customer_id && customer_name) {
+    throw new Error("Provide only one of customer_name or customer_id for sales receipts");
+  }
   if (customer_id) {
-    customerRef = await resolveCustomer(client, customer_id);
+    customerRef = await resolver.customer({ id: customer_id });
   } else if (customer_name) {
-    customerRef = await resolveCustomer(client, customer_name);
+    customerRef = await resolver.customer({ name: customer_name });
   }
 
   // Resolve deposit account (optional)

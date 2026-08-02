@@ -71,6 +71,8 @@ export interface QBLine {
   AccountBasedExpenseLineDetail?: {
     AccountRef: QBRef;
     DepartmentRef?: QBRef;
+    CustomerRef?: QBRef;
+    BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
   };
   DepositLineDetail?: {
     AccountRef?: QBRef;

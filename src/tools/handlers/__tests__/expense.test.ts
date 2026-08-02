@@ -17,6 +17,8 @@ vi.mock("../../../client/index.js", () => ({
     getAccountCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
+    resolveCustomer: vi.fn(),
+    resolveCustomerById: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
     refreshTokens: vi.fn(),
@@ -39,11 +41,19 @@ vi.mock("../../../utils/index.js", async () => {
 });
 
 import { handleCreateExpense, handleGetExpense, handleEditExpense } from "../expense.js";
-import { getAccountCache, getDepartmentCache, getVendorCache } from "../../../client/index.js";
+import {
+  getAccountCache,
+  getDepartmentCache,
+  getVendorCache,
+  resolveCustomer,
+  resolveCustomerById,
+} from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
+const mockResolveCustomer = vi.mocked(resolveCustomer);
+const mockResolveCustomerById = vi.mocked(resolveCustomerById);
 
 describe("handleCreateExpense", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -55,6 +65,8 @@ describe("handleCreateExpense", () => {
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
   });
 
   it("returns preview in draft mode", async () => {
@@ -84,6 +96,71 @@ describe("handleCreateExpense", () => {
 
     expect(result.content[0].text).toContain("Expense Created");
     expect(client.createPurchase).toHaveBeenCalledOnce();
+    expect(client.createPurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail)
+      .not.toHaveProperty("CustomerRef");
+  });
+
+  it("assigns a line customer/job by name without changing billable behavior", async () => {
+    mockSuccess(client.createPurchase, { Id: "605" });
+
+    await handleCreateExpense(client as never, {
+      payment_type: "Cash",
+      payment_account: "Cash",
+      txn_date: "2026-02-15",
+      draft: false,
+      lines: [{
+        account_name: "Office Supplies",
+        customer_name: "Customer One:Job One",
+        amount: 30,
+      }],
+    });
+
+    const detail = client.createPurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail).not.toHaveProperty("BillableStatus");
+  });
+
+  it("assigns a line customer/job by ID", async () => {
+    mockSuccess(client.createPurchase, { Id: "606" });
+
+    await handleCreateExpense(client as never, {
+      payment_type: "Cash",
+      payment_account: "Cash",
+      txn_date: "2026-02-15",
+      draft: false,
+      lines: [{ account_name: "Cash", customer_id: "301", amount: 10 }],
+    });
+
+    const detail = client.createPurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+    expect(mockResolveCustomerById).toHaveBeenCalledWith(client, "301");
+  });
+
+  it("shows a line customer/job in the default draft preview", async () => {
+    const result = await handleCreateExpense(client as never, {
+      payment_type: "Cash",
+      payment_account: "Cash",
+      txn_date: "2026-02-15",
+      lines: [{ account_name: "Cash", customer_name: "Customer One:Job One", amount: 10 }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.createPurchase).not.toHaveBeenCalled();
+  });
+
+  it("rejects customer_name and customer_id on the same line", async () => {
+    await expect(handleCreateExpense(client as never, {
+      payment_type: "Cash",
+      payment_account: "Cash",
+      txn_date: "2026-02-15",
+      lines: [{
+        account_name: "Cash",
+        customer_name: "Customer One:Job One",
+        customer_id: "301",
+        amount: 10,
+      }],
+    })).rejects.toThrow("only one");
+    expect(client.createPurchase).not.toHaveBeenCalled();
   });
 
   it("creates with all optional fields", async () => {
@@ -238,6 +315,31 @@ describe("handleGetExpense", () => {
     expect(result.content[0].text).toContain("CreditCard");
   });
 
+  it("shows line customer/job and billable status", async () => {
+    mockSuccess(client.getPurchase, {
+      Id: "600",
+      SyncToken: "1",
+      PaymentType: "CreditCard",
+      TxnDate: "2026-02-15",
+      TotalAmt: 45.99,
+      AccountRef: { value: "1", name: "Cash" },
+      Line: [{
+        Id: "1",
+        Amount: 45.99,
+        DetailType: "AccountBasedExpenseLineDetail",
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "5", name: "Office Supplies" },
+          CustomerRef: { value: "300", name: "Customer One:Job One" },
+          BillableStatus: "NotBillable",
+        },
+      }],
+    });
+
+    const result = await handleGetExpense(client as never, { id: "600" });
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(result.content[0].text).toContain("NotBillable");
+  });
+
   it("propagates API errors", async () => {
     mockError(client.getPurchase, "Not Found");
     await expect(handleGetExpense(client as never, { id: "999" })).rejects.toThrow("Not Found");
@@ -257,13 +359,24 @@ describe("handleEditExpense", () => {
     AccountRef: { value: "1", name: "Cash" },
     EntityRef: { value: "100", name: "Office Depot", type: "Vendor" },
     DepartmentRef: { value: "10", name: "Main Office" },
+    CurrencyRef: { value: "USD", name: "United States Dollar" },
+    ExchangeRate: 1,
+    PaymentMethodRef: { value: "5", name: "Visa" },
+    Credit: false,
+    IncludeInAnnualTPAR: false,
+    LinkedTxn: [{ TxnId: "901", TxnType: "ReimburseCharge", TxnLineId: "1" }],
     TotalAmt: 45.99,
     Line: [
       {
         Id: "1",
         Amount: 45.99,
         DetailType: "AccountBasedExpenseLineDetail",
-        AccountBasedExpenseLineDetail: { AccountRef: { value: "5", name: "Office Supplies" } },
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "5", name: "Office Supplies" },
+          CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          BillableStatus: "NotBillable",
+          TaxCodeRef: { value: "NON" },
+        },
       },
     ],
   };
@@ -275,6 +388,8 @@ describe("handleEditExpense", () => {
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
     mockSuccess(client.getPurchase, existingExpense);
   });
 
@@ -304,6 +419,131 @@ describe("handleEditExpense", () => {
     const payload = client.updatePurchase.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
     expect(payload.PaymentType).toBe("CreditCard");
+    expect(payload.AccountRef).toEqual(existingExpense.AccountRef);
+    expect(payload.EntityRef).toEqual(existingExpense.EntityRef);
+    expect(payload.DepartmentRef).toEqual(existingExpense.DepartmentRef);
+    expect(payload.CurrencyRef).toEqual(existingExpense.CurrencyRef);
+    expect(payload.ExchangeRate).toBe(1);
+    expect(payload.PaymentMethodRef).toEqual(existingExpense.PaymentMethodRef);
+    expect(payload.Credit).toBe(false);
+    expect(payload.IncludeInAnnualTPAR).toBe(false);
+    expect(payload.LinkedTxn).toEqual(existingExpense.LinkedTxn);
+    expect(payload.Line[0].AccountBasedExpenseLineDetail).toMatchObject({
+      CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+      BillableStatus: "NotBillable",
+      TaxCodeRef: { value: "NON" },
+    });
+  });
+
+  it("changes an existing line customer/job by name", async () => {
+    mockSuccess(client.updatePurchase, { Id: "600", SyncToken: "2" });
+
+    await handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+      draft: false,
+    });
+
+    const payload = client.updatePurchase.mock.calls[0][0];
+    const detail = payload.Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+    expect(detail.TaxCodeRef).toEqual({ value: "NON" });
+    expect(payload.EntityRef).toEqual(existingExpense.EntityRef);
+    expect(payload.DepartmentRef).toEqual(existingExpense.DepartmentRef);
+  });
+
+  it("changes an existing line customer/job by ID", async () => {
+    mockSuccess(client.updatePurchase, { Id: "600", SyncToken: "2" });
+
+    await handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "1", customer_id: "301" }],
+      draft: false,
+    });
+
+    const detail = client.updatePurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+  });
+
+  it("clears a customer/job from a NotBillable line", async () => {
+    mockSuccess(client.updatePurchase, { Id: "600", SyncToken: "2" });
+
+    await handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "1", clear_customer: true }],
+      draft: false,
+    });
+
+    const detail = client.updatePurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail).not.toHaveProperty("CustomerRef");
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("adds a new NotBillable line with a customer/job", async () => {
+    mockSuccess(client.updatePurchase, { Id: "600", SyncToken: "2" });
+
+    await handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ account_name: "Cash", amount: 10, customer_name: "Customer One:Job One" }],
+      draft: false,
+    });
+
+    const detail = client.updatePurchase.mock.calls[0][0].Line[1].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("shows the changed customer/job in draft without updating", async () => {
+    const result = await handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.updatePurchase).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["HasBeenBilled", { customer_name: "Customer One:Job One" }, "after the line has been billed"],
+    ["Billable", { clear_customer: true }, "while the line is Billable"],
+  ] as const)("protects %s customer/job state", async (status, change, message) => {
+    mockSuccess(client.getPurchase, {
+      ...existingExpense,
+      Line: [{
+        ...existingExpense.Line[0],
+        AccountBasedExpenseLineDetail: {
+          ...existingExpense.Line[0].AccountBasedExpenseLineDetail,
+          BillableStatus: status,
+        },
+      }],
+    });
+
+    await expect(handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "1", ...change }],
+      draft: false,
+    })).rejects.toThrow(message);
+    expect(client.updatePurchase).not.toHaveBeenCalled();
+  });
+
+  it("rejects customer mutation on an item-based line", async () => {
+    mockSuccess(client.getPurchase, {
+      ...existingExpense,
+      Line: [{
+        Id: "2",
+        Amount: 50,
+        DetailType: "ItemBasedExpenseLineDetail",
+        ItemBasedExpenseLineDetail: { ItemRef: { value: "10", name: "Widget" } },
+      }],
+    });
+
+    await expect(handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "2", customer_name: "Customer One:Job One" }],
+      draft: false,
+    })).rejects.toThrow("account-based lines");
+    expect(client.updatePurchase).not.toHaveBeenCalled();
   });
 
   it("propagates API errors", async () => {
@@ -333,6 +573,15 @@ describe("handleEditExpense", () => {
     const payload = client.updatePurchase.mock.calls[0][0];
     expect(payload.Line).toHaveLength(1);
     expect(payload.Line[0].Id).toBe("2");
+  });
+
+  it("rejects delete combined with customer ID assignment", async () => {
+    await expect(handleEditExpense(client as never, {
+      id: "600",
+      lines: [{ line_id: "1", delete: true, customer_id: "301" }],
+      draft: false,
+    })).rejects.toThrow("delete cannot be combined with customer/job");
+    expect(client.updatePurchase).not.toHaveBeenCalled();
   });
 
   it("throws when line_id not found", async () => {

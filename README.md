@@ -434,13 +434,13 @@ QBO_INLINE_OUTPUT=true
 | `get_journal_entry` | Fetch a journal entry by ID |
 | `edit_journal_entry` | Modify an existing journal entry |
 | **Bills** | |
-| `create_bill` | Create a vendor bill |
-| `get_bill` | Fetch a bill by ID |
-| `edit_bill` | Modify an existing bill |
+| `create_bill` | Create a vendor bill; account lines support optional customer/job tracking |
+| `get_bill` | Fetch a bill by ID, including line customer/job and billable status |
+| `edit_bill` | Modify a bill and preserve, assign, change, or clear account-line customer/jobs |
 | **Expenses** | |
-| `create_expense` | Create an expense (Cash, Check, or Credit Card) |
-| `get_expense` | Fetch an expense by ID |
-| `edit_expense` | Modify an existing expense |
+| `create_expense` | Create an expense (Cash, Check, or Credit Card) with optional line customer/job tracking |
+| `get_expense` | Fetch an expense by ID, including line customer/job and billable status |
+| `edit_expense` | Modify an expense and preserve, assign, change, or clear account-line customer/jobs |
 | **Sales Receipts** | |
 | `create_sales_receipt` | Create a sales receipt with item lines |
 | `get_sales_receipt` | Fetch a sales receipt by ID |
@@ -454,9 +454,9 @@ QBO_INLINE_OUTPUT=true
 | `get_deposit` | Fetch a deposit by ID |
 | `edit_deposit` | Modify an existing deposit |
 | **Vendor Credits** | |
-| `create_vendor_credit` | Create a vendor credit |
-| `get_vendor_credit` | Fetch a vendor credit by ID |
-| `edit_vendor_credit` | Modify an existing vendor credit |
+| `create_vendor_credit` | Create a vendor credit with optional line customer/job tracking |
+| `get_vendor_credit` | Fetch a vendor credit by ID, including line customer/job and billable status |
+| `edit_vendor_credit` | Modify a vendor credit and preserve, assign, change, or clear account-line customer/jobs |
 | **Bill Payments** | |
 | `create_bill_payment` | Pay bills and apply vendor credits (the QBO "check" / pay-bills flow) |
 | `get_bill_payment` | Fetch a bill payment by ID; flags unapplied amounts |
@@ -473,6 +473,23 @@ QBO_INLINE_OUTPUT=true
 | **Profiles** | |
 | `list_qbo_profiles` | List all configured company profiles and show which is active |
 | `switch_qbo_profile` | Switch to a different company profile |
+
+---
+
+## Line-Level Customer and Job Tracking
+
+Account-based lines on bills, expenses, and vendor credits can be associated with a customer, sub-customer, or job without making the line billable.
+
+- On create, provide either `customer_name` or `customer_id` on a line.
+- For nested jobs, `customer_name` accepts the fully qualified form `Customer:Job:Sub-job`.
+- On edit, omitting customer fields preserves the existing `CustomerRef`.
+- Use `customer_name` or `customer_id` to assign or replace the reference.
+- Use `clear_customer: true` on an existing line to remove a non-billable reference.
+- Customer mutations apply only to `AccountBasedExpenseLineDetail`; item-based expense lines are left unchanged.
+
+Customer/job tracking is independent from QBO's billable-expense workflow. New tagged lines remain `NotBillable`, writable `BillableStatus` is not exposed, `HasBeenBilled` lines cannot be reassigned, and a `Billable` line cannot have its customer cleared.
+
+Line edits use QBO full updates. The handlers preserve required header references, linked transactions, currency/tax fields, and untouched nested line metadata. Customer/job creation, replacement, and clearing were validated with disposable QBO sandbox bills, expenses, and vendor credits; unrelated header and line metadata remained unchanged.
 
 ---
 

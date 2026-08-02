@@ -20,6 +20,8 @@ vi.mock("../../../client/index.js", () => ({
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveVendor: vi.fn(),
+    resolveCustomer: vi.fn(),
+    resolveCustomerById: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
     refreshTokens: vi.fn(),
@@ -46,11 +48,19 @@ import {
   handleGetVendorCredit,
   handleEditVendorCredit,
 } from "../vendor-credit.js";
-import { getAccountCache, getDepartmentCache, getVendorCache } from "../../../client/index.js";
+import {
+  getAccountCache,
+  getDepartmentCache,
+  getVendorCache,
+  resolveCustomer,
+  resolveCustomerById,
+} from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
+const mockResolveCustomer = vi.mocked(resolveCustomer);
+const mockResolveCustomerById = vi.mocked(resolveCustomerById);
 
 describe("handleCreateVendorCredit", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -62,6 +72,8 @@ describe("handleCreateVendorCredit", () => {
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
   });
 
   it("returns preview in draft mode", async () => {
@@ -88,6 +100,67 @@ describe("handleCreateVendorCredit", () => {
     });
 
     expect(client.createVendorCredit).toHaveBeenCalledOnce();
+    expect(client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail)
+      .not.toHaveProperty("CustomerRef");
+  });
+
+  it("assigns a line customer/job by name without making it billable", async () => {
+    mockSuccess(client.createVendorCredit, { Id: "501" });
+
+    await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{
+        account_name: "Office Supplies",
+        customer_name: "Customer One:Job One",
+        amount: 75.50,
+      }],
+      draft: false,
+    });
+
+    const detail = client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("assigns a line customer/job by ID", async () => {
+    mockSuccess(client.createVendorCredit, { Id: "502" });
+
+    await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{ account_name: "Cash", customer_id: "301", amount: 25 }],
+      draft: false,
+    });
+
+    const detail = client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+    expect(mockResolveCustomerById).toHaveBeenCalledWith(client, "301");
+  });
+
+  it("shows a line customer/job in the default draft preview", async () => {
+    const result = await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{ account_name: "Cash", customer_name: "Customer One:Job One", amount: 25 }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.createVendorCredit).not.toHaveBeenCalled();
+  });
+
+  it("rejects customer_name and customer_id on the same line", async () => {
+    await expect(handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot",
+      txn_date: "2024-06-15",
+      lines: [{
+        account_name: "Cash",
+        customer_name: "Customer One:Job One",
+        customer_id: "301",
+        amount: 25,
+      }],
+    })).rejects.toThrow("only one");
+    expect(client.createVendorCredit).not.toHaveBeenCalled();
   });
 
   it("builds correct payload with VendorRef", async () => {
@@ -229,6 +302,30 @@ describe("handleGetVendorCredit", () => {
     expect(client.getVendorCredit).toHaveBeenCalledOnce();
   });
 
+  it("shows line customer/job and billable status", async () => {
+    mockSuccess(client.getVendorCredit, {
+      Id: "500",
+      SyncToken: "3",
+      TxnDate: "2024-06-15",
+      VendorRef: { value: "100", name: "Office Depot" },
+      TotalAmt: 25,
+      Line: [{
+        Id: "1",
+        Amount: 25,
+        DetailType: "AccountBasedExpenseLineDetail",
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "5", name: "Office Supplies" },
+          CustomerRef: { value: "300", name: "Customer One:Job One" },
+          BillableStatus: "NotBillable",
+        },
+      }],
+    });
+
+    const result = await handleGetVendorCredit(client as never, { id: "500" });
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(result.content[0].text).toContain("NotBillable");
+  });
+
   it("propagates API errors", async () => {
     mockError(client.getVendorCredit, "Object Not Found");
     await expect(
@@ -244,19 +341,37 @@ describe("handleEditVendorCredit", () => {
     Id: "500",
     SyncToken: "3",
     VendorRef: { value: "100", name: "Office Depot" },
+    APAccountRef: { value: "4", name: "Accounts Payable" },
+    CurrencyRef: { value: "USD", name: "United States Dollar" },
+    ExchangeRate: 1,
+    IncludeInAnnualTPAR: false,
+    LinkedTxn: [{ TxnId: "902", TxnType: "ReimburseCharge", TxnLineId: "1" }],
     TxnDate: "2024-06-15",
     TotalAmt: 200,
     Line: [
-      { Id: "1", Amount: 200, DetailType: "AccountBasedExpenseLineDetail", AccountBasedExpenseLineDetail: { AccountRef: { value: "3", name: "Rent Expense" } } },
+      {
+        Id: "1",
+        Amount: 200,
+        DetailType: "AccountBasedExpenseLineDetail",
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: "3", name: "Rent Expense" },
+          CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          BillableStatus: "NotBillable",
+          TaxCodeRef: { value: "NON" },
+        },
+      },
     ],
   };
 
   beforeEach(() => {
     client = createMockClient();
     resetMockClient(client);
+    vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
     mockSuccess(client.getVendorCredit, existingVC);
   });
 
@@ -289,6 +404,91 @@ describe("handleEditVendorCredit", () => {
     expect(client.updateVendorCredit).toHaveBeenCalledOnce();
     const payload = client.updateVendorCredit.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
+    expect(payload.Line[0].AccountBasedExpenseLineDetail).toMatchObject({
+      CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+      BillableStatus: "NotBillable",
+      TaxCodeRef: { value: "NON" },
+    });
+    expect(payload.APAccountRef).toEqual(existingVC.APAccountRef);
+    expect(payload.CurrencyRef).toEqual(existingVC.CurrencyRef);
+    expect(payload.ExchangeRate).toBe(1);
+    expect(payload.IncludeInAnnualTPAR).toBe(false);
+    expect(payload.LinkedTxn).toEqual(existingVC.LinkedTxn);
+  });
+
+  it("changes an existing line customer/job", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+      draft: false,
+    });
+
+    const detail = client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "300", name: "Customer One:Job One" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+    expect(detail.TaxCodeRef).toEqual({ value: "NON" });
+  });
+
+  it("clears a customer/job from a NotBillable line", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", clear_customer: true }],
+      draft: false,
+    });
+
+    const detail = client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail;
+    expect(detail).not.toHaveProperty("CustomerRef");
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("adds a new NotBillable line with a customer/job by ID", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ account_name: "Cash", amount: 25, customer_id: "301" }],
+      draft: false,
+    });
+
+    const detail = client.updateVendorCredit.mock.calls[0][0].Line[1].AccountBasedExpenseLineDetail;
+    expect(detail.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+    expect(detail.BillableStatus).toBe("NotBillable");
+  });
+
+  it("shows the changed customer/job in draft without updating", async () => {
+    const result = await handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", customer_name: "Customer One:Job One" }],
+    });
+
+    expect(result.content[0].text).toContain("Customer/Job: Customer One:Job One");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
+  });
+
+  it("rejects conflicting customer edit inputs", async () => {
+    await expect(handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{
+        line_id: "1",
+        customer_name: "Customer One:Job One",
+        clear_customer: true,
+      }],
+      draft: false,
+    })).rejects.toThrow("cannot be combined");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
+  });
+
+  it("rejects clearing a customer on a new line", async () => {
+    await expect(handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ account_name: "Cash", amount: 25, clear_customer: true }],
+      draft: false,
+    })).rejects.toThrow("New lines cannot clear");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
   });
 
   it("deletes a line when delete=true", async () => {
@@ -311,6 +511,15 @@ describe("handleEditVendorCredit", () => {
     const payload = client.updateVendorCredit.mock.calls[0][0];
     expect(payload.Line).toHaveLength(1);
     expect(payload.Line[0].Id).toBe("2");
+  });
+
+  it("rejects delete combined with customer clearing", async () => {
+    await expect(handleEditVendorCredit(client as never, {
+      id: "500",
+      lines: [{ line_id: "1", delete: true, clear_customer: true }],
+      draft: false,
+    })).rejects.toThrow("delete cannot be combined with customer/job");
+    expect(client.updateVendorCredit).not.toHaveBeenCalled();
   });
 
   it("throws when line_id not found", async () => {

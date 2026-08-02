@@ -24,6 +24,7 @@ import {
   resolveVendor,
   resolveItem,
   resolveCustomer,
+  resolveCustomerById,
   resolveDepartmentId,
 } from "../cache.js";
 
@@ -231,6 +232,33 @@ describe("resolveItem (lazy cache)", () => {
 });
 
 describe("resolveCustomer (lazy cache)", () => {
+  it("resolves an uncached customer ID with a direct read", async () => {
+    mockSuccess(client.getCustomer, {
+      Id: "300",
+      DisplayName: "Customer One",
+      FullyQualifiedName: "Customer One",
+      Active: true,
+    });
+
+    const ref = await resolveCustomerById(client as never, "300");
+
+    expect(ref).toEqual({ value: "300", name: "Customer One" });
+    expect(client.getCustomer).toHaveBeenCalledWith("300", expect.any(Function));
+    expect(client.findCustomers).not.toHaveBeenCalled();
+  });
+
+  it("rejects an inactive customer ID", async () => {
+    mockSuccess(client.getCustomer, {
+      Id: "300",
+      DisplayName: "Inactive Customer",
+      Active: false,
+    });
+
+    await expect(resolveCustomerById(client as never, "300")).rejects.toThrow(
+      'Customer not found or inactive: "300"'
+    );
+  });
+
   it("resolves by exact DisplayName query", async () => {
     mockSuccess(client.findCustomers, {
       QueryResponse: {
@@ -261,6 +289,76 @@ describe("resolveCustomer (lazy cache)", () => {
     const ref = await resolveCustomer(client as never, "Smith");
     expect(ref).toEqual({ value: "301", name: "John Smith" });
     expect(client.findCustomers).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves a job by exact FullyQualifiedName", async () => {
+    mockSuccess(client.findCustomers, {
+      QueryResponse: {
+        Customer: [{
+          Id: "302",
+          DisplayName: "Kitchen Remodel",
+          FullyQualifiedName: "Customer One:Kitchen Remodel",
+          Active: true,
+        }],
+      },
+    });
+
+    const ref = await resolveCustomer(client as never, "Customer One:Kitchen Remodel");
+
+    expect(ref).toEqual({ value: "302", name: "Customer One:Kitchen Remodel" });
+    expect(client.findCustomers).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        { field: "FullyQualifiedName", value: "Customer One:Kitchen Remodel", operator: "=" },
+      ]),
+      expect.any(Function)
+    );
+  });
+
+  it("throws when a partial customer name is ambiguous", async () => {
+    let callCount = 0;
+    client.findCustomers.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, result: unknown) => void;
+      callCount++;
+      cb(null, {
+        QueryResponse: {
+          Customer: callCount === 1 ? [] : [
+            { Id: "303", DisplayName: "Customer East", Active: true },
+            { Id: "304", DisplayName: "Customer West", Active: true },
+          ],
+        },
+      });
+    });
+
+    await expect(resolveCustomer(client as never, "Customer")).rejects.toThrow(
+      'Customer name is ambiguous: "Customer"'
+    );
+  });
+
+  it("caches customer ID and fully qualified name aliases", async () => {
+    mockSuccess(client.findCustomers, {
+      QueryResponse: {
+        Customer: [{
+          Id: "305",
+          DisplayName: "Phase One",
+          FullyQualifiedName: "Customer One:Phase One",
+          Active: true,
+        }],
+      },
+    });
+
+    await resolveCustomer(client as never, "Customer One:Phase One");
+    resetMockClient(client);
+
+    await expect(resolveCustomerById(client as never, "305")).resolves.toEqual({
+      value: "305",
+      name: "Customer One:Phase One",
+    });
+    await expect(resolveCustomer(client as never, "phase one")).resolves.toEqual({
+      value: "305",
+      name: "Customer One:Phase One",
+    });
+    expect(client.getCustomer).not.toHaveBeenCalled();
+    expect(client.findCustomers).not.toHaveBeenCalled();
   });
 
   it("throws when customer not found", async () => {

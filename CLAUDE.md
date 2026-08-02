@@ -98,12 +98,23 @@ For tools that return large datasets, cap the detail for HTTP mode using `isHttp
 
 ## Critical Limitations
 
-### Expenses Cannot Split Across Departments
+### Expenses Use One Header-Level Department
 
 QBO expenses (Purchases) only support **one department at the header level**. You cannot create an expense with lines in different departments. If a charge covers multiple locations:
-- **Do NOT try to edit expense lines** — `edit_expense` with line changes strips `DepartmentRef` and `EntityRef` (vendor) from the header due to a bug in the full-update code path.
 - **Use a reclassification JE** to move amounts between departments after the fact.
 - **Use the bill-splitting workflow** (frontend) to create separate per-department bills from a single vendor invoice.
+
+`edit_expense` line updates preserve header `AccountRef`, `EntityRef`, `DepartmentRef`, currency/tax metadata, linked transactions, and untouched line-detail fields. Customer assignment, replacement, and clearing were validated against disposable QBO sandbox bills, expenses, and vendor credits.
+
+### Line-Level Customer/Job Tracking
+
+Account-based lines on bills, expenses, and vendor credits support optional `customer_name` or `customer_id`. Fully qualified names such as `Customer:Job` resolve nested jobs. Edit behavior is explicit:
+- Omit customer fields to preserve the existing `CustomerRef`
+- Provide a name or ID to assign/replace it
+- Use `clear_customer: true` to remove it from an existing non-billable line
+- Do not combine customer directives with `delete: true`
+
+Customer tagging does not make a line billable. New tagged lines remain `NotBillable`; `HasBeenBilled` lines cannot be reassigned, and `Billable` lines cannot have their customer cleared.
 
 ## Building and Testing
 

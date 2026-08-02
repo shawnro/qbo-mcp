@@ -20,6 +20,7 @@ vi.mock("../../../client/index.js", () => ({
     getVendorCache: vi.fn(),
     resolveItem: vi.fn(),
     resolveCustomer: vi.fn(),
+    resolveCustomerById: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
     refreshTokens: vi.fn(),
@@ -51,12 +52,14 @@ import {
   getDepartmentCache,
   resolveItem,
   resolveCustomer,
+  resolveCustomerById,
 } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockResolveItem = vi.mocked(resolveItem);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
+const mockResolveCustomerById = vi.mocked(resolveCustomerById);
 
 describe("handleCreateSalesReceipt", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -69,6 +72,7 @@ describe("handleCreateSalesReceipt", () => {
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockResolveItem.mockResolvedValue({ value: "200", name: "Widget" });
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "John Doe" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
   });
 
   it("returns preview in draft mode", async () => {
@@ -141,6 +145,35 @@ describe("handleCreateSalesReceipt", () => {
     expect(mockResolveCustomer).toHaveBeenCalledWith(expect.anything(), "John Doe");
     const payload = client.createSalesReceipt.mock.calls[0][0];
     expect(payload.CustomerRef).toEqual({ value: "300", name: "John Doe" });
+  });
+
+  it("resolves an uncached customer ID to CustomerRef", async () => {
+    mockSuccess(client.createSalesReceipt, { Id: "601" });
+
+    await handleCreateSalesReceipt(client as never, {
+      txn_date: "2024-06-15",
+      customer_id: "301",
+      lines: [{ item_name: "Widget", amount: 50 }],
+      draft: false,
+    });
+
+    expect(mockResolveCustomerById).toHaveBeenCalledWith(expect.anything(), "301");
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    const payload = client.createSalesReceipt.mock.calls[0][0];
+    expect(payload.CustomerRef).toEqual({ value: "301", name: "Customer By ID" });
+  });
+
+  it("throws when both customer_name and customer_id are provided", async () => {
+    await expect(
+      handleCreateSalesReceipt(client as never, {
+        txn_date: "2024-06-15",
+        customer_name: "John Doe",
+        customer_id: "301",
+        lines: [{ item_name: "Widget", amount: 50 }],
+      })
+    ).rejects.toThrow("only one");
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(mockResolveCustomerById).not.toHaveBeenCalled();
   });
 
   it("resolves deposit_to_account", async () => {

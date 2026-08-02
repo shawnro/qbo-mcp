@@ -10,18 +10,24 @@ vi.mock("../../client/index.js", () => ({
   getAccountCache: vi.fn(),
   getDepartmentCache: vi.fn(),
   getVendorCache: vi.fn(),
+  resolveCustomer: vi.fn(),
+  resolveCustomerById: vi.fn(),
 }));
 
 import {
   getAccountCache,
   getDepartmentCache,
   getVendorCache,
+  resolveCustomer,
+  resolveCustomerById,
 } from "../../client/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
+const mockResolveCustomer = vi.mocked(resolveCustomer);
+const mockResolveCustomerById = vi.mocked(resolveCustomerById);
 
 function accountCacheWithNewAccount() {
   const cache = createMockAccountCache();
@@ -172,5 +178,66 @@ describe("createResolutionCoordinator", () => {
 
     await expect(resolver.vendor("Missing Vendor")).rejects.toThrow("Network timeout");
     expect(mockGetVendorCache).toHaveBeenCalledOnce();
+  });
+
+  it("routes customer names and IDs to the correct resolver", async () => {
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One" });
+    mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer Two" });
+    const resolver = createResolutionCoordinator(client as never);
+
+    await expect(resolver.customer({ name: "Customer One" })).resolves.toEqual({
+      value: "300",
+      name: "Customer One",
+    });
+    await expect(resolver.customer({ id: "301" })).resolves.toEqual({
+      value: "301",
+      name: "Customer Two",
+    });
+
+    expect(mockResolveCustomer).toHaveBeenCalledWith(client, "Customer One");
+    expect(mockResolveCustomerById).toHaveBeenCalledWith(client, "301");
+  });
+
+  it("shares one customer lookup across concurrent equivalent names", async () => {
+    mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One" });
+    const resolver = createResolutionCoordinator(client as never);
+
+    const refs = await Promise.all([
+      resolver.customer({ name: "Customer One" }),
+      resolver.customer({ name: "customer one" }),
+      resolver.customer({ name: " Customer One " }),
+    ]);
+
+    expect(refs).toEqual([
+      { value: "300", name: "Customer One" },
+      { value: "300", name: "Customer One" },
+      { value: "300", name: "Customer One" },
+    ]);
+    expect(mockResolveCustomer).toHaveBeenCalledOnce();
+  });
+
+  it("resolves different customers independently", async () => {
+    mockResolveCustomer.mockImplementation(async (_client, name) => ({ value: name, name }));
+    const resolver = createResolutionCoordinator(client as never);
+
+    await Promise.all([
+      resolver.customer({ name: "Customer One" }),
+      resolver.customer({ name: "Customer Two" }),
+    ]);
+
+    expect(mockResolveCustomer).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects invalid customer resolution input before querying", async () => {
+    const resolver = createResolutionCoordinator(client as never);
+
+    await expect(
+      resolver.customer({ id: "300", name: "Customer One" } as never)
+    ).rejects.toThrow("Provide exactly one of customer_id or customer_name");
+    await expect(resolver.customer({ name: "" })).rejects.toThrow(
+      "Provide exactly one of customer_id or customer_name"
+    );
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(mockResolveCustomerById).not.toHaveBeenCalled();
   });
 });

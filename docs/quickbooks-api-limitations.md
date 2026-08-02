@@ -103,14 +103,22 @@ This means an expense transaction **cannot be split across multiple departments*
 
 3. **Separate Expenses**: Manually create individual expense records per department (loses the connection to the single bank/card transaction).
 
-### edit_expense Full Update Bug (Known)
+### Expense Full-Update Preservation
 
-When `edit_expense` modifies lines, it performs a full update (`sparse: false`) but does **not** copy the following header-level fields from the original:
+Line changes require a full update (`sparse: false`); QBO does not support sparse updates to individual lines. The handler fetches the current expense and carries forward required and optional writable metadata, including:
 
-- `DepartmentRef` (location) — **gets stripped**
-- `EntityRef` (vendor/payee) — **gets stripped**
+- `PaymentType`, payment `AccountRef`, `EntityRef`, and `DepartmentRef`
+- Currency, exchange rate, payment method, tax, print/credit, and annual-reporting fields when present
+- `LinkedTxn` relationships
+- Untouched nested line details such as `TaxCodeRef`, `CustomerRef`, and `BillableStatus`
 
-This means any line edit on an expense will silently remove the department and vendor. Until this is fixed in the handler code, avoid using `edit_expense` for line modifications. Use JEs for reclassification instead.
+Customer/job assignment, replacement, and clearing were validated against disposable QBO sandbox bills, expenses, and vendor credits. Required header references, document fields, line account/amount/description, billable status, totals, and balances remained unchanged across full updates.
+
+### Account-Line Customer and Job References
+
+`AccountBasedExpenseLineDetail.CustomerRef` is supported on bills, expenses, and vendor credits. The MCP tools accept customer IDs, display names, and fully qualified job names. Customer tagging remains separate from billable-expense state: new tagged lines are `NotBillable`, QBO-managed `HasBeenBilled` state is not writable, and customer removal is blocked for billable lines.
+
+For edits, omission preserves the current reference, customer name/ID replaces it, and `clear_customer: true` removes it through full-update omission. Customer mutation is intentionally unsupported on item-based expense lines.
 
 ## References
 

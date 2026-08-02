@@ -16,6 +16,7 @@ vi.mock("../../../client/index.js", () => ({
     getDepartmentCache: vi.fn(),
     resolveItem: vi.fn(),
     resolveCustomer: vi.fn(),
+    resolveCustomerById: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
     refreshTokens: vi.fn(),
@@ -38,11 +39,12 @@ vi.mock("../../../utils/index.js", async () => {
 });
 
 import { handleCreateInvoice, handleGetInvoice, handleEditInvoice } from "../invoice.js";
-import { getDepartmentCache, resolveItem, resolveCustomer } from "../../../client/index.js";
+import { getDepartmentCache, resolveItem, resolveCustomer, resolveCustomerById } from "../../../client/index.js";
 
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockResolveItem = vi.mocked(resolveItem);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
+const mockResolveCustomerById = vi.mocked(resolveCustomerById);
 
 describe("handleCreateInvoice", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -53,6 +55,7 @@ describe("handleCreateInvoice", () => {
     vi.clearAllMocks();
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "200", name: "Acme Corp" });
+    mockResolveCustomerById.mockResolvedValue({ value: "201", name: "Customer By ID" });
     mockResolveItem.mockResolvedValue({ value: "300", name: "Consulting Services" });
   });
 
@@ -165,6 +168,22 @@ describe("handleCreateInvoice", () => {
     expect(mockResolveCustomer).toHaveBeenCalledWith(expect.anything(), "Acme Corp");
   });
 
+  it("resolves an uncached customer ID to CustomerRef", async () => {
+    mockSuccess(client.createInvoice, { Id: "705" });
+
+    await handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01",
+      customer_id: "201",
+      draft: false,
+      lines: [{ item_name: "Consulting Services", amount: 100 }],
+    });
+
+    const payload = client.createInvoice.mock.calls[0][0];
+    expect(payload.CustomerRef).toEqual({ value: "201", name: "Customer By ID" });
+    expect(mockResolveCustomerById).toHaveBeenCalledWith(expect.anything(), "201");
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+  });
+
   it("throws when customer not found", async () => {
     mockResolveCustomer.mockRejectedValue(new Error("Customer not found: Unknown"));
 
@@ -196,6 +215,19 @@ describe("handleCreateInvoice", () => {
         lines: [{ item_name: "Consulting Services", amount: 100 }],
       })
     ).rejects.toThrow("customer");
+  });
+
+  it("throws when both customer_name and customer_id are provided", async () => {
+    await expect(
+      handleCreateInvoice(client as never, {
+        txn_date: "2026-04-01",
+        customer_name: "Acme Corp",
+        customer_id: "201",
+        lines: [{ item_name: "Consulting Services", amount: 100 }],
+      })
+    ).rejects.toThrow("exactly one");
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(mockResolveCustomerById).not.toHaveBeenCalled();
   });
 
   it("throws when sales term not found", async () => {

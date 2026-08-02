@@ -2,7 +2,13 @@
 // These operate on pre-fetched cache objects and return QB API Ref shapes.
 
 import QuickBooks from "node-quickbooks";
-import { getAccountCache, getDepartmentCache, getVendorCache } from "../client/index.js";
+import {
+  getAccountCache,
+  getDepartmentCache,
+  getVendorCache,
+  resolveCustomer,
+  resolveCustomerById,
+} from "../client/index.js";
 import type { AccountCache, DepartmentCache, VendorCache } from "../types/cache.js";
 
 export interface AccountRef {
@@ -109,6 +115,76 @@ export interface ResolutionCoordinator {
   account(nameOrId: string): Promise<AccountRef>;
   department(nameOrId: string): Promise<EntityRef>;
   vendor(nameOrId: string): Promise<EntityRef>;
+  customer(input: CustomerResolutionInput): Promise<EntityRef>;
+}
+
+export type CustomerResolutionInput =
+  | { id: string; name?: never }
+  | { name: string; id?: never };
+
+export async function resolveOptionalCustomerRef(
+  resolver: ResolutionCoordinator,
+  input: { customer_name?: string; customer_id?: string }
+): Promise<EntityRef | undefined> {
+  const name = input.customer_name?.trim();
+  const id = input.customer_id?.trim();
+  if (name && id) {
+    throw new Error("Provide only one of customer_name or customer_id per line");
+  }
+  if (id) return resolver.customer({ id });
+  if (name) return resolver.customer({ name });
+  return undefined;
+}
+
+export interface CustomerRefChange {
+  customer_name?: string;
+  customer_id?: string;
+  clear_customer?: boolean;
+}
+
+export interface CustomerRefDetail {
+  CustomerRef?: { value: string; name?: string };
+  BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
+}
+
+export function hasCustomerRefChange(change: CustomerRefChange): boolean {
+  return Boolean(change.customer_name?.trim() || change.customer_id?.trim() || change.clear_customer);
+}
+
+export function assertNoCustomerRefChangeOnDelete(
+  change: CustomerRefChange & { delete?: boolean },
+  label: string
+): void {
+  if (change.delete && hasCustomerRefChange(change)) {
+    throw new Error(`${label}: delete cannot be combined with customer/job assignment or clearing`);
+  }
+}
+
+export async function applyCustomerRefChange(
+  resolver: ResolutionCoordinator,
+  detail: CustomerRefDetail,
+  change: CustomerRefChange,
+  label: string
+): Promise<void> {
+  const hasAssignment = Boolean(change.customer_name?.trim() || change.customer_id?.trim());
+  if (change.clear_customer && hasAssignment) {
+    throw new Error(`${label}: clear_customer cannot be combined with customer_name or customer_id`);
+  }
+  if (!change.clear_customer && !hasAssignment) return;
+
+  if (detail.BillableStatus === "HasBeenBilled") {
+    throw new Error(`${label}: customer/job cannot be changed after the line has been billed`);
+  }
+
+  if (change.clear_customer) {
+    if (detail.BillableStatus === "Billable") {
+      throw new Error(`${label}: customer/job cannot be cleared while the line is Billable`);
+    }
+    delete detail.CustomerRef;
+    return;
+  }
+
+  detail.CustomerRef = await resolveOptionalCustomerRef(resolver, change);
 }
 
 /**
@@ -130,6 +206,7 @@ export function createResolutionCoordinator(
   let accountRefresh: Promise<AccountCache> | undefined;
   let departmentRefresh: Promise<DepartmentCache> | undefined;
   let vendorRefresh: Promise<VendorCache> | undefined;
+  const customerResolutions = new Map<string, Promise<EntityRef>>();
 
   const loadAccountCache = async (): Promise<AccountCache> => {
     if (accountCache) return accountCache;
@@ -202,6 +279,24 @@ export function createResolutionCoordinator(
         if (!(error instanceof ResolutionNotFoundError) || error.entity !== "vendor") throw error;
         return resolveVendorRef(await refreshVendorCache(), nameOrId);
       }
+    },
+
+    async customer(input: CustomerResolutionInput): Promise<EntityRef> {
+      const id = input.id?.trim();
+      const name = input.name?.trim();
+      if ((!id && !name) || (id && name)) {
+        throw new Error("Provide exactly one of customer_id or customer_name");
+      }
+
+      const key = id ? `id:${id}` : `name:${name!.toLowerCase()}`;
+      let resolution = customerResolutions.get(key);
+      if (!resolution) {
+        resolution = id
+          ? resolveCustomerById(client, id)
+          : resolveCustomer(client, name!);
+        customerResolutions.set(key, resolution);
+      }
+      return resolution;
     },
   };
 }
