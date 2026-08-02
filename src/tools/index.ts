@@ -2,6 +2,7 @@
 
 import QuickBooks from "node-quickbooks";
 import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
+import { formatQBOError } from "../utils/index.js";
 import { isToolDisabled } from "./crud-filter.js";
 import {
   handleGetCompanyInfo,
@@ -153,27 +154,15 @@ export async function executeTool(
         return await executeOperation();
       } catch (retryError) {
         // If retry also fails, return that error
-        const errorMessage = typeof retryError === 'object' && retryError !== null
-          ? JSON.stringify(retryError, null, 2)
-          : String(retryError);
         return {
-          content: [{ type: "text", text: `Error after retry: ${errorMessage}` }],
+          content: [{ type: "text", text: `Error after retry: ${formatQBOError(retryError)}` }],
           isError: true,
         };
       }
     }
 
-    let errorMessage: string;
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === 'object' && error !== null) {
-      // node-quickbooks often returns error objects with Fault property
-      errorMessage = JSON.stringify(error, null, 2);
-    } else {
-      errorMessage = String(error);
-    }
     return {
-      content: [{ type: "text", text: `Error: ${errorMessage}` }],
+      content: [{ type: "text", text: `Error: ${formatQBOError(error)}` }],
       isError: true,
     };
   }

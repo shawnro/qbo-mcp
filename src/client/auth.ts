@@ -5,7 +5,7 @@ import { getCredentialProvider, getCredentialMode, isLocalMode, resolveCompanyId
 import type { QBCredentials, CredentialProvider } from "../credentials/index.js";
 import { refreshAccessToken } from "../credentials/oauth-client.js";
 import { clearLookupCache } from "./cache.js";
-import { isQBError, extractQBErrorInfo } from "../types/index.js";
+import { extractHttpStatus, extractQBErrorInfo, unwrapQBError } from "../types/index.js";
 
 // Sandbox mode for development/testing (read lazily so dotenv has time to load)
 const isSandbox = () => process.env.QBO_SANDBOX === "true";
@@ -33,16 +33,13 @@ export function clearCredentialsCache(): void {
 // Check if error is an authentication failure
 export function isAuthError(error: unknown): boolean {
   // QBO Fault-style errors (from API responses)
-  if (isQBError(error)) {
+  if (unwrapQBError(error)) {
     const { code } = extractQBErrorInfo(error);
-    return code === '3200' || code === '401';
+    if (code === '3200' || code === '401') return true;
   }
   // HTTP status code errors (e.g. from node-quickbooks or axios)
-  if (error && typeof error === 'object') {
-    const statusCode = (error as Record<string, unknown>).statusCode
-      ?? (error as Record<string, unknown>).status;
-    if (statusCode === 401 || statusCode === 403) return true;
-  }
+  const statusCode = extractHttpStatus(error);
+  if (statusCode === 401 || statusCode === 403) return true;
   // Error message heuristics
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
