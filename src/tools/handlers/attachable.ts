@@ -1,10 +1,14 @@
 // Handlers for attachable tools (create with file upload, get, edit)
 
 import fs from "node:fs";
-import path from "node:path";
 import QuickBooks from "node-quickbooks";
 import { promisify } from "../../client/index.js";
-import { outputReport } from "../../utils/index.js";
+import {
+  formatQBOError,
+  outputReport,
+  validateUploadFile,
+} from "../../utils/index.js";
+import type { ValidatedUploadFile } from "../../utils/index.js";
 
 interface QBAttachable {
   Id: string;
@@ -29,82 +33,62 @@ interface QBAttachable {
   MetaData?: { CreateTime?: string; LastUpdatedTime?: string };
 }
 
-const MIME_MAP: Record<string, string> = {
-  ".pdf": "application/pdf",
-  ".doc": "application/msword",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".xls": "application/vnd.ms-excel",
-  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ".csv": "text/csv",
-  ".txt": "text/plain",
-  ".rtf": "application/rtf",
-  ".xml": "application/xml",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".gif": "image/gif",
-  ".tif": "image/tiff",
-  ".tiff": "image/tiff",
-  ".ods": "application/vnd.oasis.opendocument.spreadsheet",
-  ".eps": "application/postscript",
-  ".ai": "application/postscript",
-};
+const ATTACHABLE_CATEGORIES = [
+  "Contact Photo",
+  "Document",
+  "Image",
+  "Receipt",
+  "Signature",
+  "Sound",
+  "Other",
+] as const;
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const ENTITY_TYPES = [
+  "Bill",
+  "BillPayment",
+  "Customer",
+  "Deposit",
+  "Invoice",
+  "Item",
+  "JournalEntry",
+  "Purchase",
+  "SalesReceipt",
+  "Vendor",
+  "VendorCredit",
+] as const;
 
-function detectContentType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  return MIME_MAP[ext] || "application/octet-stream";
+function validateMetadata(note?: string, category?: string): void {
+  if (note !== undefined && note.length > 2000) {
+    throw new Error("note must be 2000 characters or fewer");
+  }
+  if (category !== undefined && !ATTACHABLE_CATEGORIES.includes(category as typeof ATTACHABLE_CATEGORIES[number])) {
+    throw new Error(`category must be one of: ${ATTACHABLE_CATEGORIES.join(", ")}`);
+  }
 }
 
-async function validateFilePath(filePath: string): Promise<{ resolvedPath: string; size: number }> {
-  const resolvedPath = path.resolve(filePath);
-
-  // Block dotfiles and credential files (prevent leaking secrets to QBO)
-  const basename = path.basename(resolvedPath);
-  const segments = resolvedPath.split(path.sep);
-  if (basename.startsWith('.') || segments.some(s => s.startsWith('.') && s !== '.' && s !== '..')) {
-    throw new Error(`Blocked: dotfiles cannot be uploaded (${basename})`);
+function validateEntityLink(
+  entityType?: string,
+  entityId?: string,
+  includeOnSend?: boolean
+): string | undefined {
+  const hasEntityType = entityType !== undefined;
+  const hasEntityId = entityId !== undefined;
+  if (hasEntityType !== hasEntityId ||
+      (hasEntityType && (!entityType?.trim() || !entityId?.trim()))) {
+    throw new Error("entity_type and entity_id must be provided together");
   }
-  const blockedNames = ['tokens.json', 'credentials.json', 'temp-creds.json'];
-  const blockedExts = ['.env', '.pem', '.key'];
-  if (blockedNames.includes(basename.toLowerCase()) ||
-      blockedExts.some(ext => basename.toLowerCase().endsWith(ext))) {
-    throw new Error(`Blocked: credential/secret files cannot be uploaded (${basename})`);
+  if (includeOnSend !== undefined && (!entityType || !entityId)) {
+    throw new Error("include_on_send requires entity_type and entity_id");
   }
-
-  // Check existence
-  let stat: fs.Stats;
-  try {
-    stat = await fs.promises.stat(resolvedPath);
-  } catch {
-    throw new Error(`File not found: ${resolvedPath}`);
+  if (!entityType) return undefined;
+  if (!/^\d+$/.test(entityId!)) {
+    throw new Error("entity_id must be a numeric QBO entity ID");
   }
-
-  // Must be a file
-  if (!stat.isFile()) {
-    throw new Error(`Not a file: ${resolvedPath}`);
+  const canonical = ENTITY_TYPES.find((candidate) => candidate.toLowerCase() === entityType.toLowerCase());
+  if (!canonical) {
+    throw new Error(`Unsupported entity_type "${entityType}". Supported types: ${ENTITY_TYPES.join(", ")}`);
   }
-
-  // Check readable
-  try {
-    await fs.promises.access(resolvedPath, fs.constants.R_OK);
-  } catch {
-    throw new Error(`File not readable: ${resolvedPath}`);
-  }
-
-  // Size check
-  if (stat.size > MAX_FILE_SIZE) {
-    throw new Error(
-      `File too large: ${(stat.size / 1024 / 1024).toFixed(1)} MB (max ${MAX_FILE_SIZE / 1024 / 1024} MB)`
-    );
-  }
-
-  if (stat.size === 0) {
-    throw new Error(`File is empty: ${resolvedPath}`);
-  }
-
-  return { resolvedPath, size: stat.size };
+  return canonical;
 }
 
 export async function handleCreateAttachable(
@@ -118,21 +102,19 @@ export async function handleCreateAttachable(
     category?: string;
     draft?: boolean;
   }
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const { file_path, note, entity_type, entity_id, include_on_send, category, draft = true } = args;
 
   if (!file_path && !note) {
     throw new Error("At least one of file_path or note is required.");
   }
+  validateMetadata(note, category);
+  const canonicalEntityType = validateEntityLink(entity_type, entity_id, include_on_send);
 
   // Validate file if provided
-  let fileInfo: { resolvedPath: string; size: number } | undefined;
-  let contentType: string | undefined;
-  let fileName: string | undefined;
+  let fileInfo: ValidatedUploadFile | undefined;
   if (file_path) {
-    fileInfo = await validateFilePath(file_path);
-    contentType = detectContentType(fileInfo.resolvedPath);
-    fileName = path.basename(fileInfo.resolvedPath);
+    fileInfo = await validateUploadFile(file_path);
   }
 
   if (draft) {
@@ -142,15 +124,16 @@ export async function handleCreateAttachable(
     ];
 
     if (fileInfo) {
-      preview.push(`File: ${fileName}`);
+      preview.push(`File: ${fileInfo.fileName}`);
       preview.push(`Path: ${fileInfo.resolvedPath}`);
+      if (fileInfo.rootLabel) preview.push(`Business Folder: ${fileInfo.rootLabel}`);
       preview.push(`Size: ${(fileInfo.size / 1024).toFixed(1)} KB`);
-      preview.push(`Content Type: ${contentType}`);
+      preview.push(`Content Type: ${fileInfo.contentType}`);
     }
     if (note) preview.push(`Note: ${note}`);
     if (category) preview.push(`Category: ${category}`);
-    if (entity_type && entity_id) {
-      preview.push(`Linked to: ${entity_type} #${entity_id}`);
+    if (canonicalEntityType && entity_id) {
+      preview.push(`Linked to: ${canonicalEntityType} #${entity_id}`);
       if (include_on_send !== undefined) preview.push(`Include on Send: ${include_on_send}`);
     }
     preview.push("", "Set draft=false to create this attachable.");
@@ -161,26 +144,20 @@ export async function handleCreateAttachable(
   let result: QBAttachable;
 
   if (fileInfo) {
-    // File upload via node-quickbooks upload()
-    // upload() signature is overloaded: if the entityType param is a function,
-    // it's treated as the callback and no entity linking occurs. If entityType
-    // is a string (even empty ""), upload() calls updateAttachable() to create
-    // an EntityRef — passing empty string would write a malformed ref into QBO.
+    // Always upload first without linking. The SDK's combined overload performs
+    // a hidden second write, making partial success impossible to recover safely.
     const stream = fs.createReadStream(fileInfo.resolvedPath);
-    if (entity_type && entity_id) {
-      // Upload and link to entity (upload does internal updateAttachable)
+    try {
       result = (await promisify<unknown>((cb) =>
-        client.upload(fileName!, contentType!, stream, entity_type, entity_id, cb)
+        client.upload(fileInfo.fileName, fileInfo.contentType, stream, cb)
       )) as QBAttachable;
-    } else {
-      // Upload without entity linking — pass callback in entityType position
-      result = (await promisify<unknown>((cb) =>
-        (client as any).upload(fileName!, contentType!, stream, cb)
-      )) as QBAttachable;
+    } catch (error) {
+      stream.destroy();
+      throw error;
     }
 
-    // If note or category provided, update the attachable to add them
-    if (note || category) {
+    // Apply linking and metadata in one controlled follow-up update.
+    if (canonicalEntityType || note || category) {
       const updateObj: Record<string, unknown> = {
         Id: result.Id,
         SyncToken: result.SyncToken,
@@ -188,9 +165,29 @@ export async function handleCreateAttachable(
       };
       if (note) updateObj.Note = note;
       if (category) updateObj.Category = category;
-      result = (await promisify<unknown>((cb) =>
-        client.updateAttachable(updateObj, cb)
-      )) as QBAttachable;
+      if (canonicalEntityType && entity_id) {
+        updateObj.AttachableRef = [{
+          EntityRef: { value: entity_id, type: canonicalEntityType },
+          ...(include_on_send !== undefined && { IncludeOnSend: include_on_send }),
+        }];
+      }
+      try {
+        const updated = (await promisify<unknown>((cb) =>
+          client.updateAttachable(updateObj, cb)
+        )) as QBAttachable;
+        result = { ...result, ...updated };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: [
+              `File ${result.FileName || fileInfo.fileName} was uploaded as Attachable ${result.Id}, but linking or metadata update failed: ${formatQBOError(error)}.`,
+              `Use edit_attachable with id=${result.Id} to finish the link or metadata update.`,
+            ].join("\n"),
+          }],
+          isError: true,
+        };
+      }
     }
   } else {
     // Note-only attachable
@@ -198,9 +195,9 @@ export async function handleCreateAttachable(
     if (note) attachableObj.Note = note;
     if (category) attachableObj.Category = category;
 
-    if (entity_type && entity_id) {
+    if (canonicalEntityType && entity_id) {
       const ref: Record<string, unknown> = {
-        EntityRef: { value: entity_id, type: entity_type },
+        EntityRef: { value: entity_id, type: canonicalEntityType },
       };
       if (include_on_send !== undefined) ref.IncludeOnSend = include_on_send;
       attachableObj.AttachableRef = [ref];
@@ -286,6 +283,12 @@ export async function handleEditAttachable(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id, note, category, entity_type, entity_id, include_on_send, draft = true } = args;
 
+  validateMetadata(note, category);
+  const canonicalEntityType = validateEntityLink(entity_type, entity_id, include_on_send);
+  if (note === undefined && category === undefined && !canonicalEntityType) {
+    throw new Error("At least one attachable change is required");
+  }
+
   // Fetch current
   const current = (await promisify<unknown>((cb) =>
     client.getAttachable(id, cb)
@@ -303,9 +306,9 @@ export async function handleEditAttachable(
 
   // Update entity link if provided — replaces entire AttachableRef array
   // (QBO sparse updates replace arrays, consistent with Line edits in other handlers)
-  if (entity_type && entity_id) {
+  if (canonicalEntityType && entity_id) {
     const ref: Record<string, unknown> = {
-      EntityRef: { value: entity_id, type: entity_type },
+      EntityRef: { value: entity_id, type: canonicalEntityType },
     };
     if (include_on_send !== undefined) ref.IncludeOnSend = include_on_send;
 
@@ -326,11 +329,11 @@ export async function handleEditAttachable(
       previewLines.push(`  Note: ${current.Note || "(none)"} → ${note}`);
     if (category !== undefined)
       previewLines.push(`  Category: ${current.Category || "(none)"} → ${category}`);
-    if (entity_type && entity_id) {
+    if (canonicalEntityType && entity_id) {
       const existingCount = current.AttachableRef?.length || 0;
       const label = existingCount > 0
-        ? `  Link: → ${entity_type} #${entity_id} (replaces ${existingCount} existing link${existingCount > 1 ? 's' : ''})`
-        : `  Link: → ${entity_type} #${entity_id}`;
+        ? `  Link: → ${canonicalEntityType} #${entity_id} (replaces ${existingCount} existing link${existingCount > 1 ? 's' : ''})`
+        : `  Link: → ${canonicalEntityType} #${entity_id}`;
       previewLines.push(label);
     }
 

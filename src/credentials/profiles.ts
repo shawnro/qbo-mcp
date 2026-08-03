@@ -2,7 +2,7 @@
 
 import { readFileSync, existsSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import type { CredentialMode } from "./types.js";
 
 const VALID_MODES: CredentialMode[] = ["local", "aws", "azure"];
@@ -14,6 +14,12 @@ export interface QBProfile {
   mode: CredentialMode;
   secret_name?: string;
   company_id?: string;
+  upload_roots?: QBUploadRoot[];
+}
+
+export interface QBUploadRoot {
+  label: string;
+  path: string;
 }
 
 /**
@@ -89,6 +95,44 @@ function validateConfig(config: unknown, filePath: string): QBProfileConfig {
       throw new Error(
         `Profile "${name}" in ${filePath} has invalid "company_id": must be a string.`
       );
+    }
+
+    if (p.upload_roots !== undefined) {
+      if (!Array.isArray(p.upload_roots)) {
+        throw new Error(
+          `Profile "${name}" in ${filePath} has invalid "upload_roots": must be an array.`
+        );
+      }
+      if (p.upload_roots.length === 0) {
+        throw new Error(
+          `Profile "${name}" in ${filePath} has invalid "upload_roots": omit the field or configure at least one root.`
+        );
+      }
+      const labels = new Set<string>();
+      for (const [index, root] of p.upload_roots.entries()) {
+        if (!root || typeof root !== "object" || Array.isArray(root)) {
+          throw new Error(
+            `Profile "${name}" upload_roots[${index}] must be an object with label and path.`
+          );
+        }
+        const entry = root as Record<string, unknown>;
+        if (typeof entry.label !== "string" || !entry.label.trim()) {
+          throw new Error(`Profile "${name}" upload_roots[${index}] requires a non-empty label.`);
+        }
+        const label = entry.label.trim();
+        const normalizedLabel = label.toLowerCase();
+        if (labels.has(normalizedLabel)) {
+          throw new Error(`Profile "${name}" has duplicate upload root label "${entry.label}".`);
+        }
+        labels.add(normalizedLabel);
+        if (typeof entry.path !== "string" || !isAbsolute(entry.path.trim())) {
+          throw new Error(
+            `Profile "${name}" upload root "${entry.label}" path must be absolute.`
+          );
+        }
+        entry.label = label;
+        entry.path = entry.path.trim();
+      }
     }
   }
 
@@ -188,6 +232,7 @@ export function listProfiles(): Array<{
   mode: CredentialMode;
   secret_name?: string;
   company_id?: string;
+  upload_root_labels?: string[];
   active: boolean;
   is_default: boolean;
 }> {
@@ -198,6 +243,7 @@ export function listProfiles(): Array<{
     mode: profile.mode,
     secret_name: profile.secret_name,
     company_id: profile.company_id,
+    upload_root_labels: profile.upload_roots?.map((root) => root.label),
     active: name === activeProfileName,
     is_default: name === profileConfig!.default,
   }));

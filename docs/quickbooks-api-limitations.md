@@ -132,9 +132,22 @@ Sandbox validation confirmed that sparse Vendor clears require empty values rath
 
 If that follow-up terms update fails, the tool returns a non-retriable partial-success result containing the created Vendor ID and instructions to use `edit_vendor`; it does not retry the create operation. `get_vendor` allowlists supported fields before inline output and excludes tax identifiers, payment-bank details, and other unsupported Vendor data from model context.
 
+## Attachables
+
+QBO supports file and note Attachables linked to existing transactions. The transaction must exist before an Attachable can reference it. Phase 0 sandbox validation confirmed a local text file could be draft-previewed, uploaded, linked to a Bill, read back with metadata, downloaded byte-for-byte, and deleted with the disposable Bill.
+
+File upload uses a local absolute path on the machine running qbo-mcp. Files uploaded only to ordinary Claude Chat are not automatically forwarded to local MCP servers. Cowork connected folders or an explicit original path provide the supported local workflow.
+
+For multi-company use, each QBO profile may define multiple labeled `upload_roots`; qbo-mcp canonicalizes the file and configured roots before enforcing containment. Symbolic links, dotfiles, credential/secret files, unsupported file types, unreadable/empty files, and files over QBO's 100 MB limit are rejected. In single-company mode, `QBO_UPLOAD_ROOTS` provides an optional platform-delimited fallback.
+
+The node-quickbooks combined upload/link overload silently ignored `IncludeOnSend` during sandbox validation and hides partial success behind its internal follow-up update. qbo-mcp therefore uploads the file without linking, then performs one controlled sparse update containing the entity link, `IncludeOnSend`, note, and category. If the update fails, the tool returns a non-retriable partial-success result with the created Attachable ID for recovery through `edit_attachable`.
+
+QBO temporary download URLs expire after approximately 15 minutes. Uploaded file bytes are immutable; changing a file requires deleting and recreating the Attachable. Updating entity links replaces the complete `AttachableRef` array.
+
 ## References
 
 - [Data Queries - Intuit Developer](https://developer.intuit.com/app/developer/qbo/docs/learn/explore-the-quickbooks-online-api/data-queries)
 - [Deep Dive into QuickBooks Online Data Queries](https://blogs.intuit.com/2017/02/08/deep-dive-sql-queries/)
 - [Purchase API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/Purchase)
 - [Vendor API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/vendor)
+- [Attachable API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/attachable)

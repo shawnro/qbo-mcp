@@ -12,7 +12,7 @@ export {
   getActiveProfile,
   setActiveProfile,
 } from "./profiles.js";
-export type { QBProfile, QBProfileConfig } from "./profiles.js";
+export type { QBProfile, QBProfileConfig, QBUploadRoot } from "./profiles.js";
 
 import { getCredentialMode } from "./types.js";
 import type { CredentialProvider } from "./types.js";
