@@ -313,7 +313,11 @@ Create `~/.qbo-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
   "profiles": {
     "my-business": {
       "mode": "azure",
-      "secret_name": "qbo-my-business"
+      "secret_name": "qbo-my-business",
+      "upload_roots": [
+        { "label": "AP Invoices", "path": "C:\\Accounting\\My Business\\AP" },
+        { "label": "Receipts", "path": "C:\\Accounting\\My Business\\Receipts" }
+      ]
     },
     "side-project": {
       "mode": "azure",
@@ -340,6 +344,7 @@ Create `~/.qbo-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
 | `mode` | Yes | Credential provider: `local`, `aws`, or `azure` |
 | `secret_name` | Yes (aws/azure) | Provider-specific secret name |
 | `company_id` | No | Override company ID (useful when one login has multiple companies) |
+| `upload_roots` | No | Labeled absolute folders from which this profile may upload attachments. Paths are not exposed by `list_qbo_profiles`. |
 | `default` | Yes (top-level) | Profile to use on startup |
 
 ### 2. Use the Profile Tools
@@ -352,6 +357,8 @@ Create `~/.qbo-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
 - If the profiles file does not exist, the server runs in single-company mode (backward compatible)
 - If the profiles file exists but is malformed, the server fails at startup with a descriptive error
 - Switching profiles clears all cached data (accounts, departments, etc.)
+- Attachment paths are checked against the active profile's `upload_roots`; different businesses can authorize entirely different folder structures
+- Missing/offline upload roots do not prevent server startup or use of other configured roots
 - On switch failure, the server automatically rolls back to the previous profile
 
 ---
@@ -408,6 +415,7 @@ QBO_INLINE_OUTPUT=true
 | `AZURE_KEY_VAULT_URL` | - | Key Vault URI, e.g. `https://myvault.vault.azure.net` (azure mode) |
 | `QBO_COMPANY_ID` | - | Fallback company ID if not in Key Vault secret (azure mode) |
 | `QBO_PROFILES_FILE` | `~/.qbo-mcp/profiles.json` | Path to multi-company profiles config |
+| `QBO_UPLOAD_ROOTS` | - | Optional platform-delimited attachment roots for single-company mode (Windows uses `;`). Profile roots take precedence. |
 | `QBO_DISABLE_CREATE` | `false` | Hide all `create_*` tools (read-only mode for creates) |
 | `QBO_DISABLE_UPDATE` | `false` | Hide all `edit_*` tools (prevent modifications) |
 | `QBO_DISABLE_DELETE` | `false` | Hide `delete_entity` tool (prevent deletions) |
@@ -478,6 +486,32 @@ QBO_INLINE_OUTPUT=true
 | **Profiles** | |
 | `list_qbo_profiles` | List all configured company profiles and show which is active |
 | `switch_qbo_profile` | Switch to a different company profile |
+
+---
+
+## File Attachment Workflow
+
+`create_attachable` can upload a file from the computer running qbo-mcp and link it to an existing QBO transaction. A file uploaded only into ordinary Claude Chat is not automatically available to local MCP tools; provide the original absolute local path, or use Claude Cowork with the relevant business folder connected.
+
+Recommended Bill workflow:
+
+1. Select or confirm the correct QBO profile.
+2. Create the Bill and retain its returned ID.
+3. Call `create_attachable` with the absolute `file_path`, `entity_type: "Bill"`, and the Bill ID.
+4. Review the draft and call again with `draft: false`.
+5. Use `get_attachable` to verify metadata and the QBO link.
+
+Attachment safeguards and limitations:
+
+- Profile-specific `upload_roots` can authorize multiple existing business folders; no shared staging folder is required.
+- Paths must be absolute, canonical, readable, non-symlink files within the active profile's configured roots when roots are present.
+- QBO-approved business-document types only; maximum 100 MB; dotfiles and credential/secret files are blocked.
+- `entity_type` and `entity_id` must be provided together.
+- File upload is performed first, then linking/note/category metadata is applied in one controlled update. If that update fails, the tool returns the created Attachable ID so `edit_attachable` can recover without uploading a duplicate.
+- `edit_attachable` replaces the complete entity-link array.
+- Uploaded file bytes cannot be replaced; delete and recreate the Attachable.
+- QBO temporary download URLs expire after approximately 15 minutes.
+- Lambda/HTTP servers cannot access files on a user's local computer through `file_path`.
 
 ---
 

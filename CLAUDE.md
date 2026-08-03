@@ -151,8 +151,13 @@ Both builds must pass before committing. After changes, restart Claude Code to r
 ### Attachables
 
 - File upload uses `node-quickbooks` `upload()` method (multipart/form-data)
-- `upload()` has an overloaded signature: pass callback as 4th arg for upload-only, or pass entityType+entityId+callback for upload+link. **Never pass empty strings** for entityType/entityId.
+- qbo-mcp deliberately uses the upload-only overload, then performs one controlled sparse update for links, `IncludeOnSend`, note, and category. This preserves the created Attachable ID on partial failure and prevents duplicate-upload auth retries.
+- `upload()` has an overloaded signature: callback as 4th arg means upload-only; never pass empty strings for entity type/ID.
 - `edit_attachable` **replaces** the entire `AttachableRef` array (does not append)
-- File path security: blocks dotfiles, `.env`, `*.pem`, `*.key`, `tokens.json`, `credentials.json`
+- `entity_type` and `entity_id` must be supplied together
+- File paths must be absolute, canonical, non-symlink files. When configured, the active profile's labeled `upload_roots` are enforced; single-company mode can use `QBO_UPLOAD_ROOTS`.
+- File path security also blocks dotfiles, credential files, secret-key extensions, and non-QBO-approved file types
 - Max file size: 100 MB (QBO limit)
 - Cannot replace uploaded file bytes — must delete and re-create
+- Ordinary Claude Chat uploads are not exposed as local MCP paths. Use the original local path or Cowork connected-folder access.
+- Lambda/HTTP mode cannot access a user's local filesystem through `file_path`

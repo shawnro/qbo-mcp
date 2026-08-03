@@ -33,7 +33,10 @@ export async function handleListProfiles(): Promise<ToolResult> {
     const flagStr = flags.length > 0 ? ` [${flags.join(", ")}]` : "";
     const companyId = p.company_id ? ` (company: ${p.company_id})` : "";
     const secret = p.secret_name ? ` secret=${p.secret_name}` : "";
-    return `  ${p.name}${flagStr} — mode=${p.mode}${secret}${companyId}`;
+    const uploadRoots = p.upload_root_labels?.length
+      ? ` uploads=[${p.upload_root_labels.join(", ")}]`
+      : "";
+    return `  ${p.name}${flagStr} — mode=${p.mode}${secret}${companyId}${uploadRoots}`;
   });
 
   return {

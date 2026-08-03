@@ -55,7 +55,7 @@ describe("handleListProfiles", () => {
   it("returns formatted profile list", async () => {
     mockHasProfiles.mockReturnValue(true);
     mockListProfiles.mockReturnValue([
-      { name: "prod", mode: "aws" as never, secret_name: "qbo/prod", company_id: "111", active: true, is_default: true },
+      { name: "prod", mode: "aws" as never, secret_name: "qbo/prod", company_id: "111", upload_root_labels: ["AP", "Receipts"], active: true, is_default: true },
       { name: "dev", mode: "local" as never, secret_name: undefined, company_id: "222", active: false, is_default: false },
     ]);
 
@@ -67,6 +67,8 @@ describe("handleListProfiles", () => {
     expect(result.content[0].text).toContain("dev");
     expect(result.content[0].text).toContain("mode=aws");
     expect(result.content[0].text).toContain("mode=local");
+    expect(result.content[0].text).toContain("uploads=[AP, Receipts]");
+    expect(result.content[0].text).not.toContain("C:\\");
   });
 });
 

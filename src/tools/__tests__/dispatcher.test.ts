@@ -59,16 +59,21 @@ vi.mock("../../tools/handlers/index.js", () => ({
   handleCreateCustomer: vi.fn(),
   handleGetCustomer: vi.fn(),
   handleEditCustomer: vi.fn(),
+  handleCreateAttachable: vi.fn(),
+  handleGetAttachable: vi.fn(),
+  handleEditAttachable: vi.fn(),
   handleDeleteEntity: vi.fn(),
 }));
 
 import { executeTool } from "../index.js";
 import {
+  handleCreateAttachable,
   handleCreateVendor,
   handleGetCompanyInfo,
   handleGetVendor,
 } from "../handlers/index.js";
 
+const mockHandleCreateAttachable = vi.mocked(handleCreateAttachable);
 const mockHandleCreateVendor = vi.mocked(handleCreateVendor);
 const mockHandleGetCompanyInfo = vi.mocked(handleGetCompanyInfo);
 const mockHandleGetVendor = vi.mocked(handleGetVendor);
@@ -121,6 +126,27 @@ describe("executeTool", () => {
 
     expect(result.isError).toBe(true);
     expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("does not auth-retry a partial Attachable upload result", async () => {
+    mockHandleCreateAttachable.mockResolvedValue({
+      content: [{
+        type: "text",
+        text: "File invoice.pdf was uploaded as Attachable 205, but linking failed: HTTP 401: Unauthorized",
+      }],
+      isError: true,
+    });
+
+    const result = await executeTool("create_attachable", {
+      file_path: "C:\\Business\\invoice.pdf",
+      entity_type: "Bill",
+      entity_id: "77",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(mockHandleCreateAttachable).toHaveBeenCalledOnce();
     expect(mockRefreshTokens).not.toHaveBeenCalled();
   });
 
