@@ -1,6 +1,8 @@
 // Tool registry and dispatcher with auth retry
 
 import QuickBooks from "node-quickbooks";
+import { asMCPToolResult } from "../types/index.js";
+import type { InternalToolResult, MCPToolResult } from "../types/index.js";
 import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
 import { formatQBOError } from "../utils/index.js";
 import { isToolDisabled } from "./crud-filter.js";
@@ -49,6 +51,8 @@ import {
   handleCreateAttachable,
   handleGetAttachable,
   handleEditAttachable,
+  handleListTransactionAttachables,
+  handleReadAttachableContent,
   handleDeleteEntity,
   handleAuthenticate,
   handleListProfiles,
@@ -57,8 +61,7 @@ import {
 
 export { toolDefinitions } from "./definitions.js";
 
-type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
-type ToolHandler = (client: QuickBooks, args: Record<string, unknown>) => Promise<ToolResult>;
+type ToolHandler = (client: QuickBooks, args: Record<string, unknown>) => Promise<InternalToolResult>;
 
 // Tool handler registry
 const toolHandlers = new Map<string, ToolHandler>();
@@ -108,13 +111,15 @@ toolHandlers.set("edit_class", (client, args) => handleEditClass(client, args as
 toolHandlers.set("create_attachable", (client, args) => handleCreateAttachable(client, args as Parameters<typeof handleCreateAttachable>[1]));
 toolHandlers.set("get_attachable", (client, args) => handleGetAttachable(client, args as { id: string }));
 toolHandlers.set("edit_attachable", (client, args) => handleEditAttachable(client, args as Parameters<typeof handleEditAttachable>[1]));
+toolHandlers.set("list_transaction_attachables", (client, args) => handleListTransactionAttachables(client, args as Parameters<typeof handleListTransactionAttachables>[1]));
+toolHandlers.set("read_attachable_content", (client, args) => handleReadAttachableContent(client, args as { id: string }));
 toolHandlers.set("delete_entity", (client, args) => handleDeleteEntity(client, args as Parameters<typeof handleDeleteEntity>[1]));
 
 // Execute tool with auth retry logic
 export async function executeTool(
   name: string,
   args: Record<string, unknown>
-): Promise<ToolResult> {
+): Promise<MCPToolResult> {
   // Defense-in-depth: reject disabled tools even if called directly
   if (isToolDisabled(name)) {
     return {
@@ -125,15 +130,15 @@ export async function executeTool(
 
   // Special case: qbo_authenticate doesn't need a QuickBooks client
   if (name === "qbo_authenticate") {
-    return handleAuthenticate(args as { authorization_code?: string; realm_id?: string });
+    return asMCPToolResult(await handleAuthenticate(args as { authorization_code?: string; realm_id?: string }));
   }
 
   // Special case: profile tools don't need a QuickBooks client
   if (name === "list_qbo_profiles") {
-    return handleListProfiles();
+    return asMCPToolResult(await handleListProfiles());
   }
   if (name === "switch_qbo_profile") {
-    return handleSwitchProfile(args as { profile: string });
+    return asMCPToolResult(await handleSwitchProfile(args as { profile: string }));
   }
 
   const handler = toolHandlers.get(name);
@@ -148,7 +153,7 @@ export async function executeTool(
 
   // Execute with retry on auth failure
   try {
-    return await executeOperation();
+    return asMCPToolResult(await executeOperation());
   } catch (error) {
     if (isAuthError(error)) {
       // Refresh token with Intuit, save to provider, then retry
@@ -159,7 +164,7 @@ export async function executeTool(
         clearCredentialsCache();
       }
       try {
-        return await executeOperation();
+        return asMCPToolResult(await executeOperation());
       } catch (retryError) {
         // If retry also fails, return that error
         return {

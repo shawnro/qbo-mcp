@@ -7,3 +7,4 @@ export * from './money.js';
 export * from './errors.js';
 export * from './validation.js';
 export * from './upload-files.js';
+export * from './http-download.js';

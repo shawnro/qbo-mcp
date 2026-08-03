@@ -161,3 +161,6 @@ Both builds must pass before committing. After changes, restart Claude Code to r
 - Cannot replace uploaded file bytes — must delete and re-create
 - Ordinary Claude Chat uploads are not exposed as local MCP paths. Use the original local path or Cowork connected-folder access.
 - Lambda/HTTP mode cannot access a user's local filesystem through `file_path`
+- `list_transaction_attachables` queries linked IDs, then fetches full metadata without exposing signed URLs.
+- `read_attachable_content` downloads only QBO-issued URLs: bounded UTF-8 text/CSV/XML (256 KB), JPEG/PNG/GIF images and embedded PDFs (10 MB stdio, 4 MB HTTP/Lambda). It refreshes expired URLs once and never accepts arbitrary URLs. HTTP metadata lists are capped at 20.
+- Attachment verification is read-only: compare content to the transaction getter output, and require a separate draft-first edit for corrections.

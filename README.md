@@ -481,7 +481,9 @@ QBO_INLINE_OUTPUT=true
 | `edit_class` | Modify a class (name, active status, parent). Deactivate instead of delete. |
 | **Attachables** | |
 | `create_attachable` | Create an attachable — upload a local file or add a note, optionally linked to a transaction |
+| `list_transaction_attachables` | List safe metadata for attachments linked to a QBO transaction or entity |
 | `get_attachable` | Fetch an attachable by ID (includes download URL for files) |
+| `read_attachable_content` | Safely download QBO attachment content for Claude to inspect (text, images, and PDFs) |
 | `edit_attachable` | Update attachable metadata (note, category, entity links). Cannot replace files. |
 | **Profiles** | |
 | `list_qbo_profiles` | List all configured company profiles and show which is active |
@@ -512,6 +514,22 @@ Attachment safeguards and limitations:
 - Uploaded file bytes cannot be replaced; delete and recreate the Attachable.
 - QBO temporary download URLs expire after approximately 15 minutes.
 - Lambda/HTTP servers cannot access files on a user's local computer through `file_path`.
+
+To verify a transaction against an attachment already stored in QBO:
+
+1. Call the transaction getter, such as `get_bill`.
+2. Call `list_transaction_attachables` with the transaction type and ID.
+3. Select the relevant attachment ID and call `read_attachable_content`.
+4. Ask Claude to compare vendor/payee, document number, dates, total, and line details. Reading is non-mutating; any correction remains a separate draft-first edit.
+
+Content-reading limits:
+
+- Text, CSV, and XML must be UTF-8 and are limited to 256 KB to protect Claude's context budget.
+- JPEG, PNG, GIF, and PDF content is limited to 10 MB in local stdio mode and 4 MB in HTTP/Lambda mode to stay below response payload limits.
+- Attachment metadata lists are capped at 20 records in HTTP mode and clearly report when a larger requested limit was reduced.
+- Images are returned as MCP image content; PDFs are returned as embedded PDF resources.
+- QBO-signed URLs are fetched server-side, are never accepted from user input, and are refreshed once after expiry.
+- Office and other binary files remain available as metadata but are not yet parsed for Claude.
 
 ---
 

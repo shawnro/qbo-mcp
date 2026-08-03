@@ -10,6 +10,8 @@ interface TestToolDefinition {
       description?: string;
       properties?: Record<string, unknown>;
       enum?: string[];
+      minimum?: number;
+      maximum?: number;
     }>;
     required?: string[];
   };
@@ -130,5 +132,17 @@ describe("toolDefinitions Attachable tools", () => {
     expect(properties.note.maxLength).toBe(2000);
     expect(properties.category.enum).toContain("Receipt");
     expect(properties.entity_type.enum).toContain("Bill");
+  });
+
+  it("defines safe transaction listing and content reading tools", () => {
+    const list = getDefinition("list_transaction_attachables");
+    expect(list.inputSchema.required).toEqual(["entity_type", "entity_id"]);
+    expect(list.inputSchema.properties.entity_type.enum).toContain("Bill");
+    expect(list.inputSchema.properties.limit.minimum).toBe(1);
+    expect(list.inputSchema.properties.limit.maximum).toBe(100);
+
+    const read = getDefinition("read_attachable_content");
+    expect(read.inputSchema.required).toEqual(["id"]);
+    expect(read.inputSchema.properties.id.type).toBe("string");
   });
 });

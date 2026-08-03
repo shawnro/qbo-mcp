@@ -144,6 +144,12 @@ The node-quickbooks combined upload/link overload silently ignored `IncludeOnSen
 
 QBO temporary download URLs expire after approximately 15 minutes. Uploaded file bytes are immutable; changing a file requires deleting and recreating the Attachable. Updating entity links replaces the complete `AttachableRef` array.
 
+QBO supports querying attachment IDs by `AttachableRef.EntityRef.Type` and `.value`. These query results are sparse, so `list_transaction_attachables` performs bounded full reads before returning allowlisted metadata. Temporary signed URLs are intentionally excluded from list results.
+
+`read_attachable_content` re-reads current metadata, downloads only a QBO-issued HTTPS URL with timeout/redirect/byte limits, and retries once after a 401/403 by obtaining a fresh temporary URL. It returns UTF-8 text/CSV/XML capped at 256 KB, MCP image content for JPEG/PNG/GIF, or an embedded PDF resource. Binary content is capped at 10 MB in stdio and 4 MB in HTTP/Lambda mode; HTTP metadata lists are capped at 20 records. Office and unsupported binary formats are reported without downloading. Downloaded bytes are held only for the tool call and are not persisted.
+
+The intended reconciliation workflow is read-only: fetch the QBO transaction, list/read its source document, and let Claude report matching or conflicting vendor, document number, dates, total, and line details. Any correction requires a separate draft-first edit operation.
+
 ## References
 
 - [Data Queries - Intuit Developer](https://developer.intuit.com/app/developer/qbo/docs/learn/explore-the-quickbooks-online-api/data-queries)

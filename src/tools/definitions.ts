@@ -2062,6 +2062,31 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "list_transaction_attachables",
+    description: "List safe metadata for QBO Attachables linked to a specific transaction or entity. Returns attachment IDs, filenames, content types, sizes, notes, categories, timestamps, and links without downloading bytes or exposing signed URLs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_type: {
+          type: "string",
+          enum: ["Bill", "BillPayment", "Customer", "Deposit", "Invoice", "Item", "JournalEntry", "Purchase", "SalesReceipt", "Vendor", "VendorCredit"],
+          description: "QBO entity type whose attachments should be listed",
+        },
+        entity_id: {
+          type: "string",
+          description: "Numeric QBO entity ID",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 100,
+          description: "Maximum number of attachments to return (default: 20; HTTP mode detail is capped at 20)",
+        },
+      },
+      required: ["entity_type", "entity_id"],
+    },
+  },
+  {
     name: "get_attachable",
     description: "Fetch an attachable by ID. Returns file metadata (name, size, content type), note text, download URL (for files), linked entities, and SyncToken for edits.",
     inputSchema: {
@@ -2070,6 +2095,20 @@ export const toolDefinitions = [
         id: {
           type: "string",
           description: "The attachable ID",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "read_attachable_content",
+    description: "Download a QBO Attachable through its fresh temporary URL and return content Claude can inspect. Supports bounded UTF-8 text/CSV/XML, JPEG/PNG/GIF images, and PDF embedded resources. Unsupported or oversized files return actionable errors.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Numeric QBO Attachable ID",
         },
       },
       required: ["id"],
