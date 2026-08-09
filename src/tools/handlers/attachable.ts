@@ -9,53 +9,12 @@ import {
   validateUploadFile,
 } from "../../utils/index.js";
 import type { ValidatedUploadFile } from "../../utils/index.js";
-
-interface QBAttachable {
-  Id: string;
-  SyncToken: string;
-  FileName?: string;
-  FileAccessUri?: string;
-  TempDownloadUri?: string;
-  Size?: number;
-  ContentType?: string;
-  Category?: string;
-  Lat?: string;
-  Long?: string;
-  PlaceName?: string;
-  Note?: string;
-  Tag?: string;
-  ThumbnailFileAccessUri?: string;
-  ThumbnailTempDownloadUri?: string;
-  AttachableRef?: Array<{
-    EntityRef?: { value: string; type?: string; name?: string };
-    IncludeOnSend?: boolean;
-  }>;
-  MetaData?: { CreateTime?: string; LastUpdatedTime?: string };
-}
-
-const ATTACHABLE_CATEGORIES = [
-  "Contact Photo",
-  "Document",
-  "Image",
-  "Receipt",
-  "Signature",
-  "Sound",
-  "Other",
-] as const;
-
-const ENTITY_TYPES = [
-  "Bill",
-  "BillPayment",
-  "Customer",
-  "Deposit",
-  "Invoice",
-  "Item",
-  "JournalEntry",
-  "Purchase",
-  "SalesReceipt",
-  "Vendor",
-  "VendorCredit",
-] as const;
+import type { QBAttachable } from "../../types/index.js";
+import {
+  ATTACHABLE_CATEGORIES,
+  canonicalizeAttachableEntityType,
+  validateQboEntityId,
+} from "../attachable-fields.js";
 
 function validateMetadata(note?: string, category?: string): void {
   if (note !== undefined && note.length > 2000) {
@@ -81,14 +40,8 @@ function validateEntityLink(
     throw new Error("include_on_send requires entity_type and entity_id");
   }
   if (!entityType) return undefined;
-  if (!/^\d+$/.test(entityId!)) {
-    throw new Error("entity_id must be a numeric QBO entity ID");
-  }
-  const canonical = ENTITY_TYPES.find((candidate) => candidate.toLowerCase() === entityType.toLowerCase());
-  if (!canonical) {
-    throw new Error(`Unsupported entity_type "${entityType}". Supported types: ${ENTITY_TYPES.join(", ")}`);
-  }
-  return canonical;
+  validateQboEntityId(entityId!);
+  return canonicalizeAttachableEntityType(entityType);
 }
 
 export async function handleCreateAttachable(

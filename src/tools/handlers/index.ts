@@ -31,6 +31,10 @@ export {
 export { handleCreateCustomer, handleGetCustomer, handleEditCustomer } from './customer.js';
 export { handleCreateClass, handleGetClass, handleEditClass } from './class.js';
 export { handleCreateAttachable, handleGetAttachable, handleEditAttachable } from './attachable.js';
+export {
+  handleListTransactionAttachables,
+  handleReadAttachableContent,
+} from './attachment-content.js';
 export { handleDeleteEntity } from './delete.js';
 export { handleAuthenticate } from './authenticate.js';
 export { handleListProfiles, handleSwitchProfile } from './profiles.js';

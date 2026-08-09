@@ -8,7 +8,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { setOutputMode } from "./utils/output.js";
+import { setExecutionEnvironment, setOutputMode } from "./utils/output.js";
 import { toolDefinitions, executeTool } from "./tools/index.js";
 import { filterTools } from "./tools/crud-filter.js";
 import { getAuthConfig, validateToken } from "./auth/token-validator.js";
@@ -16,6 +16,7 @@ import { loadProfiles } from "./credentials/index.js";
 
 // Set HTTP output mode at module load (before any handlers run)
 setOutputMode("http");
+setExecutionEnvironment("lambda");
 
 // Load profiles config eagerly (no-op if no profiles file exists)
 loadProfiles();

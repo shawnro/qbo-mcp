@@ -62,6 +62,8 @@ vi.mock("../../tools/handlers/index.js", () => ({
   handleCreateAttachable: vi.fn(),
   handleGetAttachable: vi.fn(),
   handleEditAttachable: vi.fn(),
+  handleListTransactionAttachables: vi.fn(),
+  handleReadAttachableContent: vi.fn(),
   handleDeleteEntity: vi.fn(),
 }));
 
@@ -71,12 +73,14 @@ import {
   handleCreateVendor,
   handleGetCompanyInfo,
   handleGetVendor,
+  handleReadAttachableContent,
 } from "../handlers/index.js";
 
 const mockHandleCreateAttachable = vi.mocked(handleCreateAttachable);
 const mockHandleCreateVendor = vi.mocked(handleCreateVendor);
 const mockHandleGetCompanyInfo = vi.mocked(handleGetCompanyInfo);
 const mockHandleGetVendor = vi.mocked(handleGetVendor);
+const mockHandleReadAttachableContent = vi.mocked(handleReadAttachableContent);
 
 describe("executeTool", () => {
   const fakeClient = {} as never;
@@ -148,6 +152,20 @@ describe("executeTool", () => {
     expect(result.isError).toBe(true);
     expect(mockHandleCreateAttachable).toHaveBeenCalledOnce();
     expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("routes non-text attachment content blocks unchanged", async () => {
+    mockHandleReadAttachableContent.mockResolvedValue({
+      content: [
+        { type: "text", text: "receipt.png" },
+        { type: "image", data: "cG5n", mimeType: "image/png" },
+      ],
+    });
+
+    const result = await executeTool("read_attachable_content", { id: "200" });
+
+    expect(result.content[1]).toEqual({ type: "image", data: "cG5n", mimeType: "image/png" });
+    expect(mockHandleReadAttachableContent).toHaveBeenCalledWith(fakeClient, { id: "200" });
   });
 
   it("does not retry on non-auth errors", async () => {

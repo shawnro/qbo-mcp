@@ -5,8 +5,10 @@
 import { writeReport } from "./files.js";
 
 export type OutputMode = "stdio" | "http";
+export type ExecutionEnvironment = "local" | "lambda";
 
 let currentOutputMode: OutputMode = "stdio";
+let currentExecutionEnvironment: ExecutionEnvironment = "local";
 
 export function setOutputMode(mode: OutputMode): void {
   currentOutputMode = mode;
@@ -14,6 +16,14 @@ export function setOutputMode(mode: OutputMode): void {
 
 export function isHttpMode(): boolean {
   return currentOutputMode === "http";
+}
+
+export function setExecutionEnvironment(environment: ExecutionEnvironment): void {
+  currentExecutionEnvironment = environment;
+}
+
+export function isLambdaMode(): boolean {
+  return currentExecutionEnvironment === "lambda";
 }
 
 type ToolResult = { content: Array<{ type: string; text: string }> };

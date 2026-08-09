@@ -6,6 +6,29 @@ export interface QBRef {
   name?: string;
 }
 
+export interface QBAttachable {
+  Id: string;
+  SyncToken: string;
+  FileName?: string;
+  FileAccessUri?: string;
+  TempDownloadUri?: string;
+  Size?: number;
+  ContentType?: string;
+  Category?: string;
+  Lat?: string;
+  Long?: string;
+  PlaceName?: string;
+  Note?: string;
+  Tag?: string;
+  ThumbnailFileAccessUri?: string;
+  ThumbnailTempDownloadUri?: string;
+  AttachableRef?: Array<{
+    EntityRef?: { value: string; type?: string; name?: string };
+    IncludeOnSend?: boolean;
+  }>;
+  MetaData?: { CreateTime?: string; LastUpdatedTime?: string };
+}
+
 export interface QBErrorEntry {
   code?: string;
   Code?: string;
