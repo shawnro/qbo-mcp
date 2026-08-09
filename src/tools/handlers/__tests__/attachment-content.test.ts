@@ -19,13 +19,16 @@ vi.mock("../../../utils/index.js", async () => {
     })),
   };
 });
+vi.mock("../../../utils/pdf.js", () => ({ renderPdfPages: vi.fn() }));
 
 import {
   downloadHttpsContent,
   HttpDownloadError,
   outputReport,
+  setExecutionEnvironment,
   setOutputMode,
 } from "../../../utils/index.js";
+import { renderPdfPages } from "../../../utils/pdf.js";
 import {
   handleListTransactionAttachables,
   handleReadAttachableContent,
@@ -33,6 +36,7 @@ import {
 
 const mockDownload = vi.mocked(downloadHttpsContent);
 const mockOutputReport = vi.mocked(outputReport);
+const mockRenderPdfPages = vi.mocked(renderPdfPages);
 
 describe("handleListTransactionAttachables", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -42,6 +46,7 @@ describe("handleListTransactionAttachables", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     setOutputMode("stdio");
+    setExecutionEnvironment("local");
   });
 
   it("queries linked IDs and returns safe full metadata", async () => {
@@ -166,6 +171,7 @@ describe("handleReadAttachableContent", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     setOutputMode("stdio");
+    setExecutionEnvironment("local");
   });
 
   it("returns note-only content without downloading", async () => {
@@ -201,24 +207,57 @@ describe("handleReadAttachableContent", () => {
     expect(result.content[1].text).toContain("Invoice 123");
   });
 
-  it("returns a PDF embedded resource without putting base64 in text", async () => {
+  it("renders bounded PDF pages as native JPEG image blocks", async () => {
     const pdf = Buffer.from("%PDF-1.4 test");
+    const pageTwo = Buffer.from("jpeg-page-two");
+    const pageThree = Buffer.from("jpeg-page-three");
     mockSuccess(client.getAttachable, {
       Id: "202", SyncToken: "0", FileName: "invoice.pdf", ContentType: "application/pdf",
       Size: pdf.length, TempDownloadUri: "https://signed.example/pdf",
     });
     mockDownload.mockResolvedValue({ bytes: pdf, contentType: "application/pdf" });
-
-    const result = await handleReadAttachableContent(client as never, { id: "202" });
-    expect(result.content[1]).toEqual({
-      type: "resource",
-      resource: {
-        uri: "qbo://attachable/202/invoice.pdf",
-        mimeType: "application/pdf",
-        blob: pdf.toString("base64"),
-      },
+    mockRenderPdfPages.mockResolvedValue({
+      pageCount: 5,
+      pages: [
+        { page: 2, data: pageTwo, width: 1000, height: 1400 },
+        { page: 3, data: pageThree, width: 1000, height: 1400 },
+      ],
     });
-    expect(result.content[0].text).not.toContain(pdf.toString("base64"));
+
+    const result = await handleReadAttachableContent(client as never, {
+      id: "202",
+      page_start: 2,
+      page_count: 2,
+    });
+    expect(mockRenderPdfPages).toHaveBeenCalledWith(pdf, { pageStart: 2, pageCount: 2 });
+    expect(result.content[0].text).toContain("Rendered pages 2-3 of 5");
+    expect(result.content[0].text).toContain("page_start: 4");
+    expect(result.content[1]).toEqual({
+      type: "image",
+      data: pageTwo.toString("base64"),
+      mimeType: "image/jpeg",
+    });
+    expect(result.content[2]).toEqual({
+      type: "image",
+      data: pageThree.toString("base64"),
+      mimeType: "image/jpeg",
+    });
+    expect(JSON.stringify(result)).not.toContain("signed.example");
+  });
+
+  it("returns PDF metadata only in Lambda mode", async () => {
+    setExecutionEnvironment("lambda");
+    mockSuccess(client.getAttachable, {
+      Id: "208", SyncToken: "0", FileName: "invoice.pdf", ContentType: "application/pdf",
+      Size: 100, TempDownloadUri: "https://signed.example/pdf",
+    });
+
+    const result = await handleReadAttachableContent(client as never, { id: "208" });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("local stdio");
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockRenderPdfPages).not.toHaveBeenCalled();
   });
 
   it("refreshes an expired QBO download URL once", async () => {
@@ -280,7 +319,7 @@ describe("handleReadAttachableContent", () => {
     });
 
     await expect(handleReadAttachableContent(client as never, { id: "207" }))
-      .rejects.toThrow("HTTP/Lambda mode");
+      .rejects.toThrow("inline/HTTP output mode");
     expect(mockDownload).not.toHaveBeenCalled();
   });
 });

@@ -21,7 +21,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --outfile=dist-lambda/handler.mjs --format=esm --external:@aws-sdk/* --external:@azure/* --banner:js='import { createRequire } from \"module\"; const require = createRequire(import.meta.url);'",
+    "build:lambda": "node scripts/build-lambda.mjs",
     "prepare": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
@@ -41,10 +41,12 @@
     "@azure/identity": "^4.6.0",
     "@azure/keyvault-secrets": "^4.9.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@napi-rs/canvas": "^0.1.100",
     "dotenv": "^17.2.3",
     "intuit-oauth": "^4.2.2",
     "jose": "^6.1.0",
     "node-quickbooks": "^2.0.47",
+    "pdfjs-dist": "^5.4.624",
     "tmp": "^0.2.3"
   },
   "devDependencies": {

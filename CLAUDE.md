@@ -162,5 +162,5 @@ Both builds must pass before committing. After changes, restart Claude Code to r
 - Ordinary Claude Chat uploads are not exposed as local MCP paths. Use the original local path or Cowork connected-folder access.
 - Lambda/HTTP mode cannot access a user's local filesystem through `file_path`
 - `list_transaction_attachables` queries linked IDs, then fetches full metadata without exposing signed URLs.
-- `read_attachable_content` downloads only QBO-issued URLs: bounded UTF-8 text/CSV/XML (256 KB), JPEG/PNG/GIF images and embedded PDFs (10 MB stdio, 4 MB HTTP/Lambda). It refreshes expired URLs once and never accepts arbitrary URLs. HTTP metadata lists are capped at 20.
+- `read_attachable_content` downloads only QBO-issued URLs: bounded UTF-8 text/CSV/XML (256 KB), JPEG/PNG/GIF images, and PDFs (10 MB default local mode, 4 MB inline/HTTP output). Local PDF reads render up to three pages at a time as bounded JPEG MCP image blocks, including scanned PDFs; use `page_start` for later pages. Lambda returns metadata only and does not bundle native rendering dependencies. It refreshes expired URLs once and never accepts arbitrary URLs. HTTP metadata lists are capped at 20.
 - Attachment verification is read-only: compare content to the transaction getter output, and require a separate draft-first edit for corrections.

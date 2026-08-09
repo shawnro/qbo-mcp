@@ -525,9 +525,11 @@ To verify a transaction against an attachment already stored in QBO:
 Content-reading limits:
 
 - Text, CSV, and XML must be UTF-8 and are limited to 256 KB to protect Claude's context budget.
-- JPEG, PNG, GIF, and PDF content is limited to 10 MB in local stdio mode and 4 MB in HTTP/Lambda mode to stay below response payload limits.
+- JPEG, PNG, GIF, and PDF downloads are limited to 10 MB in default local stdio mode and 4 MB when inline/HTTP output is enabled.
 - Attachment metadata lists are capped at 20 records in HTTP mode and clearly report when a larger requested limit was reduced.
-- Images are returned as MCP image content; PDFs are returned as embedded PDF resources.
+- Images are returned as MCP image content. In the local server, PDFs are rendered to JPEG page images and returned through the same native image channel, including image-only scanned PDFs.
+- PDF reads render at most three pages per call. Use `page_start` to continue with later pages and `page_count` to request one to three pages.
+- The stateless Lambda transport returns PDF metadata and directs visual PDF analysis to the local server; native rendering dependencies are not included in the Lambda artifact.
 - QBO-signed URLs are fetched server-side, are never accepted from user input, and are refreshed once after expiry.
 - Office and other binary files remain available as metadata but are not yet parsed for Claude.
 

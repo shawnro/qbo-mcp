@@ -2102,13 +2102,24 @@ export const toolDefinitions = [
   },
   {
     name: "read_attachable_content",
-    description: "Download a QBO Attachable through its fresh temporary URL and return content Claude can inspect. Supports bounded UTF-8 text/CSV/XML, JPEG/PNG/GIF images, and PDF embedded resources. Unsupported or oversized files return actionable errors.",
+    description: "Download a QBO Attachable through its fresh temporary URL and return content Claude can inspect. Supports bounded UTF-8 text/CSV/XML, JPEG/PNG/GIF images, and locally rendered PDF page images (including scanned PDFs). PDF calls return at most 3 pages and can be repeated with page_start. Downloads are capped at 10 MB in default local mode or 4 MB with inline/HTTP output. Lambda returns PDF metadata only; visual PDF reading requires the local server. Unsupported or oversized files return actionable errors.",
     inputSchema: {
       type: "object",
       properties: {
         id: {
           type: "string",
           description: "Numeric QBO Attachable ID",
+        },
+        page_start: {
+          type: "integer",
+          minimum: 1,
+          description: "For PDF files, first 1-based page to render (default: 1)",
+        },
+        page_count: {
+          type: "integer",
+          minimum: 1,
+          maximum: 3,
+          description: "For PDF files, number of pages to render (default and maximum: 3)",
         },
       },
       required: ["id"],

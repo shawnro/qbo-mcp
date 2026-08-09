@@ -1,9 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { setOutputMode, isHttpMode, outputReport } from "../output.js";
+import {
+  isHttpMode,
+  isLambdaMode,
+  outputReport,
+  setExecutionEnvironment,
+  setOutputMode,
+} from "../output.js";
 
 describe("setOutputMode / isHttpMode", () => {
   beforeEach(() => {
     setOutputMode("stdio");
+    setExecutionEnvironment("local");
   });
 
   it("defaults to stdio mode", () => {
@@ -20,11 +27,21 @@ describe("setOutputMode / isHttpMode", () => {
     setOutputMode("stdio");
     expect(isHttpMode()).toBe(false);
   });
+
+  it("tracks Lambda execution independently from output mode", () => {
+    setOutputMode("http");
+    expect(isLambdaMode()).toBe(false);
+
+    setExecutionEnvironment("lambda");
+    expect(isLambdaMode()).toBe(true);
+    expect(isHttpMode()).toBe(true);
+  });
 });
 
 describe("outputReport", () => {
   beforeEach(() => {
     setOutputMode("stdio");
+    setExecutionEnvironment("local");
   });
 
   describe("http mode", () => {

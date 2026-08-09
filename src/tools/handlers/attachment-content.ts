@@ -8,6 +8,7 @@ import {
   downloadHttpsContent,
   HttpDownloadError,
   isHttpMode,
+  isLambdaMode,
   outputReport,
 } from "../../utils/index.js";
 import {
@@ -102,6 +103,10 @@ function contentTypesCompatible(expected: string, actual: string | undefined): b
     (expected === "image/jpg" && actual === "image/jpeg");
 }
 
+function binaryReadLimit(): number {
+  return isHttpMode() ? MAX_HTTP_BINARY_BYTES : MAX_BINARY_BYTES;
+}
+
 async function downloadAttachable(
   client: QuickBooks,
   attachable: QBAttachable,
@@ -184,7 +189,7 @@ export async function handleListTransactionAttachables(
 
 export async function handleReadAttachableContent(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string; page_start?: number; page_count?: number }
 ): Promise<MCPToolResult> {
   validateQboEntityId(args.id);
   let attachable = await getAttachable(client, args.id);
@@ -218,16 +223,59 @@ export async function handleReadAttachableContent(
 
   const maxBytes = TEXT_TYPES.has(expectedType)
     ? MAX_TEXT_BYTES
-    : isHttpMode()
-      ? MAX_HTTP_BINARY_BYTES
-      : MAX_BINARY_BYTES;
+    : binaryReadLimit();
   if (attachable.Size !== undefined && attachable.Size > maxBytes) {
     const modeHint = isHttpMode() && !TEXT_TYPES.has(expectedType)
-      ? " in HTTP/Lambda mode; use the local stdio MCP for files up to 10 MB"
+      ? " in inline/HTTP output mode; local users can disable QBO_INLINE_OUTPUT for files up to 10 MB"
       : "";
     throw new Error(
       `Attachable ${attachable.Id} is too large to read (${attachable.Size} bytes; max ${maxBytes}${modeHint})`
     );
+  }
+
+  const summary = `Attachable ${attachable.Id}: ${fileName} (${expectedType}, ${attachable.Size ?? "unknown"} bytes)`;
+
+  if (expectedType === PDF_TYPE) {
+    if (isLambdaMode()) {
+      return {
+        content: [{
+          type: "text",
+          text: `${summary}\n\nPDF visual reading is available through the local stdio qbo-mcp server; the Lambda transport returns metadata only.`,
+        }],
+        isError: true,
+      };
+    }
+
+    const downloaded = await downloadAttachable(client, attachable, maxBytes);
+    attachable = downloaded.attachable;
+    if (!contentTypesCompatible(expectedType, normalizeContentType(downloaded.responseType))) {
+      throw new Error(
+        `Attachable content type mismatch: QBO metadata says ${expectedType}, download returned ${downloaded.responseType}`
+      );
+    }
+
+    const { renderPdfPages } = await import("../../utils/pdf.js");
+    const rendered = await renderPdfPages(downloaded.bytes, {
+      pageStart: args.page_start,
+      pageCount: args.page_count,
+    });
+    const firstPage = rendered.pages[0].page;
+    const lastPage = rendered.pages[rendered.pages.length - 1].page;
+    const remaining = rendered.pageCount - lastPage;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${summary}\nRendered pages ${firstPage}-${lastPage} of ${rendered.pageCount}.` +
+            (remaining > 0 ? ` Call again with page_start: ${lastPage + 1} to inspect later pages.` : ""),
+        },
+        ...rendered.pages.map((page) => ({
+          type: "image" as const,
+          data: page.data.toString("base64"),
+          mimeType: "image/jpeg",
+        })),
+      ],
+    };
   }
 
   const downloaded = await downloadAttachable(client, attachable, maxBytes);
@@ -238,29 +286,13 @@ export async function handleReadAttachableContent(
     );
   }
 
-  const summary = `Attachable ${attachable.Id}: ${fileName} (${expectedType}, ${downloaded.bytes.length} bytes)`;
+  const downloadedSummary = `Attachable ${attachable.Id}: ${fileName} (${expectedType}, ${downloaded.bytes.length} bytes)`;
 
   if (IMAGE_TYPES.has(expectedType)) {
     return {
       content: [
-        { type: "text", text: summary },
+        { type: "text", text: downloadedSummary },
         { type: "image", data: downloaded.bytes.toString("base64"), mimeType: expectedType },
-      ],
-    };
-  }
-
-  if (expectedType === PDF_TYPE) {
-    return {
-      content: [
-        { type: "text", text: summary },
-        {
-          type: "resource",
-          resource: {
-            uri: `qbo://attachable/${attachable.Id}/${encodeURIComponent(fileName)}`,
-            mimeType: PDF_TYPE,
-            blob: downloaded.bytes.toString("base64"),
-          },
-        },
       ],
     };
   }
@@ -273,7 +305,7 @@ export async function handleReadAttachableContent(
   }
   return {
     content: [
-      { type: "text", text: summary },
+      { type: "text", text: downloadedSummary },
       { type: "text", text: `Attachment content:\n\n${text}` },
     ],
   };
