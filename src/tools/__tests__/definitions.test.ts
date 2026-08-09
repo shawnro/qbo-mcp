@@ -9,6 +9,7 @@ interface TestToolDefinition {
       maxLength?: number;
       description?: string;
       properties?: Record<string, unknown>;
+      enum?: string[];
     }>;
     required?: string[];
   };
@@ -99,5 +100,35 @@ describe("toolDefinitions Vendor tools", () => {
     }
     expect(properties.active.type).toBe("boolean");
     expect(properties.draft.type).toBe("boolean");
+  });
+});
+
+describe("toolDefinitions Attachable tools", () => {
+  function getDefinition(name: string): TestToolDefinition {
+    const definition = definitions.find((candidate) => candidate.name === name);
+    expect(definition, name).toBeDefined();
+    return definition!;
+  }
+
+  it("documents local file paths and enforces QBO metadata constraints", () => {
+    const create = getDefinition("create_attachable");
+    const properties = create.inputSchema.properties;
+
+    expect(create.inputSchema.required).toEqual([]);
+    expect(create.name).toBe("create_attachable");
+    expect(properties.file_path.description).toContain("Absolute path");
+    expect(create.inputSchema.properties.note.maxLength).toBe(2000);
+    expect(properties.category.enum).toEqual([
+      "Contact Photo", "Document", "Image", "Receipt", "Signature", "Sound", "Other",
+    ]);
+    expect(properties.entity_type.enum).toContain("Bill");
+    expect(properties.entity_type.enum).toContain("Purchase");
+  });
+
+  it("uses the same metadata constraints for edit_attachable", () => {
+    const properties = getDefinition("edit_attachable").inputSchema.properties;
+    expect(properties.note.maxLength).toBe(2000);
+    expect(properties.category.enum).toContain("Receipt");
+    expect(properties.entity_type.enum).toContain("Bill");
   });
 });

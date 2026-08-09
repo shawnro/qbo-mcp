@@ -2022,20 +2022,22 @@ export const toolDefinitions = [
   },
   {
     name: "create_attachable",
-    description: "Create an attachable — either a file upload or a note. For file uploads, provide file_path to a local file (max 100 MB). For notes, provide note text. At least one of file_path or note is required. Optionally link to a transaction via entity_type and entity_id.",
+    description: "Create an attachable — either a file upload or a note. file_path must be an absolute path on the computer running qbo-mcp; files uploaded only to Claude Chat are not automatically available. Maximum 100 MB. At least one of file_path or note is required. Optionally link to a transaction using both entity_type and entity_id.",
     inputSchema: {
       type: "object",
       properties: {
         file_path: {
           type: "string",
-          description: "Local file path to upload (e.g., receipts, invoices, contracts). Supports PDF, images, Office docs, CSV, TXT.",
+          description: "Absolute path on the qbo-mcp computer. If the active QBO profile defines upload_roots, the file must be inside one of them. Supports QBO-approved PDF, image, Office, CSV, TXT, RTF, XML, ODS, EPS, and AI files.",
         },
         note: {
           type: "string",
+          maxLength: 2000,
           description: "Note text. For file uploads, this becomes the file description.",
         },
         entity_type: {
           type: "string",
+          enum: ["Bill", "BillPayment", "Customer", "Deposit", "Invoice", "Item", "JournalEntry", "Purchase", "SalesReceipt", "Vendor", "VendorCredit"],
           description: "Entity type to link to (e.g., 'Invoice', 'Bill', 'Purchase', 'JournalEntry')",
         },
         entity_id: {
@@ -2048,7 +2050,8 @@ export const toolDefinitions = [
         },
         category: {
           type: "string",
-          description: "Category for the attachable (optional)",
+          enum: ["Contact Photo", "Document", "Image", "Receipt", "Signature", "Sound", "Other"],
+          description: "QBO category for the attachable (optional; case-sensitive)",
         },
         draft: {
           type: "boolean",
@@ -2084,14 +2087,17 @@ export const toolDefinitions = [
         },
         note: {
           type: "string",
+          maxLength: 2000,
           description: "New note text",
         },
         category: {
           type: "string",
-          description: "New category",
+          enum: ["Contact Photo", "Document", "Image", "Receipt", "Signature", "Sound", "Other"],
+          description: "New QBO category (case-sensitive)",
         },
         entity_type: {
           type: "string",
+          enum: ["Bill", "BillPayment", "Customer", "Deposit", "Invoice", "Item", "JournalEntry", "Purchase", "SalesReceipt", "Vendor", "VendorCredit"],
           description: "Entity type to link to (e.g., 'Invoice', 'Bill'). Replaces all existing links.",
         },
         entity_id: {

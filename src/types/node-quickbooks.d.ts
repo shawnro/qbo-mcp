@@ -108,6 +108,7 @@ declare module "node-quickbooks" {
     deleteAttachable(idOrEntity: object | string, callback: Callback<unknown>): void;
 
     // File upload
+    upload(filename: string, contentType: string, stream: unknown, callback: Callback<unknown>): void;
     upload(filename: string, contentType: string, stream: unknown, entityType: string, entityId: string, callback: Callback<unknown>): void;
 
     // Finder methods for Attachables
