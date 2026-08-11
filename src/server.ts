@@ -6,30 +6,37 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { toolDefinitions, executeTool } from "./tools/index.js";
-import { filterTools } from "./tools/crud-filter.js";
+import { createToolExecutor, getToolDefinitions } from "./tools/capabilities.js";
+import type { DeploymentMode } from "./tools/capabilities.js";
 
-// Create MCP server
-export const server = new Server(
-  {
-    name: "qbo-mcp",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
+export interface McpServerOptions {
+  deploymentMode?: DeploymentMode;
+}
+
+export function createMcpServer(options: McpServerOptions = {}): Server {
+  const deploymentMode = options.deploymentMode ?? "local";
+  const definitions = getToolDefinitions(toolDefinitions, deploymentMode);
+  const invokeTool = createToolExecutor(deploymentMode, executeTool);
+  const server = new Server(
+    {
+      name: "qbo-mcp",
+      version: "1.0.0",
     },
-  }
-);
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
-// Define available tools (filtered by CRUD disable flags)
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: filterTools(toolDefinitions),
-  };
-});
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: definitions }));
 
-// Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  return executeTool(name, args as Record<string, unknown>);
-});
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    return invokeTool(name, args as Record<string, unknown>);
+  });
+
+  return server;
+}
+
+export const server = createMcpServer();

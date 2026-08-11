@@ -18,7 +18,8 @@ This repo uses a branch-and-PR workflow — **never commit directly to `master`*
 ```
 src/
 ├── index.ts           # MCP server entry point (stdio)
-├── lambda.ts          # Lambda entry point (HTTP transport)
+├── lambda.ts          # Thin API Gateway adapter
+├── http/              # Provider-neutral Request → Response application
 ├── client/            # QuickBooks API client and caching
 ├── types/             # TypeScript type definitions
 ├── utils/             # Utility functions (files, URLs, money, output)
@@ -92,6 +93,12 @@ When building the `reportData` object passed to `outputReport()`, ask: **does th
 - **No**: Raw API responses, full transaction lists for summary-only tools, redundant data the summary already covers
 
 For tools that return large datasets, cap the detail for HTTP mode using `isHttpMode()` from `src/utils/output.ts`. Compute summaries from the full data, then truncate the detail. See `account-transactions.ts` (`HTTP_TXN_LIMIT`) for the pattern.
+
+### Hosted HTTP Boundary
+
+The shared `src/http/` application owns remote routing, auth, OAuth, CORS, canonical URLs, MCP lifecycle, and hosted capabilities. Host adapters only convert their native request/response shapes. Hosted configuration requires `MCP_PUBLIC_BASE_URL` and complete JWT settings unless anonymous mode is explicitly enabled with `MCP_AUTH_DISABLED=true`.
+
+Local stdio keeps profile switching, local OAuth setup, and local file uploads. Hosted HTTP is one QBO company per endpoint and must enforce unavailable capabilities in both `tools/list` and `tools/call`.
 
 ## Common Files
 

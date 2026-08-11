@@ -7,34 +7,79 @@ export interface AuthConfig {
   requiredScope?: string;
 }
 
+export type AuthConfigState =
+  | { mode: "enabled"; config: AuthConfig }
+  | { mode: "disabled" }
+  | { mode: "invalid"; reason: string };
+
+type AuthEnvironment = Record<string, string | undefined>;
+
+function parseHttpsUrl(value: string, name: string): URL | string {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return `${name} must use HTTPS`;
+    if (url.username || url.password) return `${name} must not include credentials`;
+    if (url.search || url.hash) return `${name} must not include a query or fragment`;
+    return url;
+  } catch {
+    return `${name} must be a valid absolute URL`;
+  }
+}
+
 /**
- * Read auth config from environment variables.
- * Returns null if required vars aren't set (auth disabled).
+ * Parse remote resource-server authentication without silently disabling it.
  */
-export function getAuthConfig(): AuthConfig | null {
-  const jwksUri = process.env.MCP_AUTH_JWKS_URI;
-  const audience = process.env.MCP_AUTH_AUDIENCE;
-  const issuer = process.env.MCP_AUTH_ISSUER;
+export function parseAuthConfig(env: AuthEnvironment = process.env): AuthConfigState {
+  const jwksUri = env.MCP_AUTH_JWKS_URI?.trim();
+  const audience = env.MCP_AUTH_AUDIENCE?.trim();
+  const issuer = env.MCP_AUTH_ISSUER?.trim();
+  const requiredScope = env.MCP_AUTH_SCOPE?.trim();
+  const disabled = env.MCP_AUTH_DISABLED;
+  const configuredValues = [jwksUri, audience, issuer, requiredScope].filter(Boolean);
+
+  if (disabled !== undefined && disabled !== "true" && disabled !== "false") {
+    return { mode: "invalid", reason: "MCP_AUTH_DISABLED must be true or false" };
+  }
+
+  if (disabled === "true") {
+    if (configuredValues.length > 0) {
+      return { mode: "invalid", reason: "Disabled authentication conflicts with JWT configuration" };
+    }
+    return { mode: "disabled" };
+  }
 
   if (!jwksUri || !audience || !issuer) {
-    return null;
+    return { mode: "invalid", reason: "Complete JWT authentication configuration is required" };
+  }
+
+  const parsedJwksUri = parseHttpsUrl(jwksUri, "MCP_AUTH_JWKS_URI");
+  if (typeof parsedJwksUri === "string") {
+    return { mode: "invalid", reason: parsedJwksUri };
+  }
+
+  const parsedIssuer = parseHttpsUrl(issuer, "MCP_AUTH_ISSUER");
+  if (typeof parsedIssuer === "string") {
+    return { mode: "invalid", reason: parsedIssuer };
   }
 
   // Azure AD v1 tokens use sts.windows.net issuer, v2 uses login.microsoftonline.com.
   // Accept both by extracting the tenant ID and building both issuer URLs.
-  const tenantMatch = issuer.match(/([0-9a-f-]{36})/);
+  const tenantMatch = parsedIssuer.href.match(/([0-9a-f-]{36})/i);
   const issuers = tenantMatch
     ? [
         `https://login.microsoftonline.com/${tenantMatch[1]}/v2.0`,
         `https://sts.windows.net/${tenantMatch[1]}/`,
       ]
-    : [issuer];
+    : [parsedIssuer.href.replace(/\/$/, "")];
 
   return {
-    jwksUri,
-    audience,
-    issuers,
-    requiredScope: process.env.MCP_AUTH_SCOPE,
+    mode: "enabled",
+    config: {
+      jwksUri: parsedJwksUri.href,
+      audience,
+      issuers,
+      requiredScope: requiredScope || undefined,
+    },
   };
 }
 
