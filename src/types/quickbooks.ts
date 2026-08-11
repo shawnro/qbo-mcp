@@ -229,18 +229,3 @@ export interface QBReport {
     }>;
   };
 }
-
-export interface TransactionLine {
-  date: string;
-  type: string;
-  txnId: string;
-  docNumber?: string;
-  lineId: string;
-  amount: number;        // Positive = debit, Negative = credit
-  description?: string;
-  department?: string;
-  qboLink: string;
-  accountId: string;           // Account ID for this line
-  accountName: string;         // Account name (e.g., "4010 Sales" or "Undeposited Funds")
-  isMatchingLine: boolean;     // True if this line matched the target account query
-}

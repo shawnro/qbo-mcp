@@ -1,35 +1,18 @@
-// Tests for account transaction query handler and extractAccountLines
-
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createMockClient,
-  mockSuccess,
   mockError,
-  resetMockClient,
   mockPromisify,
+  mockSuccess,
+  resetMockClient,
 } from "../../../__mocks__/mock-client.js";
-import {
-  createMockAccountCache,
-  createMockDepartmentCache,
-} from "../../../__mocks__/mock-cache.js";
+import { createMockDepartmentCache } from "../../../__mocks__/mock-cache.js";
 
 vi.mock("../../../client/index.js", () => ({
-    promisify: mockPromisify,
-    resolveAccount: vi.fn(),
-    getAccountCache: vi.fn(),
-    getDepartmentCache: vi.fn(),
-    resolveVendor: vi.fn(),
-    resolveItem: vi.fn(),
-    resolveCustomer: vi.fn(),
-    resolveDepartmentId: vi.fn(),
-    getClient: vi.fn(),
-    clearCredentialsCache: vi.fn(),
-    refreshTokens: vi.fn(),
-    isAuthError: vi.fn(),
-    clearLookupCache: vi.fn(),
-    getCompanyIdValue: vi.fn(),
+  promisify: mockPromisify,
+  resolveAccount: vi.fn(),
+  getDepartmentCache: vi.fn(),
 }));
-
 vi.mock("../../../utils/index.js", async () => {
   const actual = await vi.importActual<typeof import("../../../utils/index.js")>(
     "../../../utils/index.js"
@@ -40,291 +23,274 @@ vi.mock("../../../utils/index.js", async () => {
       content: [{ type: "text", text: summary }],
       _data: data,
     })),
-    getQboUrl: vi.fn((entity: string, id: string) => `https://qbo.test/${entity}/${id}`),
-    isHttpMode: vi.fn(() => false),
   };
 });
 
-// Must mock pagination module since the handler imports from query barrel
-vi.mock("../../../query/index.js", async () => {
-  const actual = await vi.importActual<typeof import("../../../query/index.js")>(
-    "../../../query/index.js"
-  );
-  return {
-    ...actual,
-    paginatedQuery: vi.fn(),
-  };
-});
-
+import { resolveAccount, getDepartmentCache } from "../../../client/index.js";
+import { outputReport, setOutputMode } from "../../../utils/index.js";
 import { handleQueryAccountTransactions } from "../account-transactions.js";
-import { resolveAccount, getAccountCache, getDepartmentCache } from "../../../client/index.js";
-import { outputReport } from "../../../utils/index.js";
-import { paginatedQuery } from "../../../query/index.js";
 
 const mockResolveAccount = vi.mocked(resolveAccount);
-const mockGetAccountCache = vi.mocked(getAccountCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockOutputReport = vi.mocked(outputReport);
-const mockPaginatedQuery = vi.mocked(paginatedQuery);
 
 const RESOLVED_ACCOUNT = {
-  Id: "1",
-  Name: "Cash",
-  FullyQualifiedName: "Cash",
+  Id: "35",
+  Name: "Checking",
+  FullyQualifiedName: "Checking",
   AcctNum: "1000",
   AccountType: "Bank",
-  CurrentBalance: 5000,
+  CurrentBalance: 1201,
 };
 
+const COLUMNS = [
+  "Date",
+  "Transaction Type",
+  "Num",
+  "Name",
+  "Memo/Description",
+  "Split",
+  "Amount",
+  "Balance",
+];
+
+function glReport(rows: Array<{
+  date: string;
+  type: string;
+  id?: string;
+  num?: string;
+  name?: string;
+  nameId?: string;
+  memo?: string;
+  split?: string;
+  splitId?: string;
+  amount: string;
+  balance: string;
+}>, basis = "Accrual") {
+  return {
+    Header: {
+      ReportName: "GeneralLedger",
+      StartPeriod: "2026-01-01",
+      EndPeriod: "2026-01-31",
+      ReportBasis: basis,
+      Currency: "USD",
+    },
+    Columns: {
+      Column: COLUMNS.map(title => ({ ColTitle: title, ColType: title === "Amount" || title === "Balance" ? "Money" : "String" })),
+    },
+    Rows: {
+      Row: [{
+        type: "Section",
+        Rows: {
+          Row: rows.map(row => ({
+            type: "Data",
+            ColData: [
+              { value: row.date },
+              { value: row.type, id: row.id },
+              { value: row.num || "" },
+              { value: row.name || "", id: row.nameId },
+              { value: row.memo || "" },
+              { value: row.split || "", id: row.splitId },
+              { value: row.amount },
+              { value: row.balance },
+            ],
+          })),
+        },
+      }],
+    },
+  };
+}
+
 describe("handleQueryAccountTransactions", () => {
-  const client = createMockClient();
+  let client: ReturnType<typeof createMockClient>;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    client = createMockClient();
+    resetMockClient(client);
+    vi.clearAllMocks();
+    setOutputMode("stdio");
     mockResolveAccount.mockResolvedValue(RESOLVED_ACCOUNT as never);
-    mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
+    mockSuccess(client.reportGeneralLedgerDetail, glReport([]));
+  });
 
-    // Default: all entity queries return empty
-    mockPaginatedQuery.mockResolvedValue({
-      entities: [],
-      entityKey: "Unknown",
-      apiCalls: 1,
-      truncated: false,
-      startPositionSpecified: false,
-      hasMore: false,
-      returnedCount: 0,
-      requestedLimit: 10000,
+  it("calls one authoritative GL report with resolved filters", async () => {
+    mockSuccess(client.reportGeneralLedgerDetail, glReport([], "Cash"));
+    await handleQueryAccountTransactions(client as never, {
+      account: "Checking",
+      start_date: "2026-01-01",
+      end_date: "2026-01-31",
+      accounting_method: "Cash",
+    });
+
+    expect(mockResolveAccount).toHaveBeenCalledWith(client, "Checking");
+    expect(client.reportGeneralLedgerDetail).toHaveBeenCalledOnce();
+    expect(client.reportGeneralLedgerDetail.mock.calls[0][0]).toEqual({
+      account: "35",
+      start_date: "2026-01-01",
+      end_date: "2026-01-31",
+      accounting_method: "Cash",
     });
   });
 
-  it("resolves account from input", async () => {
+  it("resolves and passes a department filter", async () => {
     await handleQueryAccountTransactions(client as never, {
-      account: "Cash",
-    });
-
-    expect(mockResolveAccount).toHaveBeenCalledWith(expect.anything(), "Cash");
-  });
-
-  it("queries all 7 entity types", async () => {
-    await handleQueryAccountTransactions(client as never, {
-      account: "Cash",
-    });
-
-    // Should call paginatedQuery 7 times (JE, Purchase, Deposit, SalesReceipt, Bill, Invoice, Payment)
-    expect(mockPaginatedQuery).toHaveBeenCalledTimes(7);
-  });
-
-  it("passes date range to pagination queries", async () => {
-    await handleQueryAccountTransactions(client as never, {
-      account: "Cash",
-      start_date: "2024-01-01",
-      end_date: "2024-06-30",
-    });
-
-    // Check that baseCriteria includes date filter
-    const firstCall = mockPaginatedQuery.mock.calls[0];
-    const pagination = firstCall[2];
-    expect(pagination.baseCriteria).toContain("TxnDate >= '2024-01-01'");
-    expect(pagination.baseCriteria).toContain("TxnDate <= '2024-06-30'");
-  });
-
-  it("resolves department and includes in report data", async () => {
-    await handleQueryAccountTransactions(client as never, {
-      account: "Cash",
+      account: "Checking",
       department: "Santa Rosa",
     });
 
-    expect(mockGetDepartmentCache).toHaveBeenCalled();
-
-    // Report data should include resolved department
+    const options = client.reportGeneralLedgerDetail.mock.calls[0][0];
+    expect(options.department).toBe("20");
     const reportData = mockOutputReport.mock.calls[0][1] as {
-      department?: { id: string; name: string };
+      department?: { id: string; name?: string };
     };
     expect(reportData.department).toEqual({ id: "20", name: "Santa Rosa" });
   });
 
-  it("throws when department not found", async () => {
-    await expect(
-      handleQueryAccountTransactions(client as never, {
-        account: "Cash",
-        department: "Nonexistent",
-      })
-    ).rejects.toThrow('Department not found: "Nonexistent"');
+  it("rejects missing departments before calling the report", async () => {
+    await expect(handleQueryAccountTransactions(client as never, {
+      account: "Checking",
+      department: "Missing",
+    })).rejects.toThrow('Department not found: "Missing"');
+    expect(client.reportGeneralLedgerDetail).not.toHaveBeenCalled();
   });
 
-  it("groups lines from same transaction together", async () => {
-    // Mock a journal entry with 2 lines matching our account
-    mockPaginatedQuery.mockImplementation(async (_client, finder) => {
-      if (finder === "findJournalEntries") {
-        return {
-          entities: [{
-            Id: "100",
-            TxnDate: "2024-03-15",
-            Line: [
-              {
-                Id: "1",
-                Amount: 500,
-                JournalEntryLineDetail: {
-                  PostingType: "Debit",
-                  AccountRef: { value: "1", name: "Cash" },
-                },
-              },
-              {
-                Id: "2",
-                Amount: 500,
-                JournalEntryLineDetail: {
-                  PostingType: "Credit",
-                  AccountRef: { value: "3", name: "Rent Expense" },
-                },
-              },
-            ],
-          }],
-          entityKey: "JournalEntry",
-          apiCalls: 1,
-          truncated: false,
-          startPositionSpecified: false,
-          hasMore: false,
-          returnedCount: 1,
-          requestedLimit: 10000,
-        };
-      }
-      return {
-        entities: [],
-        entityKey: "Unknown",
-        apiCalls: 1,
-        truncated: false,
-        startPositionSpecified: false,
-        hasMore: false,
-        returnedCount: 0,
-        requestedLimit: 10000,
-      };
-    });
+  it("returns authoritative postings with stable identities and correct bank signs", async () => {
+    mockSuccess(client.reportGeneralLedgerDetail, glReport([
+      {
+        date: "2026-01-10",
+        type: "Deposit",
+        id: "4",
+        memo: "Opening deposit",
+        split: "Opening Balance Equity",
+        splitId: "34",
+        amount: "5000.00",
+        balance: "5000.00",
+      },
+      {
+        date: "2026-01-11",
+        type: "Bill Payment (Check)",
+        id: "91",
+        num: "10",
+        name: "Robertson & Associates",
+        nameId: "49",
+        split: "Accounts Payable (A/P)",
+        splitId: "33",
+        amount: "-300.00",
+        balance: "4700.00",
+      },
+    ]));
 
-    await handleQueryAccountTransactions(client as never, {
-      account: "Cash",
-    });
+    await handleQueryAccountTransactions(client as never, { account: "Checking" });
 
-    const reportData = mockOutputReport.mock.calls[0][1] as {
-      summary: { transactionCount: number; matchingLineCount: number };
-      groupedByTransaction: Record<string, { lines: unknown[] }>;
+    const data = mockOutputReport.mock.calls[0][1] as {
+      summary: Record<string, number>;
+      postings: Array<Record<string, unknown>>;
     };
-
-    // 1 transaction with 2 lines
-    expect(reportData.summary.transactionCount).toBe(1);
-    // Only 1 matching line (Cash, account ID "1")
-    expect(reportData.summary.matchingLineCount).toBe(1);
-    // Grouped under one key
-    const groups = Object.keys(reportData.groupedByTransaction);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]).toBe("JournalEntry:100");
-  });
-
-  it("calculates debit/credit summary correctly", async () => {
-    // Two journal entries: one debit to Cash, one credit from Cash
-    mockPaginatedQuery.mockImplementation(async (_client, finder) => {
-      if (finder === "findJournalEntries") {
-        return {
-          entities: [
-            {
-              Id: "100",
-              TxnDate: "2024-03-15",
-              Line: [
-                { Id: "1", Amount: 1000, JournalEntryLineDetail: { PostingType: "Debit", AccountRef: { value: "1" } } },
-                { Id: "2", Amount: 1000, JournalEntryLineDetail: { PostingType: "Credit", AccountRef: { value: "3" } } },
-              ],
-            },
-            {
-              Id: "101",
-              TxnDate: "2024-03-16",
-              Line: [
-                { Id: "3", Amount: 250, JournalEntryLineDetail: { PostingType: "Credit", AccountRef: { value: "1" } } },
-                { Id: "4", Amount: 250, JournalEntryLineDetail: { PostingType: "Debit", AccountRef: { value: "2" } } },
-              ],
-            },
-          ],
-          entityKey: "JournalEntry",
-          apiCalls: 1,
-          truncated: false,
-          startPositionSpecified: false,
-          hasMore: false,
-          returnedCount: 2,
-          requestedLimit: 10000,
-        };
-      }
-      return {
-        entities: [],
-        entityKey: "Unknown",
-        apiCalls: 1,
-        truncated: false,
-        startPositionSpecified: false,
-        hasMore: false,
-        returnedCount: 0,
-        requestedLimit: 10000,
-      };
+    expect(data.summary).toMatchObject({
+      transactionCount: 2,
+      postingCount: 2,
+      totalDebits: 5000,
+      totalCredits: 300,
+      netChange: 4700,
+      balanceChange: 4700,
+      closingBalance: 4700,
     });
-
-    await handleQueryAccountTransactions(client as never, {
-      account: "Cash",
+    expect(data.postings[1]).toMatchObject({
+      transactionType: "Bill Payment (Check)",
+      transactionId: "91",
+      sourceEntityType: "billpayment",
+      postingType: "Credit",
+      amount: -300,
+      splitAccount: "Accounts Payable (A/P)",
+      splitAccountId: "33",
+      qboLink: "https://app.qbo.intuit.com/app/billpayment?txnId=91",
     });
-
-    const reportData = mockOutputReport.mock.calls[0][1] as {
-      summary: { totalDebits: number; totalCredits: number; netChange: number };
-    };
-
-    // Account "1" (Cash): JE 100 has debit 1000, JE 101 has credit 250
-    expect(reportData.summary.totalDebits).toBe(1000);
-    expect(reportData.summary.totalCredits).toBe(250);
-    expect(reportData.summary.netChange).toBe(750); // debits - credits
   });
 
-  it("gracefully handles entity query failure", async () => {
-    // One entity type fails, others succeed
-    let callCount = 0;
-    mockPaginatedQuery.mockImplementation(async () => {
-      callCount++;
-      if (callCount === 2) {
-        throw new Error("Permission denied for Purchases");
-      }
-      return {
-        entities: [],
-        entityKey: "Unknown",
-        apiCalls: 1,
-        truncated: false,
-        startPositionSpecified: false,
-        hasMore: false,
-        returnedCount: 0,
-        requestedLimit: 10000,
-      };
+  it("marks multi-split postings without inventing a counterpart account", async () => {
+    mockSuccess(client.reportGeneralLedgerDetail, glReport([{
+      date: "2026-01-10",
+      type: "Journal Entry",
+      id: "154",
+      split: "-Split-",
+      amount: "-1.23",
+      balance: "-1.23",
+    }]));
+
+    await handleQueryAccountTransactions(client as never, { account: "Checking" });
+    const data = mockOutputReport.mock.calls[0][1] as {
+      postings: Array<Record<string, unknown>>;
+    };
+    expect(data.postings[0]).toMatchObject({
+      hasMultipleSplits: true,
+      splitAccount: undefined,
+      splitAccountId: undefined,
     });
-
-    // Should NOT throw even though one query fails
-    await handleQueryAccountTransactions(client as never, { account: "Cash" });
-
-    // All 7 queries were attempted
-    expect(mockPaginatedQuery).toHaveBeenCalledTimes(7);
   });
 
-  it("includes account metadata in report data", async () => {
-    await handleQueryAccountTransactions(client as never, { account: "Cash" });
+  it("propagates report failures instead of returning partial success", async () => {
+    mockError(client.reportGeneralLedgerDetail, "Permission denied for General Ledger");
 
-    const reportData = mockOutputReport.mock.calls[0][1] as {
-      account: { id: string; acctNum: string; name: string; type: string };
-    };
-    expect(reportData.account.id).toBe("1");
-    expect(reportData.account.acctNum).toBe("1000");
-    expect(reportData.account.name).toBe("Cash");
-    expect(reportData.account.type).toBe("Bank");
+    await expect(handleQueryAccountTransactions(client as never, { account: "Checking" }))
+      .rejects.toThrow("Permission denied for General Ledger");
+    expect(mockOutputReport).not.toHaveBeenCalled();
   });
 
-  it("defaults date range to year start through today", async () => {
-    await handleQueryAccountTransactions(client as never, { account: "Cash" });
+  it("rejects a report basis mismatch", async () => {
+    mockSuccess(client.reportGeneralLedgerDetail, glReport([], "Accrual"));
+    await expect(handleQueryAccountTransactions(client as never, {
+      account: "Checking",
+      accounting_method: "Cash",
+    })).rejects.toThrow("returned Accrual basis after Cash was requested");
+  });
 
-    const reportData = mockOutputReport.mock.calls[0][1] as {
-      dateRange: { start: string; end: string };
+  it("rejects a report that omits its accounting basis", async () => {
+    const missingBasis = glReport([]);
+    (missingBasis.Header as { ReportBasis?: string }).ReportBasis = undefined;
+    mockSuccess(client.reportGeneralLedgerDetail, missingBasis);
+    await expect(handleQueryAccountTransactions(client as never, { account: "Checking" }))
+      .rejects.toThrow("omitted ReportBasis");
+  });
+
+  it("validates date ranges and accounting method before QBO calls", async () => {
+    await expect(handleQueryAccountTransactions(client as never, {
+      account: "Checking",
+      start_date: "2026-02-30",
+    })).rejects.toThrow("valid calendar date");
+    await expect(handleQueryAccountTransactions(client as never, {
+      account: "Checking",
+      start_date: "2026-02-01",
+      end_date: "2026-01-01",
+    })).rejects.toThrow("on or before");
+    await expect(handleQueryAccountTransactions(client as never, {
+      account: "Checking",
+      accounting_method: "Hybrid",
+    })).rejects.toThrow("Accrual");
+    expect(client.reportGeneralLedgerDetail).not.toHaveBeenCalled();
+  });
+
+  it("caps HTTP detail while computing summaries from every returned posting", async () => {
+    setOutputMode("http");
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      date: "2026-01-10",
+      type: "Expense",
+      id: String(index + 1),
+      amount: "-1.00",
+      balance: String(-(index + 1)),
+    }));
+    mockSuccess(client.reportGeneralLedgerDetail, glReport(rows));
+
+    await handleQueryAccountTransactions(client as never, { account: "Checking" });
+    const data = mockOutputReport.mock.calls[0][1] as {
+      summary: { postingCount: number; totalCredits: number };
+      postings: unknown[];
+      detailTruncatedAt?: number;
+      totalPostings?: number;
     };
-    const year = new Date().getFullYear();
-    expect(reportData.dateRange.start).toBe(`${year}-01-01`);
-    expect(reportData.dateRange.end).toBe(new Date().toISOString().split("T")[0]);
+    expect(data.summary).toMatchObject({ postingCount: 101, totalCredits: 101 });
+    expect(data.postings).toHaveLength(100);
+    expect(data.detailTruncatedAt).toBe(100);
+    expect(data.totalPostings).toBe(101);
   });
 });

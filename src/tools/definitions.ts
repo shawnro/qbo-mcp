@@ -264,7 +264,7 @@ export const toolDefinitions = [
   },
   {
     name: "query_account_transactions",
-    description: "Query all transactions affecting a specific account. Searches across JournalEntry, Purchase, Deposit, SalesReceipt, Bill, Invoice, and Payment. Returns consolidated list with date, type, amount (debit/credit), and description. Useful for investigating account balance discrepancies.",
+    description: "Return authoritative General Ledger postings affecting a specific account. Includes QBO transaction IDs, type, date, document number, counterparty, memo, split account, debit/credit, amount, running balance, and direct QBO links where supported. Supports department and Cash/Accrual filtering. This is read-only detail; fetch the source entity separately before edits to obtain current SyncToken and line IDs.",
     inputSchema: {
       type: "object",
       properties: {
@@ -283,6 +283,11 @@ export const toolDefinitions = [
         department: {
           type: "string",
           description: "Filter to specific department/location (optional)"
+        },
+        accounting_method: {
+          type: "string",
+          enum: ["Accrual", "Cash"],
+          description: "Accounting method: 'Accrual' (default) or 'Cash'"
         }
       },
       required: ["account"]
@@ -312,6 +317,7 @@ export const toolDefinitions = [
         },
         accounting_method: {
           type: "string",
+          enum: ["Accrual", "Cash"],
           description: "Accounting method: 'Accrual' (default) or 'Cash'",
         },
       },

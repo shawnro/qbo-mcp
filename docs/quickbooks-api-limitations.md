@@ -29,7 +29,9 @@ Since DepartmentRef and AccountRef cannot be filtered server-side:
 
 1. **For Reports**: Use the `department` parameter on P&L and Balance Sheet reports (these use a different API endpoint that supports department filtering)
 
-2. **For Queries**: Fetch all records and filter client-side using tools like `jq`:
+2. **For Account activity**: Use `query_account_transactions`. It calls QBO's General Ledger report with server-side account, date, department, and Cash/Accrual filters. This avoids incomplete reconstruction from selected entity types and returns stable transaction IDs for follow-up getters.
+
+3. **For raw entity queries**: Fetch records and filter client-side using tools like `jq`:
    ```bash
    # Filter SalesReceipts by department
    cat results.json | jq '.QueryResponse.SalesReceipt[] | select(.DepartmentRef.value == "5")'
@@ -37,6 +39,14 @@ Since DepartmentRef and AccountRef cannot be filtered server-side:
    # Filter JournalEntry lines by account
    cat results.json | jq '.QueryResponse.JournalEntry[].Line[] | select(.JournalEntryLineDetail.AccountRef.value == "123")'
    ```
+
+### General Ledger Report Semantics
+
+QBO General Ledger rows provide Date, Transaction Type, Num, Name, Memo/Description, Split, Amount, and Balance. In sandbox validation, the Transaction Type cell carried the stable QBO transaction ID, Name and Split carried entity/account IDs when applicable, account and department filters worked, and Cash versus Accrual materially changed the returned postings.
+
+The report `Amount` is the change in the account's normal balance—not a universal debit/credit sign. qbo-mcp classifies the requested AccountType as debit-normal or credit-normal before calculating debit and credit totals. Opening/closing balances remain the raw QBO report balances.
+
+QBO does not document report pagination or expose a total available row count/truncation flag. Detail output is capped only for HTTP model-context safety after summaries are calculated from every row QBO returned. High-volume accounts should be queried with narrower date ranges.
 
 ## Other Query Limitations
 
