@@ -146,3 +146,22 @@ describe("toolDefinitions Attachable tools", () => {
     expect(read.inputSchema.properties.id.type).toBe("string");
   });
 });
+
+describe("toolDefinitions account ledger tools", () => {
+  function getDefinition(name: string): TestToolDefinition {
+    const definition = definitions.find((candidate) => candidate.name === name);
+    expect(definition, name).toBeDefined();
+    return definition!;
+  }
+
+  it("advertises authoritative posting detail and Cash/Accrual filtering", () => {
+    const transactions = getDefinition("query_account_transactions");
+    expect(transactions.inputSchema.required).toEqual(["account"]);
+    expect(transactions.inputSchema.properties.accounting_method.enum)
+      .toEqual(["Accrual", "Cash"]);
+
+    const summary = getDefinition("account_period_summary");
+    expect(summary.inputSchema.properties.accounting_method.enum)
+      .toEqual(["Accrual", "Cash"]);
+  });
+});

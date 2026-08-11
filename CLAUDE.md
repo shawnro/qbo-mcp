@@ -49,6 +49,12 @@ const totalCents = sumCents([amountACents, amountBCents]);
 validateBalance(debitsCents, creditsCents);  // throws if not equal
 ```
 
+### Authoritative Account Ledger Reads
+
+`query_account_transactions` and `account_period_summary` use QBO's General Ledger report rather than manually reconstructing postings from selected transaction entities. A shared low-level normalizer validates report columns and rows; separate projections produce posting detail and period summaries.
+
+GL `Amount` is a normal-balance delta, so debit/credit normalization must use `AccountType`: positive means debit only for debit-normal accounts, while positive means credit for credit-normal accounts. Returned account-posting amounts use positive debit / negative credit; `rawReportAmount` preserves QBO's value. Do not infer editable line IDs from report rows—fetch the source entity before edits.
+
 ### Draft Mode for Writes
 
 All write operations (create/edit) default to `draft: true`:

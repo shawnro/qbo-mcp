@@ -435,8 +435,8 @@ QBO_INLINE_OUTPUT=true
 | `get_profit_loss` | Profit & Loss report (by month, department, class, etc.) |
 | `get_balance_sheet` | Balance Sheet report |
 | `get_trial_balance` | Trial Balance report |
-| `query_account_transactions` | All transactions affecting a specific account |
-| `account_period_summary` | Period summary for an account (opening/closing balance, debits, credits, count) |
+| `query_account_transactions` | Authoritative General Ledger postings for an account, with Cash/Accrual and department filters |
+| `account_period_summary` | GL period summary for an account (opening/closing balance, normalized debits/credits, count) |
 | **Journal Entries** | |
 | `create_journal_entry` | Create a journal entry (validates debits = credits) |
 | `get_journal_entry` | Fetch a journal entry by ID |
@@ -488,6 +488,19 @@ QBO_INLINE_OUTPUT=true
 | **Profiles** | |
 | `list_qbo_profiles` | List all configured company profiles and show which is active |
 | `switch_qbo_profile` | Switch to a different company profile |
+
+---
+
+## Account Ledger Workflow
+
+`query_account_transactions` and `account_period_summary` use QuickBooks' General Ledger report as the accounting source of truth. This includes control-account entries, item-inherited accounts, bill payments, vendor credits, credit memos, and other posting types without reconstructing them from selected entity APIs.
+
+- `query_account_transactions` returns read-only postings with QBO transaction IDs, document number, counterparty, memo, split account, debit/credit, amount, running balance, and a direct QBO link when the report type has a known route.
+- Use `accounting_method: "Accrual"` (default) or `"Cash"`; QBO applies the selected basis server-side.
+- Optional department/location filtering is also applied by the report endpoint.
+- GL report amounts are changes in each account's normal balance. qbo-mcp normalizes them so returned posting amounts use a consistent convention: positive = debit, negative = credit. `rawReportAmount` is retained for auditability.
+- Report postings do not contain editable line IDs or SyncTokens. Fetch the source Bill, Invoice, Journal Entry, etc. before any edit.
+- QBO does not publish report pagination or a total-row/truncation indicator. For high-volume accounts, use narrower date ranges; qbo-mcp reports the row count and warns on large responses rather than silently treating failed entity queries as empty activity.
 
 ---
 
