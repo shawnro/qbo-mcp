@@ -80,7 +80,7 @@ describe("handleGetProfitLoss", () => {
       department: "Santa Rosa",
     });
 
-    expect(mockResolveDepartmentId).toHaveBeenCalledWith(expect.anything(), "Santa Rosa");
+    expect(mockResolveDepartmentId).toHaveBeenCalledWith(expect.anything(), "Santa Rosa", undefined);
     const options = client.reportProfitAndLoss.mock.calls[0][0];
     expect(options.department).toBe("20");
   });
@@ -100,7 +100,8 @@ describe("handleGetProfitLoss", () => {
     expect(mockOutputReport).toHaveBeenCalledWith(
       "profit-loss",
       mockReportResult,
-      "Profit and Loss Summary"
+      "Profit and Loss Summary",
+      undefined
     );
   });
 
@@ -144,7 +145,7 @@ describe("handleGetBalanceSheet", () => {
       accounting_method: "Accrual",
     });
 
-    expect(mockResolveDepartmentId).toHaveBeenCalledWith(expect.anything(), "Main Office");
+    expect(mockResolveDepartmentId).toHaveBeenCalledWith(expect.anything(), "Main Office", undefined);
     const options = client.reportBalanceSheet.mock.calls[0][0];
     expect(options.summarize_column_by).toBe("Total");
     expect(options.accounting_method).toBe("Accrual");
@@ -190,6 +191,19 @@ describe("handleGetTrialBalance", () => {
 
     const options = client.reportTrialBalance.mock.calls[0][0];
     expect(Object.keys(options)).toHaveLength(0);
+  });
+
+  it("passes the request output policy to outputReport", async () => {
+    const output = { mode: "http", executionEnvironment: "node" } as const;
+
+    await handleGetTrialBalance(client as never, {}, { output } as never);
+
+    expect(mockOutputReport).toHaveBeenCalledWith(
+      "trial-balance",
+      mockReportResult,
+      "Trial Balance Summary",
+      output
+    );
   });
 
   it("propagates API errors", async () => {

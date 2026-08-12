@@ -16,6 +16,7 @@ import {
   resolveOptionalCustomerRef,
   toEntityRef,
 } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface CreateVendorCreditLine {
   account_id?: string;
@@ -50,8 +51,10 @@ export async function handleCreateVendorCredit(
     doc_number?: string;
     lines: CreateVendorCreditLine[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     vendor_name, vendor_id, txn_date,
     department_name, department_id, ap_account,
@@ -65,15 +68,15 @@ export async function handleCreateVendorCredit(
 
   // Get cached lookups
   const [acctCache, deptCache, vendorCacheData] = await Promise.all([
-    getAccountCache(client),
-    getDepartmentCache(client),
-    getVendorCache(client),
+    getAccountCache(client, {}, lookupCache),
+    getDepartmentCache(client, {}, lookupCache),
+    getVendorCache(client, {}, lookupCache),
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     department: deptCache,
     vendor: vendorCacheData,
-  });
+  }, lookupCache);
 
   // Resolve vendor
   let vendorRef: { value: string; name: string };
@@ -209,7 +212,8 @@ export async function handleCreateVendorCredit(
 
 export async function handleGetVendorCredit(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -273,7 +277,7 @@ export async function handleGetVendorCredit(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`vendor-credit-${vc.Id}`, vc, lines.join('\n'));
+  return outputReport(`vendor-credit-${vc.Id}`, vc, lines.join('\n'), context?.output);
 }
 
 export async function handleEditVendorCredit(
@@ -286,8 +290,10 @@ export async function handleEditVendorCredit(
     doc_number?: string;
     lines?: VendorCreditLineChange[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { id, vendor_name, txn_date, memo, doc_number, lines: lineChanges, draft = true } = args;
   validateDocNumber(doc_number);
 
@@ -322,7 +328,7 @@ export async function handleEditVendorCredit(
       };
     }>;
   };
-  const resolver = createResolutionCoordinator(client);
+  const resolver = createResolutionCoordinator(client, {}, lookupCache);
 
   // Determine if we're modifying lines - requires full update (not sparse)
   const needsFullUpdate = lineChanges && lineChanges.length > 0;

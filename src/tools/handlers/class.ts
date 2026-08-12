@@ -3,6 +3,7 @@
 import QuickBooks from "node-quickbooks";
 import { promisify } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface QBClass {
   Id: string;
@@ -105,7 +106,8 @@ export async function handleCreateClass(
 
 export async function handleGetClass(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -136,7 +138,7 @@ export async function handleGetClass(
       lines.push(`Last Updated: ${cls.MetaData.LastUpdatedTime}`);
   }
 
-  return outputReport(`class-${cls.Id}`, cls, lines.join("\n"));
+  return outputReport(`class-${cls.Id}`, cls, lines.join("\n"), context?.output);
 }
 
 export async function handleEditClass(

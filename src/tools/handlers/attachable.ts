@@ -10,6 +10,7 @@ import {
 } from "../../utils/index.js";
 import type { ValidatedUploadFile } from "../../utils/index.js";
 import type { QBAttachable } from "../../types/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 import {
   ATTACHABLE_CATEGORIES,
   canonicalizeAttachableEntityType,
@@ -176,7 +177,8 @@ export async function handleCreateAttachable(
 
 export async function handleGetAttachable(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -219,7 +221,7 @@ export async function handleGetAttachable(
       lines.push(`Last Updated: ${attachable.MetaData.LastUpdatedTime}`);
   }
 
-  return outputReport(`attachable-${attachable.Id}`, attachable, lines.join("\n"));
+  return outputReport(`attachable-${attachable.Id}`, attachable, lines.join("\n"), context?.output);
 }
 
 export async function handleEditAttachable(

@@ -8,15 +8,22 @@ import {
 import { toolDefinitions, executeTool } from "./tools/index.js";
 import { createToolExecutor, getToolDefinitions } from "./tools/capabilities.js";
 import type { DeploymentMode } from "./tools/capabilities.js";
+import type { QboRequestContext } from "./runtime/types.js";
 
-export interface McpServerOptions {
-  deploymentMode?: DeploymentMode;
-}
+export type McpServerOptions =
+  | { deploymentMode?: "local"; context?: never }
+  | { deploymentMode: "remote"; context: QboRequestContext };
 
 export function createMcpServer(options: McpServerOptions = {}): Server {
   const deploymentMode = options.deploymentMode ?? "local";
+  if (deploymentMode === "remote" && !options.context) {
+    throw new Error("Remote MCP server requires a request context");
+  }
   const definitions = getToolDefinitions(toolDefinitions, deploymentMode);
-  const invokeTool = createToolExecutor(deploymentMode, executeTool);
+  const invokeTool = createToolExecutor(
+    deploymentMode,
+    (name, args) => executeTool(name, args, options.context)
+  );
   const server = new Server(
     {
       name: "qbo-mcp",

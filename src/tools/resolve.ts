@@ -2,6 +2,7 @@
 // These operate on pre-fetched cache objects and return QB API Ref shapes.
 
 import QuickBooks from "node-quickbooks";
+import type { QboLookupCache } from "../client/cache.js";
 import {
   getAccountCache,
   getDepartmentCache,
@@ -193,7 +194,8 @@ export async function applyCustomerRefChange(
  */
 export function createResolutionCoordinator(
   client: QuickBooks,
-  caches: ResolutionCaches = {}
+  caches: ResolutionCaches = {},
+  lookupCache?: QboLookupCache
 ): ResolutionCoordinator {
   let accountCache = caches.account;
   let departmentCache = caches.department;
@@ -210,27 +212,35 @@ export function createResolutionCoordinator(
 
   const loadAccountCache = async (): Promise<AccountCache> => {
     if (accountCache) return accountCache;
-    accountLoad ??= getAccountCache(client);
+    accountLoad ??= lookupCache
+      ? getAccountCache(client, {}, lookupCache)
+      : getAccountCache(client);
     accountCache = await accountLoad;
     return accountCache;
   };
 
   const loadDepartmentCache = async (): Promise<DepartmentCache> => {
     if (departmentCache) return departmentCache;
-    departmentLoad ??= getDepartmentCache(client);
+    departmentLoad ??= lookupCache
+      ? getDepartmentCache(client, {}, lookupCache)
+      : getDepartmentCache(client);
     departmentCache = await departmentLoad;
     return departmentCache;
   };
 
   const loadVendorCache = async (): Promise<VendorCache> => {
     if (vendorCache) return vendorCache;
-    vendorLoad ??= getVendorCache(client);
+    vendorLoad ??= lookupCache
+      ? getVendorCache(client, {}, lookupCache)
+      : getVendorCache(client);
     vendorCache = await vendorLoad;
     return vendorCache;
   };
 
   const refreshAccountCache = (): Promise<AccountCache> => {
-    accountRefresh ??= getAccountCache(client, { forceRefresh: true }).then(cache => {
+    accountRefresh ??= (lookupCache
+      ? getAccountCache(client, { forceRefresh: true }, lookupCache)
+      : getAccountCache(client, { forceRefresh: true })).then(cache => {
       accountCache = cache;
       return cache;
     });
@@ -238,7 +248,9 @@ export function createResolutionCoordinator(
   };
 
   const refreshDepartmentCache = (): Promise<DepartmentCache> => {
-    departmentRefresh ??= getDepartmentCache(client, { forceRefresh: true }).then(cache => {
+    departmentRefresh ??= (lookupCache
+      ? getDepartmentCache(client, { forceRefresh: true }, lookupCache)
+      : getDepartmentCache(client, { forceRefresh: true })).then(cache => {
       departmentCache = cache;
       return cache;
     });
@@ -246,7 +258,9 @@ export function createResolutionCoordinator(
   };
 
   const refreshVendorCache = (): Promise<VendorCache> => {
-    vendorRefresh ??= getVendorCache(client, { forceRefresh: true }).then(cache => {
+    vendorRefresh ??= (lookupCache
+      ? getVendorCache(client, { forceRefresh: true }, lookupCache)
+      : getVendorCache(client, { forceRefresh: true })).then(cache => {
       vendorCache = cache;
       return cache;
     });
@@ -292,8 +306,12 @@ export function createResolutionCoordinator(
       let resolution = customerResolutions.get(key);
       if (!resolution) {
         resolution = id
-          ? resolveCustomerById(client, id)
-          : resolveCustomer(client, name!);
+          ? lookupCache
+            ? resolveCustomerById(client, id, lookupCache)
+            : resolveCustomerById(client, id)
+          : lookupCache
+            ? resolveCustomer(client, name!, lookupCache)
+            : resolveCustomer(client, name!);
         customerResolutions.set(key, resolution);
       }
       return resolution;

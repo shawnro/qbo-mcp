@@ -6,6 +6,10 @@ import {
   setExecutionEnvironment,
   setOutputMode,
 } from "../output.js";
+import type { OutputPolicy } from "../../runtime/types.js";
+
+const httpPolicy: OutputPolicy = { mode: "http", executionEnvironment: "lambda" };
+const stdioPolicy: OutputPolicy = { mode: "stdio", executionEnvironment: "local" };
 
 describe("setOutputMode / isHttpMode", () => {
   beforeEach(() => {
@@ -35,6 +39,18 @@ describe("setOutputMode / isHttpMode", () => {
     setExecutionEnvironment("lambda");
     expect(isLambdaMode()).toBe(true);
     expect(isHttpMode()).toBe(true);
+  });
+
+  it("uses explicit policies without changing global compatibility", () => {
+    setOutputMode("http");
+    setExecutionEnvironment("lambda");
+
+    expect(isHttpMode(stdioPolicy)).toBe(false);
+    expect(isLambdaMode(stdioPolicy)).toBe(false);
+    expect(isHttpMode(httpPolicy)).toBe(true);
+    expect(isLambdaMode(httpPolicy)).toBe(true);
+    expect(isHttpMode()).toBe(true);
+    expect(isLambdaMode()).toBe(true);
   });
 });
 
@@ -89,5 +105,24 @@ describe("outputReport", () => {
       const result = outputReport("profit-loss", { revenue: 100 }, "P&L");
       expect(result.content[0].text).toContain("profit-loss");
     });
+  });
+
+  it("isolates concurrent explicit HTTP and stdio policies", async () => {
+    setOutputMode("http");
+    const data = { total: 5000 };
+
+    const [httpResult, stdioResult] = await Promise.all([
+      Promise.resolve().then(() => outputReport("concurrent-http", data, "HTTP", httpPolicy)),
+      Promise.resolve().then(() => outputReport("concurrent-stdio", data, "stdio", stdioPolicy)),
+    ]);
+
+    expect(httpResult.content).toEqual([
+      { type: "text", text: "HTTP" },
+      { type: "text", text: JSON.stringify(data) },
+    ]);
+    expect(stdioResult.content).toHaveLength(1);
+    expect(stdioResult.content[0].text).toContain("Full data:");
+    expect(stdioResult.content[0].text).toContain("concurrent-stdio");
+    expect(isHttpMode()).toBe(true);
   });
 });

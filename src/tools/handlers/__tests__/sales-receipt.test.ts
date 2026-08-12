@@ -243,7 +243,7 @@ describe("handleCreateSalesReceipt", () => {
       draft: false,
     });
 
-    expect(mockResolveItem).toHaveBeenCalledWith(expect.anything(), "Widget");
+    expect(mockResolveItem).toHaveBeenCalledWith(expect.anything(), "Widget", undefined);
   });
 });
 

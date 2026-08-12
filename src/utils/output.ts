@@ -3,6 +3,7 @@
 // In HTTP mode: return data inline (no filesystem access in Lambda)
 
 import { writeReport } from "./files.js";
+import type { OutputPolicy } from "../runtime/types.js";
 
 export type OutputMode = "stdio" | "http";
 export type ExecutionEnvironment = "local" | "lambda";
@@ -14,16 +15,16 @@ export function setOutputMode(mode: OutputMode): void {
   currentOutputMode = mode;
 }
 
-export function isHttpMode(): boolean {
-  return currentOutputMode === "http";
+export function isHttpMode(policy?: OutputPolicy): boolean {
+  return (policy?.mode ?? currentOutputMode) === "http";
 }
 
 export function setExecutionEnvironment(environment: ExecutionEnvironment): void {
   currentExecutionEnvironment = environment;
 }
 
-export function isLambdaMode(): boolean {
-  return currentExecutionEnvironment === "lambda";
+export function isLambdaMode(policy?: OutputPolicy): boolean {
+  return (policy?.executionEnvironment ?? currentExecutionEnvironment) === "lambda";
 }
 
 type ToolResult = { content: Array<{ type: string; text: string }> };
@@ -33,8 +34,13 @@ type ToolResult = { content: Array<{ type: string; text: string }> };
  * - stdio: writes to temp file, appends filepath to summary
  * - http: returns summary + inline JSON data
  */
-export function outputReport(reportType: string, data: unknown, summary: string): ToolResult {
-  if (isHttpMode()) {
+export function outputReport(
+  reportType: string,
+  data: unknown,
+  summary: string,
+  policy?: OutputPolicy
+): ToolResult {
+  if (isHttpMode(policy)) {
     return {
       content: [
         { type: "text", text: summary },

@@ -5,6 +5,7 @@ import { promisify, resolveDepartmentId } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
 import { extractReportSummary } from "../../reports/index.js";
 import { QBReport } from "../../types/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 export async function handleGetProfitLoss(
   client: QuickBooks,
@@ -14,7 +15,8 @@ export async function handleGetProfitLoss(
     summarize_by?: string;
     department?: string;
     accounting_method?: string;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { start_date, end_date, summarize_by, department, accounting_method } = args;
 
@@ -22,7 +24,9 @@ export async function handleGetProfitLoss(
   if (start_date) options.start_date = start_date;
   if (end_date) options.end_date = end_date;
   if (summarize_by) options.summarize_column_by = summarize_by;
-  if (department) options.department = await resolveDepartmentId(client, department);
+  if (department) {
+    options.department = await resolveDepartmentId(client, department, context?.runtime.lookupCache);
+  }
   if (accounting_method) options.accounting_method = accounting_method;
 
   const result = await promisify<unknown>((cb) =>
@@ -30,7 +34,7 @@ export async function handleGetProfitLoss(
   ) as QBReport;
 
   const summary = extractReportSummary(result, "Profit and Loss");
-  return outputReport("profit-loss", result, summary);
+  return outputReport("profit-loss", result, summary, context?.output);
 }
 
 export async function handleGetBalanceSheet(
@@ -40,7 +44,8 @@ export async function handleGetBalanceSheet(
     summarize_by?: string;
     department?: string;
     accounting_method?: string;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { as_of_date, summarize_by, department, accounting_method } = args;
 
@@ -52,7 +57,9 @@ export async function handleGetBalanceSheet(
     options.end_date = as_of_date;
   }
   if (summarize_by) options.summarize_column_by = summarize_by;
-  if (department) options.department = await resolveDepartmentId(client, department);
+  if (department) {
+    options.department = await resolveDepartmentId(client, department, context?.runtime.lookupCache);
+  }
   if (accounting_method) options.accounting_method = accounting_method;
 
   const result = await promisify<unknown>((cb) =>
@@ -60,7 +67,7 @@ export async function handleGetBalanceSheet(
   ) as QBReport;
 
   const summary = extractReportSummary(result, "Balance Sheet");
-  return outputReport("balance-sheet", result, summary);
+  return outputReport("balance-sheet", result, summary, context?.output);
 }
 
 export async function handleGetTrialBalance(
@@ -69,7 +76,8 @@ export async function handleGetTrialBalance(
     start_date?: string;
     end_date?: string;
     accounting_method?: string;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { start_date, end_date, accounting_method } = args;
 
@@ -83,5 +91,5 @@ export async function handleGetTrialBalance(
   ) as QBReport;
 
   const summary = extractReportSummary(result, "Trial Balance");
-  return outputReport("trial-balance", result, summary);
+  return outputReport("trial-balance", result, summary, context?.output);
 }

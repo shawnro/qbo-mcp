@@ -17,6 +17,7 @@ import {
   validateDocNumber,
 } from "../../utils/index.js";
 import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface JournalEntryLine {
   account_id?: string;
@@ -46,8 +47,10 @@ export async function handleCreateJournalEntry(
     lines: JournalEntryLine[];
     draft?: boolean;
     doc_number?: string;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { txn_date, memo, lines: rawLines, draft = true, doc_number } = args;
   validateDocNumber(doc_number);
 
@@ -60,13 +63,13 @@ export async function handleCreateJournalEntry(
 
   // Get cached accounts and departments (uses TTL-based cache)
   const [acctCache, deptCache] = await Promise.all([
-    getAccountCache(client),
-    getDepartmentCache(client)
+    getAccountCache(client, {}, lookupCache),
+    getDepartmentCache(client, {}, lookupCache)
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     department: deptCache,
-  });
+  }, lookupCache);
 
   // Resolve account and department names to IDs (all lookups are from cache)
   const resolvedLines = await Promise.all(lines.map(async (line) => {
@@ -199,7 +202,8 @@ export async function handleCreateJournalEntry(
 
 export async function handleGetJournalEntry(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -253,7 +257,7 @@ export async function handleGetJournalEntry(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`journal-entry-${je.Id}`, je, lines.join('\n'));
+  return outputReport(`journal-entry-${je.Id}`, je, lines.join('\n'), context?.output);
 }
 
 export async function handleEditJournalEntry(
@@ -265,8 +269,10 @@ export async function handleEditJournalEntry(
     doc_number?: string;
     lines?: JournalEntryLineChange[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { id, txn_date, memo, doc_number, lines: rawLineChanges, draft = true } = args;
   validateDocNumber(doc_number);
 
@@ -334,13 +340,13 @@ export async function handleEditJournalEntry(
   if (lineChanges && lineChanges.length > 0) {
     // Get caches for lookups
     const [acctCache, deptCache] = await Promise.all([
-      getAccountCache(client),
-      getDepartmentCache(client)
+      getAccountCache(client, {}, lookupCache),
+      getDepartmentCache(client, {}, lookupCache)
     ]);
     const resolver = createResolutionCoordinator(client, {
       account: acctCache,
       department: deptCache,
-    });
+    }, lookupCache);
 
     for (const change of lineChanges) {
       if (change.line_id) {

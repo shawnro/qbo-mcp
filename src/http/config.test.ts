@@ -3,6 +3,7 @@ import { parseRemoteHttpConfig, publicUrl, routePath } from "./config.js";
 
 const authenticatedEnvironment = {
   MCP_PUBLIC_BASE_URL: "https://mcp.example.com/prod/",
+  MCP_SINGLE_REPLICA: "true",
   MCP_AUTH_JWKS_URI: "https://login.example.com/keys",
   MCP_AUTH_AUDIENCE: "api://quickbooks",
   MCP_AUTH_ISSUER: "https://login.example.com/tenant/v2.0",
@@ -24,6 +25,7 @@ describe("parseRemoteHttpConfig", () => {
   it("normalizes the base URL and supports explicit anonymous mode", () => {
     expect(parseRemoteHttpConfig({
       MCP_PUBLIC_BASE_URL: "https://mcp.example.com/prod/",
+      MCP_SINGLE_REPLICA: "true",
       MCP_AUTH_DISABLED: "true",
     })).toMatchObject({
       mode: "valid",
@@ -38,6 +40,7 @@ describe("parseRemoteHttpConfig", () => {
   it("keeps OAuth proxy configuration separate and rejects conflicts", () => {
     expect(parseRemoteHttpConfig({
       MCP_PUBLIC_BASE_URL: "https://mcp.example.com",
+      MCP_SINGLE_REPLICA: "true",
       MCP_AUTH_DISABLED: "true",
       MCP_AUTH_SERVER_URL: "https://login.example.com/tenant/v2.0",
     }).mode).toBe("invalid");
@@ -59,9 +62,20 @@ describe("parseRemoteHttpConfig", () => {
     });
   });
 
+  it("requires an explicit single-replica acknowledgement", () => {
+    expect(parseRemoteHttpConfig({
+      MCP_PUBLIC_BASE_URL: "https://mcp.example.com",
+      MCP_AUTH_DISABLED: "true",
+    })).toEqual({
+      mode: "invalid",
+      reason: "MCP_SINGLE_REPLICA=true is required until distributed token refresh coordination is configured",
+    });
+  });
+
   it("promotes invalid authentication to invalid hosted configuration", () => {
     expect(parseRemoteHttpConfig({
       MCP_PUBLIC_BASE_URL: "https://mcp.example.com",
+      MCP_SINGLE_REPLICA: "true",
       MCP_AUTH_JWKS_URI: "https://login.example.com/keys",
     })).toEqual({
       mode: "invalid",

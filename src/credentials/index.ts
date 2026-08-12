@@ -10,20 +10,24 @@ export {
   listProfiles,
   getActiveProfileName,
   getActiveProfile,
+  getProfile,
   setActiveProfile,
 } from "./profiles.js";
 export type { QBProfile, QBProfileConfig, QBUploadRoot } from "./profiles.js";
 
 import { getCredentialMode } from "./types.js";
 import type { CredentialProvider } from "./types.js";
+import type { QBProfile } from "./profiles.js";
 import { AWSCredentialProvider } from "./aws-provider.js";
 import { LocalCredentialProvider } from "./local-provider.js";
 import {
   hasProfiles,
   getActiveProfile,
   getActiveProfileName,
+  getProfile,
   setActiveProfile,
 } from "./profiles.js";
+import { runLocalOperation } from "../runtime/local-operation-coordinator.js";
 
 // Singleton provider instance
 let providerInstance: CredentialProvider | null = null;
@@ -31,9 +35,12 @@ let providerInstance: CredentialProvider | null = null;
 /**
  * Create a credential provider for a given mode and optional config.
  */
-async function createProvider(mode: string, secretName?: string): Promise<CredentialProvider> {
+export async function createCredentialProvider(
+  mode: string,
+  secretName?: string
+): Promise<CredentialProvider> {
   if (mode === "aws") {
-    return new AWSCredentialProvider();
+    return new AWSCredentialProvider({ secretName });
   } else if (mode === "azure") {
     const { AzureCredentialProvider } = await import("./azure-provider.js");
     return new AzureCredentialProvider(secretName);
@@ -54,9 +61,9 @@ export async function getCredentialProvider(): Promise<CredentialProvider> {
       if (!profile) {
         throw new Error("Profiles loaded but no active profile set.");
       }
-      providerInstance = await createProvider(profile.mode, profile.secret_name);
+      providerInstance = await createCredentialProvider(profile.mode, profile.secret_name);
     } else {
-      providerInstance = await createProvider(getCredentialMode());
+      providerInstance = await createCredentialProvider(getCredentialMode());
     }
   }
   return providerInstance;
@@ -95,6 +102,25 @@ export function switchProfile(name: string): string {
   setActiveProfile(name); // throws if profile doesn't exist
   clearProviderCache();
   return previousName || name;
+}
+
+export async function switchProfileAtomically<T>(
+  name: string,
+  validate: (profile: QBProfile) => Promise<T>,
+  activate: () => void
+): Promise<{ previousName: string; value: T }> {
+  const run = async () => {
+    const profile = getProfile(name);
+    const previousName = getActiveProfileName() ?? name;
+    const value = await validate(profile);
+
+    setActiveProfile(name);
+    clearProviderCache();
+    activate();
+    return { previousName, value };
+  };
+
+  return runLocalOperation(run);
 }
 
 /**

@@ -1,6 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RemoteHttpConfigState } from "./config.js";
 import { createHttpApp } from "./app.js";
+import type { HttpAppDependencies } from "./app.js";
+import { companyKey } from "../runtime/types.js";
+import type { QboCompanyRuntime } from "../runtime/types.js";
+import { createLookupCache } from "../client/cache.js";
+
+const runtime: QboCompanyRuntime = {
+  companyKey: companyKey("test-company"),
+  companyId: "123",
+  lookupCache: createLookupCache(),
+  createClientAttempt: vi.fn(),
+  refreshAfterAuthError: vi.fn(),
+  clearCaches: vi.fn(),
+};
+
+function createTestApp(
+  config: RemoteHttpConfigState,
+  dependencies: Omit<HttpAppDependencies, "executionEnvironment"> & {
+    executionEnvironment?: HttpAppDependencies["executionEnvironment"];
+  } = {}
+) {
+  return createHttpApp(config, {
+    getRuntime: async () => runtime,
+    createRequestId: () => "request-1",
+    ...dependencies,
+    executionEnvironment: dependencies.executionEnvironment ?? "lambda",
+  });
+}
 
 const anonymousConfig: RemoteHttpConfigState = {
   mode: "valid",
@@ -50,7 +77,7 @@ describe("HTTP application", () => {
     });
 
   it("fails closed with a bounded configuration response", async () => {
-    const app = createHttpApp({ mode: "invalid", reason: "secret configuration detail" });
+    const app = createTestApp({ mode: "invalid", reason: "secret configuration detail" });
     const response = await app(new Request("https://anything.example/qb/mcp", { method: "POST" }));
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("secret configuration detail");
@@ -59,7 +86,7 @@ describe("HTTP application", () => {
 
   it("supports explicit anonymous MCP without advertising OAuth", async () => {
     const handleMcp = vi.fn(async () => new Response("mcp", { status: 200 }));
-    const app = createHttpApp(anonymousConfig, { handleMcp });
+    const app = createTestApp(anonymousConfig, { handleMcp });
 
     expect((await app(new Request("https://mcp.example.com/authorize"))).status).toBe(404);
     expect((await app(new Request("https://mcp.example.com/qb/mcp"))).status).toBe(405);
@@ -71,7 +98,7 @@ describe("HTTP application", () => {
   it("requires and validates bearer tokens without exposing validator details", async () => {
     const validateToken = vi.fn(async () => ({ valid: false as const, error: "JWKS secret detail" }));
     const handleMcp = vi.fn(async () => new Response("mcp"));
-    const app = createHttpApp(authenticatedConfig, { validateToken, handleMcp });
+    const app = createTestApp(authenticatedConfig, { validateToken, handleMcp });
 
     const missing = await app(new Request("https://mcp.example.com/prod/qb/mcp", { method: "POST" }));
     expect(missing.status).toBe(401);
@@ -86,15 +113,18 @@ describe("HTTP application", () => {
   });
 
   it("uses canonical metadata URLs instead of request host headers", async () => {
-    const app = createHttpApp(authenticatedConfig);
+    const app = createTestApp(authenticatedConfig);
     const response = await app(new Request("https://spoofed.example/prod/qb/mcp"));
     const body = await response.json() as { resource: string };
     expect(body.resource).toBe("https://mcp.example.com/prod/qb/mcp");
   });
 
   it("delegates authenticated requests and bounds MCP failures", async () => {
-    const validateToken = vi.fn(async () => ({ valid: true as const, claims: {} }));
-    const success = createHttpApp(authenticatedConfig, {
+    const validateToken = vi.fn(async () => ({
+      valid: true as const,
+      claims: { oid: "principal-1" },
+    }));
+    const success = createTestApp(authenticatedConfig, {
       validateToken,
       handleMcp: async () => new Response("ok"),
     });
@@ -103,7 +133,7 @@ describe("HTTP application", () => {
       headers: { Authorization: "Bearer valid-token" },
     }))).status).toBe(200);
 
-    const failure = createHttpApp(authenticatedConfig, {
+    const failure = createTestApp(authenticatedConfig, {
       validateToken,
       handleMcp: async () => { throw new Error("sensitive failure"); },
     });
@@ -124,7 +154,7 @@ describe("HTTP application", () => {
         headers: { "Content-Type": "application/json" },
       });
     });
-    const app = createHttpApp(authenticatedConfig, { fetch: fetchImpl });
+    const app = createTestApp(authenticatedConfig, { fetch: fetchImpl });
     const response = await app(new Request("https://mcp.example.com/prod/token", {
       method: "POST",
       body: "grant_type=authorization_code&scope=offline_access",
@@ -135,7 +165,7 @@ describe("HTTP application", () => {
   });
 
   it("returns exact route and method errors with CORS", async () => {
-    const app = createHttpApp(anonymousConfig);
+    const app = createTestApp(anonymousConfig);
     expect((await app(new Request("https://mcp.example.com/unknown"))).status).toBe(404);
     const response = await app(new Request("https://mcp.example.com/qb/mcp", { method: "DELETE" }));
     expect(response.status).toBe(405);
@@ -144,7 +174,7 @@ describe("HTTP application", () => {
   });
 
   it("runs the real stateless MCP transport with hosted capabilities", async () => {
-    const app = createHttpApp(anonymousConfig);
+    const app = createTestApp(anonymousConfig);
     const initialize = await app(mcpRequest("initialize", {
       protocolVersion: "2025-03-26",
       capabilities: {},
@@ -170,5 +200,47 @@ describe("HTTP application", () => {
     }));
     const callBody = await call.json() as { result: { isError?: boolean } };
     expect(callBody.result.isError).toBe(true);
+  });
+
+  it("propagates normalized principal and immutable runtime context", async () => {
+    const handleMcp = vi.fn(async (_request, context) => {
+      expect(context).toMatchObject({
+        requestId: "request-1",
+        principal: { kind: "authenticated", id: "principal-1" },
+        transport: "http",
+        output: { mode: "http", executionEnvironment: "lambda" },
+        runtime,
+      });
+      expect(Object.isFrozen(context)).toBe(true);
+      return new Response("ok");
+    });
+    const app = createTestApp(authenticatedConfig, {
+      validateToken: async () => ({ valid: true, claims: { oid: "principal-1" } }),
+      handleMcp,
+    });
+
+    const response = await app(new Request("https://mcp.example.com/prod/qb/mcp", {
+      method: "POST",
+      headers: { Authorization: "Bearer valid-token" },
+    }));
+    expect(response.status).toBe(200);
+    expect(handleMcp).toHaveBeenCalledOnce();
+  });
+
+  it("uses the host adapter execution environment in request context", async () => {
+    const handleMcp = vi.fn(async (_request, context) => {
+      expect(context.output).toEqual({ mode: "http", executionEnvironment: "node" });
+      return new Response("ok");
+    });
+    const app = createTestApp(anonymousConfig, {
+      executionEnvironment: "node",
+      handleMcp,
+    });
+
+    const response = await app(new Request("https://mcp.example.com/qb/mcp", {
+      method: "POST",
+    }));
+    expect(response.status).toBe(200);
+    expect(handleMcp).toHaveBeenCalledOnce();
   });
 });

@@ -16,6 +16,7 @@ import {
 } from "../../reports/index.js";
 import { outputReport } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 export async function handleAccountPeriodSummary(
   client: QuickBooks,
@@ -25,10 +26,12 @@ export async function handleAccountPeriodSummary(
     end_date?: string;
     department?: string;
     accounting_method?: string;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { account, start_date, end_date, department, accounting_method } = args;
-  const resolvedAccount = await resolveAccount(client, account);
+  const resolvedAccount = await resolveAccount(client, account, lookupCache);
   const accountType = validateLedgerAccountType(resolvedAccount.AccountType);
   const { startDate, endDate } = resolveReportDateRange(start_date, end_date);
   const accountingMethod = normalizeAccountingMethod(accounting_method);
@@ -36,8 +39,8 @@ export async function handleAccountPeriodSummary(
   let resolvedDepartmentId: string | undefined;
   let resolvedDepartmentName: string | undefined;
   if (department) {
-    const departmentCache = await getDepartmentCache(client);
-    const resolver = createResolutionCoordinator(client, { department: departmentCache });
+    const departmentCache = await getDepartmentCache(client, {}, lookupCache);
+    const resolver = createResolutionCoordinator(client, { department: departmentCache }, lookupCache);
     const ref = await resolver.department(department);
     resolvedDepartmentId = ref.value;
     resolvedDepartmentName = ref.name;
@@ -111,5 +114,5 @@ export async function handleAccountPeriodSummary(
     summary,
   };
 
-  return outputReport("account-period-summary", reportData, summaryLines.join("\n"));
+  return outputReport("account-period-summary", reportData, summaryLines.join("\n"), context?.output);
 }

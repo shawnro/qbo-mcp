@@ -420,6 +420,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_DISABLE_UPDATE` | `false` | Hide all `edit_*` tools (prevent modifications) |
 | `QBO_DISABLE_DELETE` | `false` | Hide `delete_entity` tool (prevent deletions) |
 | `MCP_PUBLIC_BASE_URL` | - | Required canonical base URL for hosted HTTP, including any API Gateway stage path |
+| `MCP_SINGLE_REPLICA` | - | Must be `true` for hosted HTTP until distributed token-refresh coordination is available |
 | `MCP_AUTH_JWKS_URI` | - | HTTPS JWKS endpoint for hosted bearer-token validation |
 | `MCP_AUTH_AUDIENCE` | - | Required JWT audience for hosted authentication |
 | `MCP_AUTH_ISSUER` | - | Required HTTPS JWT issuer for hosted authentication |
@@ -435,6 +436,8 @@ Hosted HTTP deployments require `MCP_PUBLIC_BASE_URL`. Use the externally reacha
 Authentication is fail-closed. Configure `MCP_AUTH_JWKS_URI`, `MCP_AUTH_AUDIENCE`, and `MCP_AUTH_ISSUER` together. Missing, partial, malformed, or conflicting settings return a bounded `503 configuration_error`; they never make the server anonymous. `MCP_AUTH_DISABLED=true` is an explicit development option and disables OAuth discovery and proxy routes.
 
 The hosted transport uses one configured QuickBooks company per endpoint. Local stdio retains named profiles, `qbo_authenticate`, profile switching, and local file uploads. Hosted clients do not see or invoke those process-local tools. `create_attachable` remains available remotely for notes and entity links, but not for `file_path` uploads because a hosted process cannot read files from a customer's computer. Multi-company customers can register one hosted endpoint per company; secure in-process hosted multi-company selection requires a later principal-to-company authorization and state-isolation layer.
+
+Hosted deployments must currently run as one process/replica and set `MCP_SINGLE_REPLICA=true`. Refresh coordination is process-local, so Lambda reserved concurrency and container replica limits must both be one. Do not scale a hosted endpoint beyond one replica until distributed refresh locking is implemented and validated; that work is planned with the Azure deployment adapters.
 
 Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability policy live in a provider-neutral Web `Request` to `Response` application. AWS Lambda is an API Gateway adapter over that application; Azure Functions and Node/container adapters can use the same core without duplicating accounting or security policy.
 

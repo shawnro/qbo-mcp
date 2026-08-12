@@ -123,7 +123,7 @@ describe("handleQueryAccountTransactions", () => {
       accounting_method: "Cash",
     });
 
-    expect(mockResolveAccount).toHaveBeenCalledWith(client, "Checking");
+    expect(mockResolveAccount).toHaveBeenCalledWith(client, "Checking", undefined);
     expect(client.reportGeneralLedgerDetail).toHaveBeenCalledOnce();
     expect(client.reportGeneralLedgerDetail.mock.calls[0][0]).toEqual({
       account: "35",

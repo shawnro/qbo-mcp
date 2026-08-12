@@ -10,6 +10,7 @@ import {
   formatAddress,
   resolveTermRef,
 } from "../entity-fields.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 // QB Customer object shape (relevant fields)
 interface QBCustomer {
@@ -62,8 +63,10 @@ export async function handleCreateCustomer(
     preferred_delivery_method?: string;
     sales_term_ref?: string;
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     display_name, given_name, middle_name, family_name, suffix,
     company_name, email, phone, mobile,
@@ -95,7 +98,9 @@ export async function handleCreateCustomer(
   // Resolve parent customer (for subcustomers/jobs)
   let parentName: string | undefined;
   if (parent_ref) {
-    const parentCustomer = await resolveCustomer(client, parent_ref);
+    const parentCustomer = lookupCache
+      ? await resolveCustomer(client, parent_ref, lookupCache)
+      : await resolveCustomer(client, parent_ref, lookupCache);
     customerObj.ParentRef = parentCustomer;
     parentName = parentCustomer.name;
   }
@@ -156,7 +161,8 @@ export async function handleCreateCustomer(
 
 export async function handleGetCustomer(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -200,7 +206,7 @@ export async function handleGetCustomer(
   lines.push("");
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`customer-${customer.Id}`, customer, lines.join("\n"));
+  return outputReport(`customer-${customer.Id}`, customer, lines.join("\n"), context?.output);
 }
 
 export async function handleEditCustomer(
@@ -227,8 +233,10 @@ export async function handleEditCustomer(
     preferred_delivery_method?: string;
     sales_term_ref?: string;
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     id, display_name, given_name, middle_name, family_name, suffix,
     company_name, email, phone, mobile,
@@ -269,7 +277,9 @@ export async function handleEditCustomer(
 
   // Resolve parent customer if provided
   if (parent_ref !== undefined) {
-    const parentCustomer = await resolveCustomer(client, parent_ref);
+    const parentCustomer = lookupCache
+      ? await resolveCustomer(client, parent_ref, lookupCache)
+      : await resolveCustomer(client, parent_ref, lookupCache);
     updated.ParentRef = parentCustomer;
   }
 

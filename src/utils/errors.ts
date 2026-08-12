@@ -6,6 +6,14 @@ import {
 
 const MAX_FIELD_LENGTH = 500;
 const MAX_ERROR_LENGTH = 2_000;
+const AMBIGUOUS_NETWORK_CODES = new Set([
+  "ECONNABORTED",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+]);
 
 function bounded(value: unknown, limit = MAX_FIELD_LENGTH): string | undefined {
   if (typeof value !== "string" && typeof value !== "number") return undefined;
@@ -58,4 +66,21 @@ export function formatQBOError(error: unknown): string {
   }
 
   return finalize(bounded(error, MAX_ERROR_LENGTH) ?? "Unknown error");
+}
+
+export function isAmbiguousMutationError(error: unknown): boolean {
+  const status = extractHttpStatus(error);
+  if (status === 408 || (status !== undefined && status >= 500)) return true;
+
+  if (typeof error === "object" && error !== null) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && AMBIGUOUS_NETWORK_CODES.has(code.toUpperCase())) {
+      return true;
+    }
+  }
+
+  if (error instanceof Error) {
+    return /\b(timeout|timed out|connection reset|socket hang up)\b/i.test(error.message);
+  }
+  return false;
 }

@@ -1,8 +1,13 @@
 import { validateToken } from "../auth/token-validator.js";
 import type { AuthConfig } from "../auth/token-validator.js";
+import type { QboPrincipal } from "../runtime/types.js";
 import { jsonResponse } from "./responses.js";
 
 export type TokenValidator = typeof validateToken;
+
+export type AuthorizationResult =
+  | { authorized: true; principal: QboPrincipal }
+  | { authorized: false; response: Response };
 
 export function extractBearerToken(request: Request): string | null {
   const authorization = request.headers.get("authorization");
@@ -26,10 +31,27 @@ export async function authorizeRequest(
   config: AuthConfig,
   resourceUrl: string,
   validator: TokenValidator
-): Promise<Response | null> {
+): Promise<AuthorizationResult> {
   const token = extractBearerToken(request);
-  if (!token) return unauthorized(resourceUrl, "Bearer token required");
+  if (!token) {
+    return { authorized: false, response: unauthorized(resourceUrl, "Bearer token required") };
+  }
   const result = await validator(token, config);
-  if (!result.valid) return unauthorized(resourceUrl, "Bearer token is invalid");
-  return null;
+  if (!result.valid) {
+    return { authorized: false, response: unauthorized(resourceUrl, "Bearer token is invalid") };
+  }
+
+  const principalId = typeof result.claims.oid === "string"
+    ? result.claims.oid
+    : typeof result.claims.sub === "string"
+      ? result.claims.sub
+      : null;
+  if (!principalId) {
+    return { authorized: false, response: unauthorized(resourceUrl, "Bearer token has no subject") };
+  }
+
+  return {
+    authorized: true,
+    principal: { kind: "authenticated", id: principalId },
+  };
 }

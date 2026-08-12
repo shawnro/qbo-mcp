@@ -4,6 +4,7 @@ import QuickBooks from "node-quickbooks";
 import { promisify } from "../../client/index.js";
 import { asMCPToolResult } from "../../types/index.js";
 import type { MCPToolResult, QBAttachable } from "../../types/index.js";
+import type { OutputPolicy, QboRequestContext } from "../../runtime/types.js";
 import {
   downloadHttpsContent,
   HttpDownloadError,
@@ -103,8 +104,8 @@ function contentTypesCompatible(expected: string, actual: string | undefined): b
     (expected === "image/jpg" && actual === "image/jpeg");
 }
 
-function binaryReadLimit(): number {
-  return isHttpMode() ? MAX_HTTP_BINARY_BYTES : MAX_BINARY_BYTES;
+function binaryReadLimit(outputPolicy?: OutputPolicy): number {
+  return isHttpMode(outputPolicy) ? MAX_HTTP_BINARY_BYTES : MAX_BINARY_BYTES;
 }
 
 async function downloadAttachable(
@@ -135,7 +136,8 @@ async function downloadAttachable(
 
 export async function handleListTransactionAttachables(
   client: QuickBooks,
-  args: { entity_type: string; entity_id: string; limit?: number }
+  args: { entity_type: string; entity_id: string; limit?: number },
+  context?: QboRequestContext
 ): Promise<MCPToolResult> {
   const entityType = canonicalizeAttachableEntityType(args.entity_type);
   validateQboEntityId(args.entity_id);
@@ -143,7 +145,7 @@ export async function handleListTransactionAttachables(
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ATTACHMENTS) {
     throw new Error(`limit must be an integer from 1 to ${MAX_ATTACHMENTS}`);
   }
-  const effectiveLimit = isHttpMode() ? Math.min(limit, HTTP_ATTACHMENT_LIMIT) : limit;
+  const effectiveLimit = isHttpMode(context?.output) ? Math.min(limit, HTTP_ATTACHMENT_LIMIT) : limit;
 
   const queryResult = await promisify<unknown>((callback) =>
     client.findAttachables([
@@ -183,13 +185,15 @@ export async function handleListTransactionAttachables(
       attachments: metadata,
       ...(effectiveLimit < limit && { detailCapped: true, requestedLimit: limit }),
     },
-    lines.join("\n")
+    lines.join("\n"),
+    context?.output
   ));
 }
 
 export async function handleReadAttachableContent(
   client: QuickBooks,
-  args: { id: string; page_start?: number; page_count?: number }
+  args: { id: string; page_start?: number; page_count?: number },
+  context?: QboRequestContext
 ): Promise<MCPToolResult> {
   validateQboEntityId(args.id);
   let attachable = await getAttachable(client, args.id);
@@ -223,9 +227,9 @@ export async function handleReadAttachableContent(
 
   const maxBytes = TEXT_TYPES.has(expectedType)
     ? MAX_TEXT_BYTES
-    : binaryReadLimit();
+    : binaryReadLimit(context?.output);
   if (attachable.Size !== undefined && attachable.Size > maxBytes) {
-    const modeHint = isHttpMode() && !TEXT_TYPES.has(expectedType)
+    const modeHint = isHttpMode(context?.output) && !TEXT_TYPES.has(expectedType)
       ? " in inline/HTTP output mode; local users can disable QBO_INLINE_OUTPUT for files up to 10 MB"
       : "";
     throw new Error(
@@ -236,7 +240,7 @@ export async function handleReadAttachableContent(
   const summary = `Attachable ${attachable.Id}: ${fileName} (${expectedType}, ${attachable.Size ?? "unknown"} bytes)`;
 
   if (expectedType === PDF_TYPE) {
-    if (isLambdaMode()) {
+    if (isLambdaMode(context?.output)) {
       return {
         content: [{
           type: "text",
