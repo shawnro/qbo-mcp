@@ -8,10 +8,11 @@ import {
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import type { CredentialProvider, QBCredentials } from "./types.js";
 
-// Configuration from environment variables with sensible defaults
-const REGION = process.env.AWS_REGION || "us-east-2";
-const SECRET_NAME = process.env.QBO_SECRET_NAME || "prod/qbo";
-const COMPANY_ID_PARAM = process.env.QBO_COMPANY_ID_PARAM || "/prod/qbo/company_id";
+export interface AWSCredentialProviderOptions {
+  region?: string;
+  secretName?: string;
+  companyIdParameter?: string;
+}
 
 /**
  * AWS-based credential provider
@@ -21,14 +22,21 @@ export class AWSCredentialProvider implements CredentialProvider {
   private secretsClient: SecretsManagerClient;
   private ssmClient: SSMClient;
   private cachedCompanyId: string | null = null;
+  private readonly secretName: string;
+  private readonly companyIdParameter: string;
 
-  constructor() {
-    this.secretsClient = new SecretsManagerClient({ region: REGION });
-    this.ssmClient = new SSMClient({ region: REGION });
+  constructor(options: AWSCredentialProviderOptions = {}) {
+    const region = options.region ?? process.env.AWS_REGION ?? "us-east-2";
+    this.secretName = options.secretName ?? process.env.QBO_SECRET_NAME ?? "prod/qbo";
+    this.companyIdParameter = options.companyIdParameter
+      ?? process.env.QBO_COMPANY_ID_PARAM
+      ?? "/prod/qbo/company_id";
+    this.secretsClient = new SecretsManagerClient({ region });
+    this.ssmClient = new SSMClient({ region });
   }
 
   async getCredentials(): Promise<QBCredentials> {
-    const command = new GetSecretValueCommand({ SecretId: SECRET_NAME });
+    const command = new GetSecretValueCommand({ SecretId: this.secretName });
     const response = await this.secretsClient.send(command);
 
     if (!response.SecretString) {
@@ -40,7 +48,7 @@ export class AWSCredentialProvider implements CredentialProvider {
 
   async saveCredentials(credentials: QBCredentials): Promise<void> {
     const command = new PutSecretValueCommand({
-      SecretId: SECRET_NAME,
+      SecretId: this.secretName,
       SecretString: JSON.stringify(credentials),
     });
     await this.secretsClient.send(command);
@@ -52,7 +60,7 @@ export class AWSCredentialProvider implements CredentialProvider {
     }
 
     const command = new GetParameterCommand({
-      Name: COMPANY_ID_PARAM,
+      Name: this.companyIdParameter,
       WithDecryption: true,
     });
     const response = await this.ssmClient.send(command);

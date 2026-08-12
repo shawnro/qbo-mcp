@@ -207,6 +207,19 @@ export function getActiveProfile(): QBProfile | null {
   return profileConfig.profiles[activeProfileName] ?? null;
 }
 
+export function getProfile(name: string): QBProfile {
+  if (!profileConfig) {
+    throw new Error("Cannot switch profiles: no profiles config loaded.");
+  }
+  const profile = profileConfig.profiles[name];
+  if (!profile) {
+    throw new Error(
+      `Profile "${name}" not found. Available profiles: ${Object.keys(profileConfig.profiles).join(", ")}.`
+    );
+  }
+  return profile;
+}
+
 /**
  * Set the active profile by name.
  * Throws if the profile name doesn't exist in the config.

@@ -13,6 +13,7 @@ import {
 } from "../../client/index.js";
 import { validateAmount, validateDocNumber, toCents, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface BillPaymentBillInput {
   bill_id: string;
@@ -45,8 +46,10 @@ export async function handleCreateBillPayment(
     bills: BillPaymentBillInput[];
     credits?: BillPaymentCreditInput[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     vendor_name, vendor_id, payment_account, txn_date,
     memo, doc_number, bills, credits = [], draft = true,
@@ -59,13 +62,13 @@ export async function handleCreateBillPayment(
 
   // Get cached lookups
   const [acctCache, vendorCacheData] = await Promise.all([
-    getAccountCache(client),
-    getVendorCache(client),
+    getAccountCache(client, {}, lookupCache),
+    getVendorCache(client, {}, lookupCache),
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     vendor: vendorCacheData,
-  });
+  }, lookupCache);
 
   // Resolve vendor
   let vendorRef: { value: string; name: string };
@@ -240,7 +243,8 @@ export async function handleCreateBillPayment(
 
 export async function handleGetBillPayment(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -311,5 +315,5 @@ export async function handleGetBillPayment(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`bill-payment-${bp.Id}`, bp, lines.join('\n'));
+  return outputReport(`bill-payment-${bp.Id}`, bp, lines.join('\n'), context?.output);
 }

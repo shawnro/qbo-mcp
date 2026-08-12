@@ -82,6 +82,12 @@ export function parseRemoteHttpConfig(env: Environment = process.env): RemoteHtt
   if (!publicBaseUrl) {
     return { mode: "invalid", reason: "MCP_PUBLIC_BASE_URL must be a safe HTTPS URL" };
   }
+  if (env.MCP_SINGLE_REPLICA?.trim().toLowerCase() !== "true") {
+    return {
+      mode: "invalid",
+      reason: "MCP_SINGLE_REPLICA=true is required until distributed token refresh coordination is configured",
+    };
+  }
 
   const auth = parseAuthConfig(env);
   if (auth.mode === "invalid") {

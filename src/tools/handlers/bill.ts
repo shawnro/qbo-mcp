@@ -16,6 +16,7 @@ import {
   resolveOptionalCustomerRef,
   toEntityRef,
 } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface CreateBillLine {
   account_id?: string;
@@ -51,8 +52,10 @@ export async function handleCreateBill(
     doc_number?: string;
     lines: CreateBillLine[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     vendor_name, vendor_id, txn_date, due_date,
     department_name, department_id, ap_account,
@@ -66,15 +69,15 @@ export async function handleCreateBill(
 
   // Get cached lookups
   const [acctCache, deptCache, vendorCacheData] = await Promise.all([
-    getAccountCache(client),
-    getDepartmentCache(client),
-    getVendorCache(client),
+    getAccountCache(client, {}, lookupCache),
+    getDepartmentCache(client, {}, lookupCache),
+    getVendorCache(client, {}, lookupCache),
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     department: deptCache,
     vendor: vendorCacheData,
-  });
+  }, lookupCache);
 
   // Resolve vendor
   let vendorRef: { value: string; name: string };
@@ -212,7 +215,8 @@ export async function handleCreateBill(
 
 export async function handleGetBill(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -286,7 +290,7 @@ export async function handleGetBill(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`bill-${bill.Id}`, bill, lines.join('\n'));
+  return outputReport(`bill-${bill.Id}`, bill, lines.join('\n'), context?.output);
 }
 
 export async function handleEditBill(
@@ -301,8 +305,10 @@ export async function handleEditBill(
     doc_number?: string;
     lines?: BillLineChange[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { id, vendor_name, txn_date, due_date, memo, department_name, doc_number, lines: lineChanges, draft = true } = args;
   validateDocNumber(doc_number);
 
@@ -339,7 +345,7 @@ export async function handleEditBill(
       };
     }>;
   };
-  const resolver = createResolutionCoordinator(client);
+  const resolver = createResolutionCoordinator(client, {}, lookupCache);
 
   // Resolve vendor if changing
   let vendorRef: { value: string; name: string };

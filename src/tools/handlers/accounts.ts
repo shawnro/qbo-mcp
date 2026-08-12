@@ -3,15 +3,17 @@
 import QuickBooks from "node-quickbooks";
 import { getAccountCache } from "../../client/index.js";
 import { toCents, formatDollars, sumCents, outputReport } from "../../utils/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 export async function handleListAccounts(
   client: QuickBooks,
-  args: { account_type?: string; active_only?: boolean }
+  args: { account_type?: string; active_only?: boolean },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { account_type, active_only = true } = args;
 
   // Use the account cache (fetches all accounts with pagination)
-  const cache = await getAccountCache(client);
+  const cache = await getAccountCache(client, {}, context?.runtime.lookupCache);
 
   // Apply filters client-side
   let accounts = cache.items;
@@ -38,5 +40,5 @@ export async function handleListAccounts(
     ...accounts.slice(0, 10).map(a => `  ${a.AcctNum || "N/A"} - ${a.Name} (${a.AccountType}): ${a.CurrentBalance || 0}`)
   ].join("\n");
 
-  return outputReport("accounts", result, summary);
+  return outputReport("accounts", result, summary, context?.output);
 }

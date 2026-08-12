@@ -21,31 +21,45 @@ export interface LookupCacheOptions {
   forceRefresh?: boolean;
 }
 
-// Module-level cache state
-let departmentCache: DepartmentCache | null = null;
-let accountCache: AccountCache | null = null;
-let vendorCache: VendorCache | null = null;
-let vendorCacheGeneration = 0;
-// Item cache: lazy per-entry lookup (not bulk-loaded like others)
-const itemCacheById = new Map<string, CachedItem>();
-const itemCacheByName = new Map<string, CachedItem>(); // lowercase key
-// Customer cache: lazy per-entry lookup (companies can have thousands)
-const customerCacheById = new Map<string, CachedCustomer>();
-const customerCacheByName = new Map<string, CachedCustomer>(); // lowercase key
-
-export function clearVendorCache(): void {
-  vendorCache = null;
-  vendorCacheGeneration++;
+export interface QboLookupCache {
+  department: DepartmentCache | null;
+  account: AccountCache | null;
+  vendor: VendorCache | null;
+  vendorGeneration: number;
+  readonly itemById: Map<string, CachedItem>;
+  readonly itemByName: Map<string, CachedItem>;
+  readonly customerById: Map<string, CachedCustomer>;
+  readonly customerByName: Map<string, CachedCustomer>;
 }
 
-export function clearLookupCache(): void {
-  departmentCache = null;
-  accountCache = null;
-  clearVendorCache();
-  itemCacheById.clear();
-  itemCacheByName.clear();
-  customerCacheById.clear();
-  customerCacheByName.clear();
+export function createLookupCache(): QboLookupCache {
+  return {
+    department: null,
+    account: null,
+    vendor: null,
+    vendorGeneration: 0,
+    itemById: new Map(),
+    itemByName: new Map(),
+    customerById: new Map(),
+    customerByName: new Map(),
+  };
+}
+
+const defaultLookupCache = createLookupCache();
+
+export function clearVendorCache(cache: QboLookupCache = defaultLookupCache): void {
+  cache.vendor = null;
+  cache.vendorGeneration++;
+}
+
+export function clearLookupCache(cache: QboLookupCache = defaultLookupCache): void {
+  cache.department = null;
+  cache.account = null;
+  clearVendorCache(cache);
+  cache.itemById.clear();
+  cache.itemByName.clear();
+  cache.customerById.clear();
+  cache.customerByName.clear();
 }
 
 // Helper to extract entities from QB query response with type safety
@@ -57,10 +71,11 @@ function extractQueryResults<T>(result: unknown, entityKey: string): T[] {
 
 export async function getDepartmentCache(
   client: QuickBooks,
-  options: LookupCacheOptions = {}
+  options: LookupCacheOptions = {},
+  cache: QboLookupCache = defaultLookupCache
 ): Promise<DepartmentCache> {
-  if (!options.forceRefresh && departmentCache && (Date.now() - departmentCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
-    return departmentCache;
+  if (!options.forceRefresh && cache.department && (Date.now() - cache.department.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+    return cache.department;
   }
 
   const result = await promisify<unknown>((cb) => client.findDepartments({ fetchAll: true }, cb));
@@ -73,16 +88,17 @@ export async function getDepartmentCache(
     byName.set(dept.Name.toLowerCase(), dept);
   }
 
-  departmentCache = { items, byId, byName, fetchedAt: Date.now() };
-  return departmentCache;
+  cache.department = { items, byId, byName, fetchedAt: Date.now() };
+  return cache.department;
 }
 
 export async function getAccountCache(
   client: QuickBooks,
-  options: LookupCacheOptions = {}
+  options: LookupCacheOptions = {},
+  cache: QboLookupCache = defaultLookupCache
 ): Promise<AccountCache> {
-  if (!options.forceRefresh && accountCache && (Date.now() - accountCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
-    return accountCache;
+  if (!options.forceRefresh && cache.account && (Date.now() - cache.account.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+    return cache.account;
   }
 
   const result = await promisify<unknown>((cb) => client.findAccounts({ fetchAll: true }, cb));
@@ -99,12 +115,16 @@ export async function getAccountCache(
     }
   }
 
-  accountCache = { items, byId, byName, byAcctNum, fetchedAt: Date.now() };
-  return accountCache;
+  cache.account = { items, byId, byName, byAcctNum, fetchedAt: Date.now() };
+  return cache.account;
 }
 
 // Resolve account by name, AcctNum, or ID using cache
-export async function resolveAccount(client: QuickBooks, account: string): Promise<CachedAccount> {
+export async function resolveAccount(
+  client: QuickBooks,
+  account: string,
+  cache: QboLookupCache = defaultLookupCache
+): Promise<CachedAccount> {
   const findAccount = (cache: AccountCache): CachedAccount | undefined => {
     const lower = account.toLowerCase();
     return cache.byId.get(account)
@@ -113,10 +133,10 @@ export async function resolveAccount(client: QuickBooks, account: string): Promi
       || cache.items.find(a => a.FullyQualifiedName?.toLowerCase().includes(lower));
   };
 
-  let match = findAccount(await getAccountCache(client));
+  let match = findAccount(await getAccountCache(client, {}, cache));
   if (match) return match;
 
-  match = findAccount(await getAccountCache(client, { forceRefresh: true }));
+  match = findAccount(await getAccountCache(client, { forceRefresh: true }, cache));
   if (match) return match;
 
   throw new Error(`Account not found: "${account}". Try using account name, number (AcctNum), or ID.`);
@@ -124,13 +144,14 @@ export async function resolveAccount(client: QuickBooks, account: string): Promi
 
 export async function getVendorCache(
   client: QuickBooks,
-  options: LookupCacheOptions = {}
+  options: LookupCacheOptions = {},
+  cache: QboLookupCache = defaultLookupCache
 ): Promise<VendorCache> {
-  if (!options.forceRefresh && vendorCache && (Date.now() - vendorCache.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
-    return vendorCache;
+  if (!options.forceRefresh && cache.vendor && (Date.now() - cache.vendor.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+    return cache.vendor;
   }
 
-  const generation = vendorCacheGeneration;
+  const generation = cache.vendorGeneration;
   const result = await promisify<unknown>((cb) => client.findVendors({ fetchAll: true }, cb));
   const items = extractQueryResults<CachedVendor>(result, 'Vendor');
 
@@ -142,15 +163,19 @@ export async function getVendorCache(
   }
 
   const refreshed = { items, byId, byName, fetchedAt: Date.now() };
-  if (generation === vendorCacheGeneration) {
-    vendorCache = refreshed;
+  if (generation === cache.vendorGeneration) {
+    cache.vendor = refreshed;
   }
   return refreshed;
 }
 
 // Resolve vendor by name or ID using cache
 // Returns { value, name } ref object for QuickBooks API
-export async function resolveVendor(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
+export async function resolveVendor(
+  client: QuickBooks,
+  nameOrId: string,
+  cache: QboLookupCache = defaultLookupCache
+): Promise<{ value: string; name: string }> {
   const findVendor = (cache: VendorCache): CachedVendor | undefined => {
     const lower = nameOrId.toLowerCase();
     return cache.byId.get(nameOrId)
@@ -158,10 +183,10 @@ export async function resolveVendor(client: QuickBooks, nameOrId: string): Promi
       || cache.items.find(v => v.DisplayName.toLowerCase().includes(lower));
   };
 
-  let match = findVendor(await getVendorCache(client));
+  let match = findVendor(await getVendorCache(client, {}, cache));
   if (match) return { value: match.Id, name: match.DisplayName };
 
-  match = findVendor(await getVendorCache(client, { forceRefresh: true }));
+  match = findVendor(await getVendorCache(client, { forceRefresh: true }, cache));
   if (match) return { value: match.Id, name: match.DisplayName };
 
   throw new Error(`Vendor not found: "${nameOrId}". Try using vendor display name or ID.`);
@@ -169,9 +194,13 @@ export async function resolveVendor(client: QuickBooks, nameOrId: string): Promi
 
 // Resolve item by name or ID using lazy per-entry cache
 // Unlike other caches, items are fetched on demand (companies can have thousands)
-export async function resolveItem(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
+export async function resolveItem(
+  client: QuickBooks,
+  nameOrId: string,
+  cache: QboLookupCache = defaultLookupCache
+): Promise<{ value: string; name: string }> {
   // Check cache first (with TTL)
-  const cached = itemCacheById.get(nameOrId) || itemCacheByName.get(nameOrId.toLowerCase());
+  const cached = cache.itemById.get(nameOrId) || cache.itemByName.get(nameOrId.toLowerCase());
   if (cached && (Date.now() - cached.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
     return { value: cached.Id, name: cached.Name };
   }
@@ -212,15 +241,19 @@ export async function resolveItem(client: QuickBooks, nameOrId: string): Promise
     Active: item.Active,
     fetchedAt: Date.now(),
   };
-  itemCacheById.set(item.Id, entry);
-  itemCacheByName.set(item.Name.toLowerCase(), entry);
+  cache.itemById.set(item.Id, entry);
+  cache.itemByName.set(item.Name.toLowerCase(), entry);
 
   return { value: item.Id, name: item.Name };
 }
 
 // Helper to resolve department name to ID using cache
 // Accepts: internal ID (e.g., "5"), name (e.g., "20400"), or partial match
-export async function resolveDepartmentId(client: QuickBooks, department: string): Promise<string> {
+export async function resolveDepartmentId(
+  client: QuickBooks,
+  department: string,
+  cache: QboLookupCache = defaultLookupCache
+): Promise<string> {
   const findDepartment = (cache: DepartmentCache): CachedDepartment | undefined => {
     const lower = department.toLowerCase();
     return cache.byId.get(department)
@@ -228,17 +261,17 @@ export async function resolveDepartmentId(client: QuickBooks, department: string
       || cache.items.find(d => d.FullyQualifiedName?.toLowerCase().includes(lower));
   };
 
-  let match = findDepartment(await getDepartmentCache(client));
+  let match = findDepartment(await getDepartmentCache(client, {}, cache));
   if (match) return match.Id;
 
-  match = findDepartment(await getDepartmentCache(client, { forceRefresh: true }));
+  match = findDepartment(await getDepartmentCache(client, { forceRefresh: true }, cache));
   if (match) return match.Id;
 
   // If nothing found, return as-is (let API handle error)
   return department;
 }
 
-function cacheCustomer(customer: {
+function cacheCustomer(cache: QboLookupCache, customer: {
   Id: string;
   DisplayName: string;
   FullyQualifiedName?: string;
@@ -248,10 +281,10 @@ function cacheCustomer(customer: {
     ...customer,
     fetchedAt: Date.now(),
   };
-  customerCacheById.set(entry.Id, entry);
-  customerCacheByName.set(entry.DisplayName.toLowerCase(), entry);
+  cache.customerById.set(entry.Id, entry);
+  cache.customerByName.set(entry.DisplayName.toLowerCase(), entry);
   if (entry.FullyQualifiedName) {
-    customerCacheByName.set(entry.FullyQualifiedName.toLowerCase(), entry);
+    cache.customerByName.set(entry.FullyQualifiedName.toLowerCase(), entry);
   }
   return entry;
 }
@@ -266,9 +299,10 @@ function customerRef(customer: CachedCustomer): { value: string; name: string } 
 // Resolve customer by ID using direct read and lazy per-entry cache.
 export async function resolveCustomerById(
   client: QuickBooks,
-  id: string
+  id: string,
+  cache: QboLookupCache = defaultLookupCache
 ): Promise<{ value: string; name: string }> {
-  const cached = customerCacheById.get(id);
+  const cached = cache.customerById.get(id);
   if (cached && (Date.now() - cached.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
     return customerRef(cached);
   }
@@ -284,7 +318,7 @@ export async function resolveCustomerById(
     throw new Error(`Customer not found or inactive: "${id}".`);
   }
 
-  return customerRef(cacheCustomer({
+  return customerRef(cacheCustomer(cache, {
     Id: customer.Id,
     DisplayName: customer.DisplayName,
     FullyQualifiedName: customer.FullyQualifiedName,
@@ -295,9 +329,13 @@ export async function resolveCustomerById(
 // Resolve customer by display name or hierarchical FullyQualifiedName using
 // lazy per-entry cache. Unlike bulk caches, customers are fetched on demand
 // because companies can have thousands.
-export async function resolveCustomer(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
+export async function resolveCustomer(
+  client: QuickBooks,
+  nameOrId: string,
+  cache: QboLookupCache = defaultLookupCache
+): Promise<{ value: string; name: string }> {
   // Check cache first (with TTL)
-  const cached = customerCacheByName.get(nameOrId.toLowerCase());
+  const cached = cache.customerByName.get(nameOrId.toLowerCase());
   if (cached && (Date.now() - cached.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
     return customerRef(cached);
   }
@@ -347,5 +385,5 @@ export async function resolveCustomer(client: QuickBooks, nameOrId: string): Pro
   }
 
   // Use first match and cache it
-  return customerRef(cacheCustomer(customers[0]));
+  return customerRef(cacheCustomer(cache, customers[0]));
 }

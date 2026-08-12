@@ -2,6 +2,7 @@
 // Enhances text summaries with per-transaction line breakdowns
 
 import { isHttpMode } from "../utils/output.js";
+import type { OutputPolicy } from "../runtime/types.js";
 
 const TRANSACTION_ENTITIES = new Set([
   "journalentry", "purchase", "bill", "deposit",
@@ -126,7 +127,8 @@ function formatTransaction(entity: string, record: Record<string, unknown>): str
  */
 export function summarizeTransactionLines(
   entity: string,
-  entities: Array<Record<string, unknown>>
+  entities: Array<Record<string, unknown>>,
+  outputPolicy?: OutputPolicy
 ): string | null {
   if (!TRANSACTION_ENTITIES.has(entity.toLowerCase())) {
     return null;
@@ -136,7 +138,7 @@ export function summarizeTransactionLines(
     return null;
   }
 
-  const cap = isHttpMode() ? 25 : 50;
+  const cap = isHttpMode(outputPolicy) ? 25 : 50;
   const displayed = entities.slice(0, cap);
   const remaining = entities.length - displayed.length;
 

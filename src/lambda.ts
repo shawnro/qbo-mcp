@@ -100,7 +100,9 @@ export async function toGatewayResult(response: Response): Promise<APIGatewayRes
 
 export function createLambdaHandler(
   configState: RemoteHttpConfigState = parseRemoteHttpConfig(),
-  app: (request: Request) => Promise<Response> = createHttpApp(configState)
+  app: (request: Request) => Promise<Response> = createHttpApp(configState, {
+    executionEnvironment: "lambda",
+  })
 ): (event: APIGatewayEvent) => Promise<APIGatewayResult> {
   return async (event) => {
     if (event.warmer === true) {

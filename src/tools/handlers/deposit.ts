@@ -9,6 +9,7 @@ import {
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, toCents, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator, ResolutionNotFoundError, toEntityRef } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 // --- Interfaces ---
 
@@ -69,8 +70,10 @@ export async function handleCreateDeposit(
     department_id?: string;
     memo?: string;
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     deposit_to_account, txn_date, lines,
     department_name, department_id, memo, draft = true,
@@ -82,15 +85,15 @@ export async function handleCreateDeposit(
 
   // Parallel cache fetch
   const [acctCache, deptCache, vendorCacheData] = await Promise.all([
-    getAccountCache(client),
-    getDepartmentCache(client),
-    getVendorCache(client),
+    getAccountCache(client, {}, lookupCache),
+    getDepartmentCache(client, {}, lookupCache),
+    getVendorCache(client, {}, lookupCache),
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     department: deptCache,
     vendor: vendorCacheData,
-  });
+  }, lookupCache);
 
   // Resolve deposit_to_account
   const depositToRef = await resolver.account(deposit_to_account);
@@ -222,7 +225,8 @@ export async function handleCreateDeposit(
 
 export async function handleGetDeposit(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -262,7 +266,7 @@ export async function handleGetDeposit(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`deposit-${deposit.Id}`, deposit, lines.join('\n'));
+  return outputReport(`deposit-${deposit.Id}`, deposit, lines.join('\n'), context?.output);
 }
 
 export async function handleEditDeposit(
@@ -276,8 +280,10 @@ export async function handleEditDeposit(
     lines?: DepositLineInput[];
     draft?: boolean;
     expected_total?: number;  // For fixing corrupted deposits - bypasses validation
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { id, txn_date, memo, deposit_to_account, department_name, lines: newLines, draft = true, expected_total } = args;
 
   // Fetch current Deposit
@@ -337,13 +343,13 @@ export async function handleEditDeposit(
   const needsDeptCache = department_name !== undefined;
 
   const [acctCache, deptCache] = await Promise.all([
-    needsAcctCache ? getAccountCache(client) : Promise.resolve(null),
-    needsDeptCache ? getDepartmentCache(client) : Promise.resolve(null),
+    needsAcctCache ? getAccountCache(client, {}, lookupCache) : Promise.resolve(null),
+    needsDeptCache ? getDepartmentCache(client, {}, lookupCache) : Promise.resolve(null),
   ]);
   const resolver = createResolutionCoordinator(client, {
     ...(acctCache && { account: acctCache }),
     ...(deptCache && { department: deptCache }),
-  });
+  }, lookupCache);
 
   // Resolve deposit_to_account if provided
   if (deposit_to_account !== undefined) {

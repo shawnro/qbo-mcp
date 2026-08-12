@@ -68,10 +68,12 @@ vi.mock("../../tools/handlers/index.js", () => ({
 }));
 
 import { executeTool } from "../index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 import {
   handleCreateAttachable,
   handleCreateVendor,
   handleGetCompanyInfo,
+  handleGetTrialBalance,
   handleGetVendor,
   handleReadAttachableContent,
 } from "../handlers/index.js";
@@ -79,6 +81,7 @@ import {
 const mockHandleCreateAttachable = vi.mocked(handleCreateAttachable);
 const mockHandleCreateVendor = vi.mocked(handleCreateVendor);
 const mockHandleGetCompanyInfo = vi.mocked(handleGetCompanyInfo);
+const mockHandleGetTrialBalance = vi.mocked(handleGetTrialBalance);
 const mockHandleGetVendor = vi.mocked(handleGetVendor);
 const mockHandleReadAttachableContent = vi.mocked(handleReadAttachableContent);
 
@@ -96,6 +99,9 @@ describe("executeTool", () => {
     mockHandleGetVendor.mockResolvedValue({
       content: [{ type: "text", text: "Vendor Info" }],
     });
+    mockHandleGetTrialBalance.mockResolvedValue({
+      content: [{ type: "text", text: "Trial Balance" }],
+    });
   });
 
   it("executes handler successfully on first try", async () => {
@@ -110,7 +116,31 @@ describe("executeTool", () => {
     const result = await executeTool("get_vendor", { id: "42" });
 
     expect(result.content[0].text).toBe("Vendor Info");
-    expect(mockHandleGetVendor).toHaveBeenCalledWith(fakeClient, { id: "42" });
+    expect(mockHandleGetVendor).toHaveBeenCalledWith(fakeClient, { id: "42" }, undefined);
+  });
+
+  it("forwards request context through report and Vendor mutation registrations", async () => {
+    const context = {
+      runtime: {
+        createClientAttempt: vi.fn().mockResolvedValue({
+          client: fakeClient,
+          credentialFingerprint: "fingerprint",
+        }),
+      },
+    } as unknown as QboRequestContext;
+    mockHandleCreateVendor.mockResolvedValue({
+      content: [{ type: "text", text: "Vendor draft" }],
+    });
+
+    await executeTool("get_trial_balance", {}, context);
+    await executeTool("create_vendor", { display_name: "Acme" }, context);
+
+    expect(mockHandleGetTrialBalance).toHaveBeenCalledWith(fakeClient, {}, context);
+    expect(mockHandleCreateVendor).toHaveBeenCalledWith(
+      fakeClient,
+      { display_name: "Acme" },
+      context
+    );
   });
 
   it("does not auth-retry a partial Vendor creation result", async () => {
@@ -165,7 +195,7 @@ describe("executeTool", () => {
     const result = await executeTool("read_attachable_content", { id: "200" });
 
     expect(result.content[1]).toEqual({ type: "image", data: "cG5n", mimeType: "image/png" });
-    expect(mockHandleReadAttachableContent).toHaveBeenCalledWith(fakeClient, { id: "200" });
+    expect(mockHandleReadAttachableContent).toHaveBeenCalledWith(fakeClient, { id: "200" }, undefined);
   });
 
   it("does not retry on non-auth errors", async () => {
@@ -198,7 +228,7 @@ describe("executeTool", () => {
     expect(mockGetClient).toHaveBeenCalledTimes(2);
   });
 
-  it("clears credentials cache when refresh fails", async () => {
+  it("stops when refresh fails instead of retrying with stale credentials", async () => {
     mockHandleGetCompanyInfo
       .mockRejectedValueOnce(new Error("AuthenticationFailed"))
       .mockResolvedValueOnce({
@@ -211,8 +241,88 @@ describe("executeTool", () => {
 
     expect(mockRefreshTokens).toHaveBeenCalledOnce();
     expect(mockClearCredentialsCache).toHaveBeenCalledOnce();
-    // Retry still happens after cache clear
-    expect(result.content[0].text).toBe("Success after cache clear");
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe("Authentication refresh failed: Refresh failed");
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
+  });
+
+  it("never replays a committed mutation after an auth failure", async () => {
+    mockHandleCreateVendor.mockRejectedValue(new Error("AuthenticationFailed"));
+    mockIsAuthError.mockReturnValue(true);
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("indeterminate_result");
+    expect(mockRefreshTokens).toHaveBeenCalledOnce();
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+  });
+
+  it("never replays a committed attachment upload after an auth failure", async () => {
+    mockHandleCreateAttachable.mockRejectedValue(new Error("AuthenticationFailed"));
+    mockIsAuthError.mockReturnValue(true);
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const result = await executeTool("create_attachable", {
+      file_path: "C:\\receipts\\receipt.pdf",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("indeterminate_result");
+    expect(mockRefreshTokens).toHaveBeenCalledOnce();
+    expect(mockHandleCreateAttachable).toHaveBeenCalledOnce();
+  });
+
+  it("marks an ambiguous committed timeout indeterminate without replay", async () => {
+    mockHandleCreateVendor.mockRejectedValue(Object.assign(
+      new Error("socket timed out"),
+      { code: "ETIMEDOUT" }
+    ));
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("indeterminate_result");
+    expect(result.content[0].text).toContain("ETIMEDOUT");
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("marks an HTTP 408 committed result indeterminate without replay", async () => {
+    mockHandleCreateVendor.mockRejectedValue(Object.assign(
+      new Error("Request Timeout"),
+      { statusCode: 408 }
+    ));
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("indeterminate_result");
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+  });
+
+  it("returns ordinary committed validation failures without indeterminate wording", async () => {
+    mockHandleCreateVendor.mockRejectedValue(new Error("Display name is required"));
+
+    const result = await executeTool("create_vendor", {
+      display_name: "",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe("Error: Display name is required");
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
   });
 
   it("returns error when retry also fails after auth error", async () => {

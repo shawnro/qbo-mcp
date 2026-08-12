@@ -5,17 +5,18 @@ import { mockPromisify } from "../../../__mocks__/mock-client.js";
 vi.mock("../../../credentials/index.js", () => ({
   hasProfiles: vi.fn(),
   listProfiles: vi.fn(),
-  switchProfile: vi.fn(),
+  switchProfileAtomically: vi.fn(),
   getActiveProfileName: vi.fn(),
+}));
+
+vi.mock("../../../runtime/local-profile.js", () => ({
+  validateLocalProfile: vi.fn(),
 }));
 
 // Mock client module
 vi.mock("../../../client/index.js", () => ({
   promisify: mockPromisify,
-  getClient: vi.fn(),
   clearCredentialsCache: vi.fn(),
-  refreshTokens: vi.fn(),
-  isAuthError: vi.fn(),
   clearLookupCache: vi.fn(),
   getCompanyIdValue: vi.fn(),
 }));
@@ -23,20 +24,19 @@ vi.mock("../../../client/index.js", () => ({
 import {
   hasProfiles,
   listProfiles,
-  switchProfile,
+  switchProfileAtomically,
   getActiveProfileName,
 } from "../../../credentials/index.js";
-import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../../../client/index.js";
+import { clearCredentialsCache } from "../../../client/index.js";
+import { validateLocalProfile } from "../../../runtime/local-profile.js";
 import { handleListProfiles, handleSwitchProfile } from "../profiles.js";
 
 const mockHasProfiles = vi.mocked(hasProfiles);
 const mockListProfiles = vi.mocked(listProfiles);
-const mockSwitchProfile = vi.mocked(switchProfile);
+const mockSwitchProfileAtomically = vi.mocked(switchProfileAtomically);
 const mockGetActiveProfileName = vi.mocked(getActiveProfileName);
-const mockGetClient = vi.mocked(getClient);
 const mockClearCredentialsCache = vi.mocked(clearCredentialsCache);
-const mockRefreshTokens = vi.mocked(refreshTokens);
-const mockIsAuthError = vi.mocked(isAuthError);
+const mockValidateLocalProfile = vi.mocked(validateLocalProfile);
 
 describe("handleListProfiles", () => {
   beforeEach(() => {
@@ -93,13 +93,13 @@ describe("handleSwitchProfile", () => {
     const result = await handleSwitchProfile({ profile: "prod" });
 
     expect(result.content[0].text).toContain('Already on profile "prod"');
-    expect(mockSwitchProfile).not.toHaveBeenCalled();
+    expect(mockSwitchProfileAtomically).not.toHaveBeenCalled();
   });
 
-  it("returns error when switchProfile throws", async () => {
+  it("returns error when the target profile is invalid", async () => {
     mockHasProfiles.mockReturnValue(true);
     mockGetActiveProfileName.mockReturnValue("prod");
-    mockSwitchProfile.mockImplementation(() => { throw new Error('Profile "bad" not found'); });
+    mockSwitchProfileAtomically.mockRejectedValue(new Error('Profile "bad" not found'));
 
     const result = await handleSwitchProfile({ profile: "bad" });
 
@@ -110,60 +110,32 @@ describe("handleSwitchProfile", () => {
   it("switches successfully and returns company name", async () => {
     mockHasProfiles.mockReturnValue(true);
     mockGetActiveProfileName.mockReturnValue("prod");
-    mockSwitchProfile.mockReturnValue("prod");
-    const mockClient = { realmId: "999", getCompanyInfo: vi.fn() };
-    mockGetClient.mockResolvedValue(mockClient as never);
-    mockClient.getCompanyInfo.mockImplementation((_id: string, cb: Function) => {
-      cb(null, { CompanyName: "Dev Corp" });
+    mockSwitchProfileAtomically.mockImplementation(async (_name, validate, activate) => {
+      const value = await validate({ mode: "local" });
+      activate();
+      return { previousName: "prod", value };
     });
+    mockValidateLocalProfile.mockResolvedValue("Dev Corp");
 
     const result = await handleSwitchProfile({ profile: "dev" });
 
     expect(result.content[0].text).toContain('Switched to profile "dev"');
     expect(result.content[0].text).toContain("Dev Corp");
     expect(mockClearCredentialsCache).toHaveBeenCalled();
+    expect(mockValidateLocalProfile).toHaveBeenCalledWith("dev", { mode: "local" });
   });
 
-  it("retries with token refresh on auth error", async () => {
+  it("keeps the active profile and caches unchanged on candidate failure", async () => {
     mockHasProfiles.mockReturnValue(true);
     mockGetActiveProfileName.mockReturnValue("prod");
-    mockSwitchProfile.mockReturnValue("prod");
-
-    let callCount = 0;
-    const mockClient = { realmId: "999", getCompanyInfo: vi.fn() };
-    mockGetClient.mockResolvedValue(mockClient as never);
-    mockClient.getCompanyInfo.mockImplementation((_id: string, cb: Function) => {
-      callCount++;
-      if (callCount === 1) {
-        cb(new Error("Token expired"));
-      } else {
-        cb(null, { CompanyName: "Refreshed Corp" });
-      }
-    });
-    mockIsAuthError.mockReturnValue(true);
-    mockRefreshTokens.mockResolvedValue(undefined as never);
-
-    const result = await handleSwitchProfile({ profile: "dev" });
-
-    expect(result.content[0].text).toContain("Refreshed Corp");
-    expect(mockRefreshTokens).toHaveBeenCalledOnce();
-  });
-
-  it("rolls back to previous profile on connection failure", async () => {
-    mockHasProfiles.mockReturnValue(true);
-    mockGetActiveProfileName.mockReturnValue("prod");
-    mockSwitchProfile.mockReturnValue("prod");
-    mockGetClient.mockRejectedValue(new Error("Connection refused"));
-    mockIsAuthError.mockReturnValue(false);
+    mockSwitchProfileAtomically.mockRejectedValue(new Error("Connection refused"));
 
     const result = await handleSwitchProfile({ profile: "dev" });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Failed to connect");
-    expect(result.content[0].text).toContain("Rolled back");
+    expect(result.content[0].text).toContain("Active profile remains");
     expect(result.content[0].text).toContain('"prod"');
-    // switchProfile called twice: once for switch, once for rollback
-    expect(mockSwitchProfile).toHaveBeenCalledTimes(2);
-    expect(mockSwitchProfile).toHaveBeenLastCalledWith("prod");
+    expect(mockClearCredentialsCache).not.toHaveBeenCalled();
   });
 });

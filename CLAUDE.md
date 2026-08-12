@@ -96,7 +96,7 @@ For tools that return large datasets, cap the detail for HTTP mode using `isHttp
 
 ### Hosted HTTP Boundary
 
-The shared `src/http/` application owns remote routing, auth, OAuth, CORS, canonical URLs, MCP lifecycle, and hosted capabilities. Host adapters only convert their native request/response shapes. Hosted configuration requires `MCP_PUBLIC_BASE_URL` and complete JWT settings unless anonymous mode is explicitly enabled with `MCP_AUTH_DISABLED=true`.
+The shared `src/http/` application owns remote routing, auth, OAuth, CORS, canonical URLs, MCP lifecycle, and hosted capabilities. Host adapters only convert their native request/response shapes. Hosted configuration requires `MCP_PUBLIC_BASE_URL`, `MCP_SINGLE_REPLICA=true`, and complete JWT settings unless anonymous mode is explicitly enabled with `MCP_AUTH_DISABLED=true`. Until distributed refresh locking is implemented, hosted deployments must enforce one process/replica.
 
 Local stdio keeps profile switching, local OAuth setup, and local file uploads. Hosted HTTP is one QBO company per endpoint and must enforce unavailable capabilities in both `tools/list` and `tools/call`.
 

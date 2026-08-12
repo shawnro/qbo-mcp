@@ -17,6 +17,7 @@ import {
 } from "../../reports/index.js";
 import { isHttpMode, outputReport } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 const HTTP_POSTING_LIMIT = 100;
 const LARGE_REPORT_WARNING = 1000;
@@ -29,10 +30,12 @@ export async function handleQueryAccountTransactions(
     end_date?: string;
     department?: string;
     accounting_method?: string;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { account, start_date, end_date, department, accounting_method } = args;
-  const resolvedAccount = await resolveAccount(client, account);
+  const resolvedAccount = await resolveAccount(client, account, lookupCache);
   const accountType = validateLedgerAccountType(resolvedAccount.AccountType);
   const { startDate, endDate } = resolveReportDateRange(start_date, end_date);
   const accountingMethod = normalizeAccountingMethod(accounting_method);
@@ -40,8 +43,8 @@ export async function handleQueryAccountTransactions(
   let resolvedDepartmentId: string | undefined;
   let resolvedDepartmentName: string | undefined;
   if (department) {
-    const departmentCache = await getDepartmentCache(client);
-    const resolver = createResolutionCoordinator(client, { department: departmentCache });
+    const departmentCache = await getDepartmentCache(client, {}, lookupCache);
+    const resolver = createResolutionCoordinator(client, { department: departmentCache }, lookupCache);
     const ref = await resolver.department(department);
     resolvedDepartmentId = ref.value;
     resolvedDepartmentName = ref.name;
@@ -75,7 +78,7 @@ export async function handleQueryAccountTransactions(
   const allPostings = projectAccountPostings(ledger, accountType);
   const ledgerSummary = projectLedgerSummary(ledger, accountType);
   const netChange = ledgerSummary.totalDebits - ledgerSummary.totalCredits;
-  const truncated = isHttpMode() && allPostings.length > HTTP_POSTING_LIMIT;
+  const truncated = isHttpMode(context?.output) && allPostings.length > HTTP_POSTING_LIMIT;
   const outputPostings = truncated
     ? allPostings.slice(0, HTTP_POSTING_LIMIT)
     : allPostings;
@@ -196,5 +199,5 @@ export async function handleQueryAccountTransactions(
     }
   }
 
-  return outputReport("account-transactions", reportData, summaryLines.join("\n"));
+  return outputReport("account-transactions", reportData, summaryLines.join("\n"), context?.output);
 }

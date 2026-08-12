@@ -16,6 +16,7 @@ import {
   resolveOptionalCustomerRef,
   toEntityRef,
 } from "../resolve.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface CreateExpenseLine {
   account_id?: string;
@@ -51,8 +52,10 @@ export async function handleCreateExpense(
     doc_number?: string;
     lines: CreateExpenseLine[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     payment_type, payment_account, txn_date,
     entity_name, entity_id,
@@ -67,15 +70,15 @@ export async function handleCreateExpense(
 
   // Get cached lookups in parallel
   const [acctCache, deptCache, vendorCacheData] = await Promise.all([
-    getAccountCache(client),
-    getDepartmentCache(client),
-    getVendorCache(client),
+    getAccountCache(client, {}, lookupCache),
+    getDepartmentCache(client, {}, lookupCache),
+    getVendorCache(client, {}, lookupCache),
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     department: deptCache,
     vendor: vendorCacheData,
-  });
+  }, lookupCache);
 
   // Resolve payment account
   const paymentAcct = await resolver.account(payment_account);
@@ -209,7 +212,8 @@ export async function handleCreateExpense(
 
 export async function handleGetExpense(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -293,7 +297,7 @@ export async function handleGetExpense(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`expense-${expense.Id}`, expense, lines.join('\n'));
+  return outputReport(`expense-${expense.Id}`, expense, lines.join('\n'), context?.output);
 }
 
 export async function handleEditExpense(
@@ -308,8 +312,10 @@ export async function handleEditExpense(
     entity_id?: string;
     lines?: ExpenseLineChange[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const { id, txn_date, memo, payment_account, department_name, entity_name, entity_id, lines: lineChanges, draft = true } = args;
 
   // Fetch current Purchase
@@ -347,7 +353,7 @@ export async function handleEditExpense(
       };
     }>;
   };
-  const resolver = createResolutionCoordinator(client);
+  const resolver = createResolutionCoordinator(client, {}, lookupCache);
 
   // Determine if we're modifying lines - requires full update (not sparse)
   const needsFullUpdate = lineChanges && lineChanges.length > 0;

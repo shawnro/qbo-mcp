@@ -126,7 +126,7 @@ describe("handleCreateBill", () => {
     expect(result.content[0].text).toContain("Bill Created");
     expect(client.createBill).toHaveBeenCalledOnce();
     expect(mockGetVendorCache).toHaveBeenCalledOnce();
-    expect(mockGetVendorCache).toHaveBeenCalledWith(client);
+    expect(mockGetVendorCache).toHaveBeenCalledWith(client, {}, undefined);
   });
 
   it("refreshes a stale vendor cache and creates by vendor name", async () => {

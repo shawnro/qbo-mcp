@@ -11,15 +11,17 @@ import {
   summarizeTransactionLines,
 } from "../../query/index.js";
 import { isQBError, extractQBErrorInfo } from "../../types/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 export async function handleQuery(
   client: QuickBooks,
-  args: { query: string }
+  args: { query: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const { query } = args;
 
   // Parse pagination params from query
-  const pagination = parsePaginationFromQuery(query);
+  const pagination = parsePaginationFromQuery(query, context?.output);
 
   // Determine entity type from query for appropriate finder method
   const entityMatch = query.match(/FROM\s+(\w+)/i);
@@ -108,11 +110,11 @@ export async function handleQuery(
     summaryLines.push(`Warning: Large result set (>${WARNING_THRESHOLD} records)`);
   }
 
-  const txnSummary = summarizeTransactionLines(entity, entities);
+  const txnSummary = summarizeTransactionLines(entity, entities, context?.output);
   if (txnSummary) {
     summaryLines.push('');
     summaryLines.push(txnSummary);
   }
 
-  return outputReport(`query-${entity.toLowerCase()}`, result, summaryLines.join("\n"));
+  return outputReport(`query-${entity.toLowerCase()}`, result, summaryLines.join("\n"), context?.output);
 }

@@ -4,9 +4,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getActiveProfile,
+  getActiveProfileName,
   listProfiles,
   loadProfiles,
 } from "../profiles.js";
+import { switchProfileAtomically } from "../index.js";
+import { vi } from "vitest";
 
 let tempDir: string;
 let profilesPath: string;
@@ -97,5 +100,60 @@ describe("profile upload roots", () => {
       },
     });
     expect(() => loadProfiles()).toThrow('duplicate upload root label "ap"');
+  });
+});
+
+describe("atomic profile switching", () => {
+  async function loadTwoProfiles(): Promise<void> {
+    await writeConfig({
+      default: "business-a",
+      profiles: {
+        "business-a": { mode: "local", company_id: "a" },
+        "business-b": { mode: "local", company_id: "b" },
+      },
+    });
+    loadProfiles();
+  }
+
+  it("does not publish a profile whose candidate validation fails", async () => {
+    await loadTwoProfiles();
+    const activate = vi.fn();
+
+    await expect(switchProfileAtomically(
+      "business-b",
+      async () => { throw new Error("connection failed"); },
+      activate
+    )).rejects.toThrow("connection failed");
+
+    expect(getActiveProfileName()).toBe("business-a");
+    expect(activate).not.toHaveBeenCalled();
+  });
+
+  it("serializes validation and publishes each successful switch atomically", async () => {
+    await loadTwoProfiles();
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const order: string[] = [];
+
+    const first = switchProfileAtomically("business-b", async () => {
+      order.push("first-start");
+      await firstGate;
+      order.push("first-valid");
+      return "B";
+    }, () => order.push("first-active"));
+    const second = switchProfileAtomically("business-a", async () => {
+      order.push("second-start");
+      return "A";
+    }, () => order.push("second-active"));
+
+    await vi.waitFor(() => expect(order).toEqual(["first-start"]));
+    expect(getActiveProfileName()).toBe("business-a");
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(order).toEqual([
+      "first-start", "first-valid", "first-active", "second-start", "second-active",
+    ]);
+    expect(getActiveProfileName()).toBe("business-a");
   });
 });

@@ -47,8 +47,10 @@ export type CredentialMode = "local" | "aws" | "azure";
  * Get credential mode from environment
  * Defaults to "local" if not specified
  */
-export function getCredentialMode(): CredentialMode {
-  const mode = process.env.QBO_CREDENTIAL_MODE?.toLowerCase();
+export function getCredentialMode(
+  env: Record<string, string | undefined> = process.env
+): CredentialMode {
+  const mode = env.QBO_CREDENTIAL_MODE?.toLowerCase();
   if (mode === "aws") {
     return "aws";
   }

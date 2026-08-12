@@ -3,10 +3,11 @@
 import {
   hasProfiles,
   listProfiles,
-  switchProfile,
+  switchProfileAtomically,
   getActiveProfileName,
 } from "../../credentials/index.js";
-import { getClient, clearCredentialsCache, refreshTokens, isAuthError, promisify } from "../../client/index.js";
+import { clearCredentialsCache } from "../../client/index.js";
+import { validateLocalProfile } from "../../runtime/local-profile.js";
 
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
 
@@ -78,43 +79,12 @@ export async function handleSwitchProfile(
     };
   }
 
-  // Switch profile and clear all cached state
-  let previousProfile: string;
   try {
-    previousProfile = switchProfile(targetProfile);
-  } catch (err) {
-    return {
-      content: [{
-        type: "text",
-        text: `Failed to switch profile: ${(err as Error).message}`,
-      }],
-      isError: true,
-    };
-  }
-
-  // Clear client-side caches (credentials, QB client, lookup caches)
-  clearCredentialsCache();
-
-  // Validate the new profile by connecting to QBO
-  const tryConnect = async () => {
-    const client = await getClient();
-    const companyInfo = await promisify<unknown>((cb) =>
-      client.getCompanyInfo(client.realmId as string, cb)
+    const { value: companyName } = await switchProfileAtomically(
+      targetProfile,
+      (profile) => validateLocalProfile(targetProfile, profile),
+      clearCredentialsCache
     );
-    return (companyInfo as { CompanyName?: string })?.CompanyName || "Unknown";
-  };
-
-  try {
-    let companyName: string;
-    try {
-      companyName = await tryConnect();
-    } catch (err) {
-      // If access token is expired, refresh and retry once
-      if (!isAuthError(err)) throw err;
-      await refreshTokens();
-      companyName = await tryConnect();
-    }
-
     return {
       content: [{
         type: "text",
@@ -122,19 +92,11 @@ export async function handleSwitchProfile(
       }],
     };
   } catch (err) {
-    // Rollback: restore previous profile and all state
-    try {
-      switchProfile(previousProfile);
-      clearCredentialsCache();
-    } catch {
-      // Best-effort rollback — if this also fails, we're in trouble
-    }
-
     return {
       content: [{
         type: "text",
         text: `Failed to connect after switching to "${targetProfile}": ${(err as Error).message}\n\n` +
-          `Rolled back to profile "${previousProfile}".`,
+          `Active profile remains "${getActiveProfileName()}".`,
       }],
       isError: true,
     };

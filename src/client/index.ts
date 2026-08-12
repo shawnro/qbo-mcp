@@ -9,6 +9,7 @@ export {
   getCompanyIdValue,
 } from './auth.js';
 export {
+  createLookupCache,
   clearLookupCache,
   clearVendorCache,
   getDepartmentCache,
@@ -21,3 +22,4 @@ export {
   resolveCustomerById,
   resolveDepartmentId,
 } from './cache.js';
+export type { QboLookupCache } from './cache.js';

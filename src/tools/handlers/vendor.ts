@@ -3,6 +3,7 @@
 import QuickBooks from "node-quickbooks";
 import { clearVendorCache, promisify } from "../../client/index.js";
 import { formatQBOError, getQboUrl, outputReport } from "../../utils/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 import {
   AddressInput,
   QBAddress,
@@ -220,7 +221,8 @@ function addChange(
 
 export async function handleCreateVendor(
   client: QuickBooks,
-  args: VendorFields & { display_name: string; draft?: boolean }
+  args: VendorFields & { display_name: string; draft?: boolean },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const { draft = true, ...fields } = args;
   validateVendorFields(fields, true);
@@ -276,7 +278,7 @@ export async function handleCreateVendor(
         }, callback)
       ) as QBVendor;
     } catch (error) {
-      clearVendorCache();
+      clearVendorCache(context?.runtime.lookupCache);
       // Return rather than throw: the Vendor already exists, so the global
       // auth retry must not execute the entire create operation a second time.
       return {
@@ -288,7 +290,7 @@ export async function handleCreateVendor(
       };
     }
   }
-  clearVendorCache();
+  clearVendorCache(context?.runtime.lookupCache);
 
   const response = [
     "Vendor Created!",
@@ -305,7 +307,8 @@ export async function handleCreateVendor(
 
 export async function handleGetVendor(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const vendor = await promisify<unknown>((callback) =>
     client.getVendor(args.id, callback)
@@ -370,12 +373,13 @@ export async function handleGetVendor(
     MetaData: vendor.MetaData,
   };
 
-  return outputReport(`vendor-${vendor.Id}`, reportData, lines.join("\n"));
+  return outputReport(`vendor-${vendor.Id}`, reportData, lines.join("\n"), context?.output);
 }
 
 export async function handleEditVendor(
   client: QuickBooks,
-  args: VendorEditFields & { id: string; draft?: boolean }
+  args: VendorEditFields & { id: string; draft?: boolean },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id, draft = true, ...fields } = args;
   validateVendorFields(fields);
@@ -447,7 +451,7 @@ export async function handleEditVendor(
   const result = await promisify<unknown>((callback) =>
     client.updateVendor(updated, callback)
   ) as QBVendor;
-  clearVendorCache();
+  clearVendorCache(context?.runtime.lookupCache);
 
   return {
     content: [{
@@ -464,7 +468,8 @@ export async function handleEditVendor(
 
 export async function handleDeactivateVendor(
   client: QuickBooks,
-  args: { id: string; draft?: boolean }
+  args: { id: string; draft?: boolean },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id, draft = true } = args;
   const current = await promisify<unknown>((callback) =>
@@ -505,7 +510,7 @@ export async function handleDeactivateVendor(
       Active: false,
     }, callback)
   ) as QBVendor;
-  clearVendorCache();
+  clearVendorCache(context?.runtime.lookupCache);
 
   return {
     content: [{

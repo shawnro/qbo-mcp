@@ -1,4 +1,9 @@
 import { validateToken } from "../auth/token-validator.js";
+import { randomUUID } from "node:crypto";
+import { getHostedCompanyRuntime } from "../runtime/factory.js";
+import { anonymousPrincipal } from "../runtime/types.js";
+import type { QboCompanyRuntime, QboPrincipal, QboRequestContext } from "../runtime/types.js";
+import type { OutputPolicy } from "../runtime/types.js";
 import type { TokenValidator } from "./auth.js";
 import { authorizeRequest } from "./auth.js";
 import type { RemoteHttpConfigState } from "./config.js";
@@ -11,16 +16,22 @@ import { configurationError, jsonResponse, methodNotAllowed, notFound } from "./
 export interface HttpAppDependencies {
   validateToken?: TokenValidator;
   fetch?: typeof fetch;
-  handleMcp?: (request: Request) => Promise<Response>;
+  handleMcp?: (request: Request, context: QboRequestContext) => Promise<Response>;
+  getRuntime?: () => Promise<QboCompanyRuntime>;
+  createRequestId?: () => string;
+  executionEnvironment: OutputPolicy["executionEnvironment"];
 }
 
 export function createHttpApp(
   configState: RemoteHttpConfigState,
-  dependencies: HttpAppDependencies = {}
+  dependencies: HttpAppDependencies
 ): (request: Request) => Promise<Response> {
   const validator = dependencies.validateToken ?? validateToken;
   const fetchImpl = dependencies.fetch ?? fetch;
   const mcpHandler = dependencies.handleMcp ?? handleMcpRequest;
+  const getRuntime = dependencies.getRuntime ?? getHostedCompanyRuntime;
+  const createRequestId = dependencies.createRequestId ?? randomUUID;
+  const executionEnvironment = dependencies.executionEnvironment;
 
   return async (request) => {
     if (request.method === "OPTIONS") return corsPreflight();
@@ -63,18 +74,28 @@ export function createHttpApp(
       }));
     }
     if (request.method !== "POST") return withCors(methodNotAllowed(["GET", "POST"]));
+    let principal: QboPrincipal = anonymousPrincipal;
     if (config.auth.mode === "enabled") {
-      const authFailure = await authorizeRequest(
+      const authorization = await authorizeRequest(
         request,
         config.auth.config,
         publicUrl(config, config.mcpPath),
         validator
       );
-      if (authFailure) return withCors(authFailure);
+      if (!authorization.authorized) return withCors(authorization.response);
+      principal = authorization.principal;
     }
 
     try {
-      return withCors(await mcpHandler(request));
+      const runtime = await getRuntime();
+      const context: QboRequestContext = Object.freeze({
+        requestId: createRequestId(),
+        principal,
+        transport: "http",
+        output: Object.freeze({ mode: "http", executionEnvironment }),
+        runtime,
+      });
+      return withCors(await mcpHandler(request, context));
     } catch {
       return withCors(jsonResponse(500, {
         error: "internal_error",

@@ -8,6 +8,7 @@ import {
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
 import { resolveTermRef } from "../entity-fields.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 
 interface InvoiceLineChange {
   line_id?: string;
@@ -47,8 +48,10 @@ export async function handleCreateInvoice(
     doc_number?: string;
     lines: CreateInvoiceLine[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     txn_date, customer_name, customer_id,
     due_date, department_name, department_id,
@@ -61,7 +64,7 @@ export async function handleCreateInvoice(
   if (!lines || lines.length === 0) {
     throw new Error("At least one line is required");
   }
-  const resolver = createResolutionCoordinator(client);
+  const resolver = createResolutionCoordinator(client, {}, lookupCache);
 
   // Resolve customer (required for invoices)
   if ((!customer_id && !customer_name) || (customer_id && customer_name)) {
@@ -94,7 +97,9 @@ export async function handleCreateInvoice(
       throw new Error(`Line for "${itemInput}" requires amount, or both qty and unit_price`);
     }
 
-    const itemRef = await resolveItem(client, itemInput);
+    const itemRef = lookupCache
+      ? await resolveItem(client, itemInput, lookupCache)
+      : await resolveItem(client, itemInput, lookupCache);
 
     const qty = line.qty ?? 1;
     let amountCents: number;
@@ -203,7 +208,8 @@ export async function handleCreateInvoice(
 
 export async function handleGetInvoice(
   client: QuickBooks,
-  args: { id: string }
+  args: { id: string },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
 
@@ -294,7 +300,7 @@ export async function handleGetInvoice(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`invoice-${invoice.Id}`, invoice, lines.join('\n'));
+  return outputReport(`invoice-${invoice.Id}`, invoice, lines.join('\n'), context?.output);
 }
 
 export async function handleEditInvoice(
@@ -313,8 +319,10 @@ export async function handleEditInvoice(
     department_name?: string;
     lines?: InvoiceLineChange[];
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const lookupCache = context?.runtime.lookupCache;
   const {
     id, txn_date, due_date, memo, customer_memo, bill_email,
     sales_term_ref, allow_online_credit_card_payment, allow_online_ach_payment,
@@ -406,7 +414,7 @@ export async function handleEditInvoice(
   if (bill_email !== undefined) updated.BillEmail = { Address: bill_email };
   if (allow_online_credit_card_payment !== undefined) updated.AllowOnlineCreditCardPayment = allow_online_credit_card_payment;
   if (allow_online_ach_payment !== undefined) updated.AllowOnlineACHPayment = allow_online_ach_payment;
-  const resolver = createResolutionCoordinator(client);
+  const resolver = createResolutionCoordinator(client, {}, lookupCache);
 
   // Resolve sales term if provided
   if (sales_term_ref !== undefined) {
@@ -470,7 +478,9 @@ export async function handleEditInvoice(
           throw new Error('New lines require amount, or both qty and unit_price');
         }
 
-        const itemRef = await resolveItem(client, itemInput);
+        const itemRef = lookupCache
+          ? await resolveItem(client, itemInput, lookupCache)
+          : await resolveItem(client, itemInput, lookupCache);
 
         const qty = change.qty ?? 1;
         let amountCents: number;
