@@ -376,7 +376,10 @@ describe("handleGetAttachable", () => {
       ContentType: "application/pdf",
       Size: 15360,
       TempDownloadUri: "https://example.com/download/200",
+      ThumbnailTempDownloadUri: "https://example.com/thumbnail/200",
+      FileAccessUri: "https://example.com/file/200",
       Note: "Receipt for lunch",
+      Category: "Receipt",
       AttachableRef: [
         {
           EntityRef: { value: "42", type: "Purchase", name: "Office Supplies" },
@@ -386,16 +389,25 @@ describe("handleGetAttachable", () => {
       MetaData: { CreateTime: "2024-01-15", LastUpdatedTime: "2024-01-15" },
     });
 
-    const result = await handleGetAttachable(client as never, { id: "200" });
+    const context = {
+      output: { mode: "http", executionEnvironment: "local" },
+    } as never;
+    const result = await handleGetAttachable(client as never, { id: "200" }, context);
     const text = result.content[0].text;
+    const completeOutput = result.content.map((item) => item.text).join("\n");
 
     expect(text).toContain("receipt.pdf");
     expect(text).toContain("application/pdf");
     expect(text).toContain("15.0 KB");
-    expect(text).toContain("https://example.com/download/200");
     expect(text).toContain("Receipt for lunch");
+    expect(text).toContain("Category: Receipt");
     expect(text).toContain("Purchase #42");
     expect(text).toContain("SyncToken: 1");
+    expect(completeOutput).not.toContain("Download URL");
+    expect(completeOutput).not.toContain("example.com");
+    expect(completeOutput).not.toContain("TempDownloadUri");
+    expect(completeOutput).not.toContain("ThumbnailTempDownloadUri");
+    expect(completeOutput).not.toContain("FileAccessUri");
   });
 
   it("returns note-only attachable", async () => {

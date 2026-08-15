@@ -16,6 +16,7 @@ import {
   canonicalizeAttachableEntityType,
   validateQboEntityId,
 } from "../attachable-fields.js";
+import { safeAttachableMetadata } from "./attachment-content.js";
 
 function validateMetadata(note?: string, category?: string): void {
   if (note !== undefined && note.length > 2000) {
@@ -185,43 +186,33 @@ export async function handleGetAttachable(
   const attachable = (await promisify<unknown>((cb) =>
     client.getAttachable(id, cb)
   )) as QBAttachable;
+  const metadata = safeAttachableMetadata(attachable);
 
   const lines: string[] = [
     "Attachable",
     "==========",
-    `ID: ${attachable.Id}`,
-    `SyncToken: ${attachable.SyncToken}`,
+    `ID: ${metadata.id}`,
+    `SyncToken: ${metadata.syncToken}`,
   ];
 
-  if (attachable.FileName) lines.push(`File Name: ${attachable.FileName}`);
-  if (attachable.ContentType) lines.push(`Content Type: ${attachable.ContentType}`);
-  if (attachable.Size != null) lines.push(`Size: ${(attachable.Size / 1024).toFixed(1)} KB`);
-  if (attachable.Note) lines.push(`Note: ${attachable.Note}`);
-  if (attachable.Category) lines.push(`Category: ${attachable.Category}`);
+  if (metadata.fileName) lines.push(`File Name: ${metadata.fileName}`);
+  if (metadata.contentType) lines.push(`Content Type: ${metadata.contentType}`);
+  if (metadata.size != null) lines.push(`Size: ${(metadata.size / 1024).toFixed(1)} KB`);
+  if (metadata.note) lines.push(`Note: ${metadata.note}`);
+  if (metadata.category) lines.push(`Category: ${metadata.category}`);
 
-  if (attachable.TempDownloadUri) {
-    lines.push(`Download URL: ${attachable.TempDownloadUri}`);
-  }
-
-  if (attachable.AttachableRef && attachable.AttachableRef.length > 0) {
+  if (metadata.linkedEntities.length > 0) {
     lines.push("", "Linked Entities:");
-    for (const ref of attachable.AttachableRef) {
-      if (ref.EntityRef) {
-        const entity = ref.EntityRef;
-        lines.push(`  ${entity.type || "Unknown"} #${entity.value}${entity.name ? ` (${entity.name})` : ""}`);
-        if (ref.IncludeOnSend) lines.push("    Include on Send: true");
-      }
+    for (const entity of metadata.linkedEntities) {
+      lines.push(`  ${entity.type || "Unknown"} #${entity.id}${entity.name ? ` (${entity.name})` : ""}`);
+      if (entity.includeOnSend) lines.push("    Include on Send: true");
     }
   }
 
-  if (attachable.MetaData) {
-    if (attachable.MetaData.CreateTime)
-      lines.push(`Created: ${attachable.MetaData.CreateTime}`);
-    if (attachable.MetaData.LastUpdatedTime)
-      lines.push(`Last Updated: ${attachable.MetaData.LastUpdatedTime}`);
-  }
+  if (metadata.createdAt) lines.push(`Created: ${metadata.createdAt}`);
+  if (metadata.updatedAt) lines.push(`Last Updated: ${metadata.updatedAt}`);
 
-  return outputReport(`attachable-${attachable.Id}`, attachable, lines.join("\n"), context?.output);
+  return outputReport(`attachable-${metadata.id}`, metadata, lines.join("\n"), context?.output);
 }
 
 export async function handleEditAttachable(
