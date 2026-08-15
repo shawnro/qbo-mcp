@@ -2,3 +2,4 @@
 
 export * from './summary.js';
 export * from './general-ledger.js';
+export * from './inline-output.js';

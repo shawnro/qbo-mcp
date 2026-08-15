@@ -1,7 +1,12 @@
 // Tests for pagination param parsing
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parsePaginationFromQuery, BATCH_SIZE, SAFETY_LIMIT } from "../pagination.js";
+import {
+  parsePaginationFromQuery,
+  BATCH_SIZE,
+  HTTP_QUERY_LIMIT,
+  SAFETY_LIMIT,
+} from "../pagination.js";
 
 // Mock isHttpMode
 vi.mock("../../utils/output.js", () => ({
@@ -27,6 +32,12 @@ describe("parsePaginationFromQuery", () => {
       mockIsHttpMode.mockReturnValue(true);
       const result = parsePaginationFromQuery("SELECT * FROM Invoice");
       expect(result.maxResults).toBe(100);
+    });
+
+    it("caps explicit MAXRESULTS in HTTP mode", () => {
+      mockIsHttpMode.mockReturnValue(true);
+      const result = parsePaginationFromQuery("SELECT * FROM Invoice MAXRESULTS 500");
+      expect(result.maxResults).toBe(HTTP_QUERY_LIMIT);
     });
 
     it("extracts explicit MAXRESULTS", () => {

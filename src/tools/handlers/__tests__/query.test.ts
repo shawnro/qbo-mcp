@@ -38,7 +38,7 @@ vi.mock("../../../types/index.js", () => ({
 }));
 
 import { handleQuery } from "../query.js";
-import { paginatedQuery } from "../../../query/index.js";
+import { HTTP_QUERY_LIMIT, paginatedQuery } from "../../../query/index.js";
 import { isQBError } from "../../../types/index.js";
 
 const mockPaginatedQuery = vi.mocked(paginatedQuery);
@@ -226,5 +226,63 @@ describe("handleQuery", () => {
     });
 
     expect(result.content[0].text).toContain("More data exists");
+  });
+
+  it("explains when an explicit HTTP query limit is capped", async () => {
+    mockPaginatedQuery.mockResolvedValue({
+      entities: Array.from({ length: HTTP_QUERY_LIMIT }, (_, index) => ({ Id: String(index) })),
+      entityKey: "Invoice",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: true,
+      returnedCount: HTTP_QUERY_LIMIT,
+      requestedLimit: HTTP_QUERY_LIMIT,
+    } as never);
+
+    const result = await handleQuery(
+      client as never,
+      { query: "SELECT * FROM Invoice MAXRESULTS 500" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    );
+
+    expect(mockPaginatedQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      "findInvoices",
+      expect.objectContaining({ maxResults: HTTP_QUERY_LIMIT })
+    );
+    expect(result.content[0].text).toContain(
+      `HTTP mode detail capped at ${HTTP_QUERY_LIMIT} records`
+    );
+    expect(result.content[0].text).toContain("STARTPOSITION 101");
+  });
+
+  it("explains the default HTTP query limit", async () => {
+    mockPaginatedQuery.mockResolvedValue({
+      entities: Array.from({ length: HTTP_QUERY_LIMIT }, (_, index) => ({ Id: String(index) })),
+      entityKey: "Invoice",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: true,
+      returnedCount: HTTP_QUERY_LIMIT,
+      requestedLimit: HTTP_QUERY_LIMIT,
+    } as never);
+
+    const result = await handleQuery(
+      client as never,
+      { query: "SELECT * FROM Invoice" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    );
+
+    expect(mockPaginatedQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      "findInvoices",
+      expect.objectContaining({ maxResults: HTTP_QUERY_LIMIT })
+    );
+    expect(result.content[0].text).toContain(
+      `HTTP mode detail limited to ${HTTP_QUERY_LIMIT} records`
+    );
+    expect(result.content[0].text).toContain("STARTPOSITION 101");
   });
 });

@@ -2,10 +2,27 @@
 
 import QuickBooks from "node-quickbooks";
 import { promisify, resolveDepartmentId } from "../../client/index.js";
-import { outputReport } from "../../utils/index.js";
-import { extractReportSummary } from "../../reports/index.js";
+import { isHttpMode, outputReport } from "../../utils/index.js";
+import { extractReportSummary, projectReportForHttp } from "../../reports/index.js";
 import { QBReport } from "../../types/index.js";
 import type { QboRequestContext } from "../../runtime/types.js";
+
+function outputFinancialReport(
+  reportType: string,
+  result: QBReport,
+  summary: string,
+  context?: QboRequestContext
+): { content: Array<{ type: string; text: string }> } {
+  if (!isHttpMode(context?.output)) {
+    return outputReport(reportType, result, summary, context?.output);
+  }
+
+  const projection = projectReportForHttp(result);
+  const outputSummary = projection.truncated
+    ? `${summary}\nHTTP mode detail capped at ${projection.includedDetailRows} of ${projection.totalDetailRows} report rows; totals and section summaries are preserved. Use a smaller date range or fewer summary columns for more detail.`
+    : summary;
+  return outputReport(reportType, projection.data, outputSummary, context?.output);
+}
 
 export async function handleGetProfitLoss(
   client: QuickBooks,
@@ -34,7 +51,7 @@ export async function handleGetProfitLoss(
   ) as QBReport;
 
   const summary = extractReportSummary(result, "Profit and Loss");
-  return outputReport("profit-loss", result, summary, context?.output);
+  return outputFinancialReport("profit-loss", result, summary, context);
 }
 
 export async function handleGetBalanceSheet(
@@ -67,7 +84,7 @@ export async function handleGetBalanceSheet(
   ) as QBReport;
 
   const summary = extractReportSummary(result, "Balance Sheet");
-  return outputReport("balance-sheet", result, summary, context?.output);
+  return outputFinancialReport("balance-sheet", result, summary, context);
 }
 
 export async function handleGetTrialBalance(
@@ -91,5 +108,5 @@ export async function handleGetTrialBalance(
   ) as QBReport;
 
   const summary = extractReportSummary(result, "Trial Balance");
-  return outputReport("trial-balance", result, summary, context?.output);
+  return outputFinancialReport("trial-balance", result, summary, context);
 }

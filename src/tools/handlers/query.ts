@@ -1,8 +1,9 @@
 // Handler for query tool
 
 import QuickBooks from "node-quickbooks";
-import { getQboUrl, outputReport } from "../../utils/index.js";
+import { getQboUrl, isHttpMode, outputReport } from "../../utils/index.js";
 import {
+  HTTP_QUERY_LIMIT,
   parsePaginationFromQuery,
   paginatedQuery,
   SAFETY_LIMIT,
@@ -92,6 +93,9 @@ export async function handleQuery(
     `Results: ${count} records${isLinkable ? ' (with QBO links)' : ''}`
   ];
 
+  const explicitMaxResults = query.match(/MAXRESULTS\s+(\d+)/i);
+  const httpMode = isHttpMode(context?.output);
+
   // Add pagination info
   if (startPositionSpecified) {
     summaryLines.push('Note: STARTPOSITION specified - no auto-pagination');
@@ -103,7 +107,16 @@ export async function handleQuery(
   if (truncated) {
     summaryLines.push(`Warning: Results truncated at ${SAFETY_LIMIT} records (safety limit)`);
   } else if (hasMore) {
-    summaryLines.push(`Note: Results limited to ${requestedLimit} by MAXRESULTS. More data exists.`);
+    if (httpMode) {
+      const requested = explicitMaxResults ? Number(explicitMaxResults[1]) : undefined;
+      summaryLines.push(
+        requested && requested > HTTP_QUERY_LIMIT
+          ? `HTTP mode detail capped at ${HTTP_QUERY_LIMIT} records (requested ${requested}). More data exists.`
+          : `HTTP mode detail limited to ${HTTP_QUERY_LIMIT} records. More data exists.`
+      );
+    } else {
+      summaryLines.push(`Note: Results limited to ${requestedLimit} by MAXRESULTS. More data exists.`);
+    }
     const nextPosition = (startPositionSpecified ? (pagination.startPosition || 1) : 1) + returnedCount;
     summaryLines.push(`To fetch more: Add "STARTPOSITION ${nextPosition}" to query.`);
   } else if (count >= WARNING_THRESHOLD) {

@@ -87,13 +87,13 @@ Follow the pattern of the nearest existing tool. Use `outputReport()` for any to
 
 `outputReport()` behaves differently by transport:
 - **stdio**: Writes full data to a temp file, returns summary text + filepath. Data never enters LLM context.
-- **HTTP**: Returns summary text + **inline JSON**. Everything in the data object goes directly into the LLM's context window.
+- **HTTP**: Returns summary text + bounded inline JSON. Generic queries and financial-report detail are capped at 100 records/rows, and a 100,000-character serialized backstop replaces oversized JSON with compact omission metadata.
 
 When building the `reportData` object passed to `outputReport()`, ask: **does the HTTP user need this data inline?**
 - **Yes**: Structured summaries, metadata, entity objects needed for follow-up edits (SyncToken, line IDs)
 - **No**: Raw API responses, full transaction lists for summary-only tools, redundant data the summary already covers
 
-For tools that return large datasets, cap the detail for HTTP mode using `isHttpMode()` from `src/utils/output.ts`. Compute summaries from the full data, then truncate the detail. See `account-transactions.ts` (`HTTP_TXN_LIMIT`) for the pattern.
+For tools that return large datasets, cap the detail for HTTP mode using `isHttpMode()` from `src/utils/output.ts`. Compute summaries from the full data, then truncate the detail and report original/returned counts with continuation guidance. See `account-transactions.ts` (`HTTP_TXN_LIMIT`) and `reports/inline-output.ts` for the patterns. The `outputReport()` size backstop is defense in depth, not a substitute for a useful tool-specific projection.
 
 ### Hosted HTTP Boundary
 

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
 import {
+  MAX_INLINE_JSON_CHARS,
   isHttpMode,
   isLambdaMode,
   outputReport,
@@ -87,6 +89,21 @@ describe("outputReport", () => {
       const result = outputReport("test", data, "Summary");
       expect(result.content[1].text).toBe("[1,2,3]");
     });
+
+    it("omits oversized inline JSON with bounded continuation guidance", () => {
+      const data = { value: "x".repeat(MAX_INLINE_JSON_CHARS) };
+      const result = outputReport("large-query", data, "Large query");
+
+      expect(result.content[0].text).toContain("Inline data omitted");
+      const metadata = JSON.parse(result.content[1].text);
+      expect(metadata).toEqual({
+        inlineDataOmitted: true,
+        serializedCharacters: JSON.stringify(data).length,
+        limit: MAX_INLINE_JSON_CHARS,
+        guidance: "Use narrower filters, a smaller date range, or paginated requests.",
+      });
+      expect(result.content[1].text.length).toBeLessThan(500);
+    });
   });
 
   describe("stdio mode", () => {
@@ -104,6 +121,15 @@ describe("outputReport", () => {
     it("includes report type in filename", () => {
       const result = outputReport("profit-loss", { revenue: 100 }, "P&L");
       expect(result.content[0].text).toContain("profit-loss");
+    });
+
+    it("writes oversized data completely instead of applying inline limits", () => {
+      const data = { value: "x".repeat(MAX_INLINE_JSON_CHARS) };
+      const result = outputReport("large-stdio", data, "Large local report");
+      const filepath = result.content[0].text.match(/Full data: (.+)$/)?.[1];
+
+      expect(filepath).toBeDefined();
+      expect(JSON.parse(readFileSync(filepath!, "utf8"))).toEqual(data);
     });
   });
 
