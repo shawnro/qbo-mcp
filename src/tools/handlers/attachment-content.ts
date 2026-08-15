@@ -28,7 +28,7 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/gif"
 const TEXT_TYPES = new Set(["text/plain", "text/csv", "text/xml", "application/xml"]);
 const PDF_TYPE = "application/pdf";
 
-interface SafeAttachableMetadata {
+export interface SafeAttachableMetadata {
   id: string;
   syncToken: string;
   fileName?: string;
@@ -46,7 +46,7 @@ interface SafeAttachableMetadata {
   updatedAt?: string;
 }
 
-function safeMetadata(attachable: QBAttachable): SafeAttachableMetadata {
+export function safeAttachableMetadata(attachable: QBAttachable): SafeAttachableMetadata {
   return {
     id: attachable.Id,
     syncToken: attachable.SyncToken,
@@ -161,7 +161,7 @@ export async function handleListTransactionAttachables(
   const attachables = await mapWithConcurrency(ids, METADATA_CONCURRENCY, (id) =>
     getAttachable(client, id)
   );
-  const metadata = attachables.map(safeMetadata);
+  const metadata = attachables.map(safeAttachableMetadata);
 
   const lines = [
     `Attachments linked to ${entityType} #${args.entity_id}`,

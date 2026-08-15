@@ -2094,7 +2094,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_attachable",
-    description: "Fetch an attachable by ID. Returns file metadata (name, size, content type), note text, download URL (for files), linked entities, and SyncToken for edits.",
+    description: "Fetch safe attachable metadata by ID. Returns file metadata (name, size, content type), note text, linked entities, and SyncToken for edits. Temporary download URLs are intentionally excluded; use read_attachable_content to inspect file content.",
     inputSchema: {
       type: "object",
       properties: {

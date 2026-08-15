@@ -503,7 +503,7 @@ Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability polic
 | **Attachables** | |
 | `create_attachable` | Create an attachable — upload a local file or add a note, optionally linked to a transaction |
 | `list_transaction_attachables` | List safe metadata for attachments linked to a QBO transaction or entity |
-| `get_attachable` | Fetch an attachable by ID (includes download URL for files) |
+| `get_attachable` | Fetch safe attachable metadata by ID; temporary download URLs are excluded |
 | `read_attachable_content` | Safely download QBO attachment content for Claude to inspect (text, images, and PDFs) |
 | `edit_attachable` | Update attachable metadata (note, category, entity links). Cannot replace files. |
 | **Profiles** | |
@@ -564,7 +564,7 @@ Content-reading limits:
 - Images are returned as MCP image content. In the local server, PDFs are rendered to JPEG page images and returned through the same native image channel, including image-only scanned PDFs.
 - PDF reads render at most three pages per call. Use `page_start` to continue with later pages and `page_count` to request one to three pages.
 - The stateless Lambda transport returns PDF metadata and directs visual PDF analysis to the local server; native rendering dependencies are not included in the Lambda artifact.
-- QBO-signed URLs are fetched server-side, are never accepted from user input, and are refreshed once after expiry.
+- QBO-signed URLs are fetched server-side, are never returned by metadata tools or accepted from user input, and are refreshed once after expiry.
 - Office and other binary files remain available as metadata but are not yet parsed for Claude.
 
 ---
