@@ -195,15 +195,23 @@ describe("handleGetCustomer", () => {
       Active: true,
       Balance: 500.00,
       BillAddr: { Line1: "123 Main St", City: "Portland", CountrySubDivisionCode: "OR" },
+      PrimaryTaxIdentifier: "sensitive-tax-id",
     });
 
-    const result = await handleGetCustomer(client as never, { id: "42" });
+    const result = await handleGetCustomer(client as never, { id: "42" }, {
+      output: { mode: "http", executionEnvironment: "local" },
+    } as never);
+    const completeOutput = result.content.map((item) => item.text).join("\n");
 
     expect(result.content[0].text).toContain("Acme Inc");
     expect(result.content[0].text).toContain("info@acme.com");
     expect(result.content[0].text).toContain("555-1234");
     expect(result.content[0].text).toContain("$500.00");
     expect(result.content[0].text).toContain("123 Main St");
+    expect(completeOutput).toContain('"SyncToken":"0"');
+    expect(completeOutput).toContain('"BillAddr"');
+    expect(completeOutput).not.toContain("PrimaryTaxIdentifier");
+    expect(completeOutput).not.toContain("sensitive-tax-id");
   });
 
   it("handles customer with no optional fields", async () => {

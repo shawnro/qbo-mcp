@@ -41,6 +41,36 @@ interface QBCustomer {
   MetaData?: { CreateTime?: string; LastUpdatedTime?: string };
 }
 
+function projectCustomerReport(customer: QBCustomer): QBCustomer {
+  return {
+    Id: customer.Id,
+    SyncToken: customer.SyncToken,
+    DisplayName: customer.DisplayName,
+    GivenName: customer.GivenName,
+    MiddleName: customer.MiddleName,
+    FamilyName: customer.FamilyName,
+    Suffix: customer.Suffix,
+    CompanyName: customer.CompanyName,
+    PrimaryEmailAddr: customer.PrimaryEmailAddr,
+    PrimaryPhone: customer.PrimaryPhone,
+    Mobile: customer.Mobile,
+    BillAddr: customer.BillAddr,
+    ShipAddr: customer.ShipAddr,
+    Notes: customer.Notes,
+    Taxable: customer.Taxable,
+    Active: customer.Active,
+    Balance: customer.Balance,
+    BalanceWithJobs: customer.BalanceWithJobs,
+    FullyQualifiedName: customer.FullyQualifiedName,
+    Job: customer.Job,
+    BillWithParent: customer.BillWithParent,
+    ParentRef: customer.ParentRef,
+    PreferredDeliveryMethod: customer.PreferredDeliveryMethod,
+    SalesTermRef: customer.SalesTermRef,
+    MetaData: customer.MetaData,
+  };
+}
+
 export async function handleCreateCustomer(
   client: QuickBooks,
   args: {
@@ -206,7 +236,12 @@ export async function handleGetCustomer(
   lines.push("");
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`customer-${customer.Id}`, customer, lines.join("\n"), context?.output);
+  return outputReport(
+    `customer-${customer.Id}`,
+    projectCustomerReport(customer),
+    lines.join("\n"),
+    context?.output
+  );
 }
 
 export async function handleEditCustomer(

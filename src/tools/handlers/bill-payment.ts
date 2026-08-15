@@ -315,5 +315,25 @@ export async function handleGetBillPayment(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`bill-payment-${bp.Id}`, bp, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: bp.Id,
+    SyncToken: bp.SyncToken,
+    TxnDate: bp.TxnDate,
+    DocNumber: bp.DocNumber,
+    PrivateNote: bp.PrivateNote,
+    TotalAmt: bp.TotalAmt,
+    PayType: bp.PayType,
+    VendorRef: bp.VendorRef,
+    CheckPayment: bp.CheckPayment,
+    CreditCardPayment: bp.CreditCardPayment,
+    Line: bp.Line?.map((line) => ({
+      Amount: line.Amount,
+      LinkedTxn: line.LinkedTxn?.map((txn) => ({
+        TxnId: txn.TxnId,
+        TxnType: txn.TxnType,
+      })),
+    })),
+  };
+
+  return outputReport(`bill-payment-${bp.Id}`, reportData, lines.join('\n'), context?.output);
 }

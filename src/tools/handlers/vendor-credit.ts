@@ -229,6 +229,11 @@ export async function handleGetVendorCredit(
     VendorRef?: { value: string; name?: string };
     APAccountRef?: { value: string; name?: string };
     DepartmentRef?: { value: string; name?: string };
+    CurrencyRef?: { value: string; name?: string };
+    ExchangeRate?: number;
+    GlobalTaxCalculation?: string;
+    IncludeInAnnualTPAR?: boolean;
+    LinkedTxn?: Array<{ TxnId: string; TxnType: string; TxnLineId?: string }>;
     Line?: Array<{
       Id: string;
       Amount: number;
@@ -277,7 +282,42 @@ export async function handleGetVendorCredit(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`vendor-credit-${vc.Id}`, vc, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: vc.Id,
+    SyncToken: vc.SyncToken,
+    TxnDate: vc.TxnDate,
+    DocNumber: vc.DocNumber,
+    PrivateNote: vc.PrivateNote,
+    TotalAmt: vc.TotalAmt,
+    VendorRef: vc.VendorRef,
+    APAccountRef: vc.APAccountRef,
+    DepartmentRef: vc.DepartmentRef,
+    CurrencyRef: vc.CurrencyRef,
+    ExchangeRate: vc.ExchangeRate,
+    GlobalTaxCalculation: vc.GlobalTaxCalculation,
+    IncludeInAnnualTPAR: vc.IncludeInAnnualTPAR,
+    LinkedTxn: vc.LinkedTxn?.map((txn) => ({
+      TxnId: txn.TxnId,
+      TxnType: txn.TxnType,
+      TxnLineId: txn.TxnLineId,
+    })),
+    Line: vc.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      AccountBasedExpenseLineDetail: line.AccountBasedExpenseLineDetail
+        ? {
+            AccountRef: line.AccountBasedExpenseLineDetail.AccountRef,
+            DepartmentRef: line.AccountBasedExpenseLineDetail.DepartmentRef,
+            CustomerRef: line.AccountBasedExpenseLineDetail.CustomerRef,
+            BillableStatus: line.AccountBasedExpenseLineDetail.BillableStatus,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`vendor-credit-${vc.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditVendorCredit(

@@ -452,6 +452,8 @@ Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability polic
 
 QuickBooks callback operations have a configurable deadline through `QBO_REQUEST_TIMEOUT_MS`. A deadline stops the MCP request from waiting but cannot cancel a request already sent by `node-quickbooks`. Timed-out reads and draft previews can be retried. A timed-out committed mutation returns `indeterminate_result` and is never replayed automatically; verify the record in QuickBooks before deciding whether to retry.
 
+Entity getters return allowlisted, workflow-relevant data rather than raw QuickBooks API objects. IDs, `SyncToken`, editable line IDs, linked transactions, and references needed for follow-up work are retained; unsupported upstream fields and opaque nested payloads are excluded from both inline HTTP output and local report files. Generic queries and financial reports remain broader read surfaces and use the bounded output policy described above.
+
 ---
 
 ## Available Tools
