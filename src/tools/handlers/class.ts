@@ -138,7 +138,18 @@ export async function handleGetClass(
       lines.push(`Last Updated: ${cls.MetaData.LastUpdatedTime}`);
   }
 
-  return outputReport(`class-${cls.Id}`, cls, lines.join("\n"), context?.output);
+  const reportData: QBClass = {
+    Id: cls.Id,
+    SyncToken: cls.SyncToken,
+    Name: cls.Name,
+    FullyQualifiedName: cls.FullyQualifiedName,
+    Active: cls.Active,
+    SubClass: cls.SubClass,
+    ParentRef: cls.ParentRef,
+    MetaData: cls.MetaData,
+  };
+
+  return outputReport(`class-${cls.Id}`, reportData, lines.join("\n"), context?.output);
 }
 
 export async function handleEditClass(

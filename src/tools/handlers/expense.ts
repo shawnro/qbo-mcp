@@ -238,6 +238,7 @@ export async function handleGetExpense(
     PrintStatus?: string;
     Credit?: boolean;
     IncludeInAnnualTPAR?: boolean;
+    LinkedTxn?: Array<{ TxnId: string; TxnType: string; TxnLineId?: string }>;
     Line?: Array<{
       Id: string;
       Amount: number;
@@ -297,7 +298,53 @@ export async function handleGetExpense(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`expense-${expense.Id}`, expense, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: expense.Id,
+    SyncToken: expense.SyncToken,
+    TxnDate: expense.TxnDate,
+    PaymentType: expense.PaymentType,
+    DocNumber: expense.DocNumber,
+    PrivateNote: expense.PrivateNote,
+    TotalAmt: expense.TotalAmt,
+    AccountRef: expense.AccountRef,
+    EntityRef: expense.EntityRef,
+    DepartmentRef: expense.DepartmentRef,
+    CurrencyRef: expense.CurrencyRef,
+    ExchangeRate: expense.ExchangeRate,
+    GlobalTaxCalculation: expense.GlobalTaxCalculation,
+    PaymentMethodRef: expense.PaymentMethodRef,
+    PrintStatus: expense.PrintStatus,
+    Credit: expense.Credit,
+    IncludeInAnnualTPAR: expense.IncludeInAnnualTPAR,
+    LinkedTxn: expense.LinkedTxn?.map((txn) => ({
+      TxnId: txn.TxnId,
+      TxnType: txn.TxnType,
+      TxnLineId: txn.TxnLineId,
+    })),
+    Line: expense.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      AccountBasedExpenseLineDetail: line.AccountBasedExpenseLineDetail
+        ? {
+            AccountRef: line.AccountBasedExpenseLineDetail.AccountRef,
+            DepartmentRef: line.AccountBasedExpenseLineDetail.DepartmentRef,
+            CustomerRef: line.AccountBasedExpenseLineDetail.CustomerRef,
+            BillableStatus: line.AccountBasedExpenseLineDetail.BillableStatus,
+          }
+        : undefined,
+      ItemBasedExpenseLineDetail: line.ItemBasedExpenseLineDetail
+        ? {
+            ItemRef: line.ItemBasedExpenseLineDetail.ItemRef,
+            Qty: line.ItemBasedExpenseLineDetail.Qty,
+            UnitPrice: line.ItemBasedExpenseLineDetail.UnitPrice,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`expense-${expense.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditExpense(

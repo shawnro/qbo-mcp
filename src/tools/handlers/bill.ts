@@ -232,6 +232,13 @@ export async function handleGetBill(
     TotalAmt?: number;
     VendorRef?: { value: string; name?: string };
     APAccountRef?: { value: string; name?: string };
+    DepartmentRef?: { value: string; name?: string };
+    SalesTermRef?: { value: string; name?: string };
+    CurrencyRef?: { value: string; name?: string };
+    ExchangeRate?: number;
+    GlobalTaxCalculation?: string;
+    IncludeInAnnualTPAR?: boolean;
+    LinkedTxn?: Array<{ TxnId: string; TxnType: string; TxnLineId?: string }>;
     Line?: Array<{
       Id: string;
       Amount: number;
@@ -264,6 +271,7 @@ export async function handleGetBill(
     `Ref no.: ${bill.DocNumber || '(none)'}`,
     `Memo: ${bill.PrivateNote || '(none)'}`,
     `AP Account: ${bill.APAccountRef?.name || bill.APAccountRef?.value || 'Accounts Payable'}`,
+    `Department: ${bill.DepartmentRef?.name || bill.DepartmentRef?.value || '(none)'}`,
     `Total: $${(bill.TotalAmt || 0).toFixed(2)}`,
     '',
     'Lines:',
@@ -290,7 +298,51 @@ export async function handleGetBill(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`bill-${bill.Id}`, bill, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: bill.Id,
+    SyncToken: bill.SyncToken,
+    TxnDate: bill.TxnDate,
+    DueDate: bill.DueDate,
+    DocNumber: bill.DocNumber,
+    PrivateNote: bill.PrivateNote,
+    TotalAmt: bill.TotalAmt,
+    VendorRef: bill.VendorRef,
+    APAccountRef: bill.APAccountRef,
+    DepartmentRef: bill.DepartmentRef,
+    SalesTermRef: bill.SalesTermRef,
+    CurrencyRef: bill.CurrencyRef,
+    ExchangeRate: bill.ExchangeRate,
+    GlobalTaxCalculation: bill.GlobalTaxCalculation,
+    IncludeInAnnualTPAR: bill.IncludeInAnnualTPAR,
+    LinkedTxn: bill.LinkedTxn?.map((txn) => ({
+      TxnId: txn.TxnId,
+      TxnType: txn.TxnType,
+      TxnLineId: txn.TxnLineId,
+    })),
+    Line: bill.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      AccountBasedExpenseLineDetail: line.AccountBasedExpenseLineDetail
+        ? {
+            AccountRef: line.AccountBasedExpenseLineDetail.AccountRef,
+            DepartmentRef: line.AccountBasedExpenseLineDetail.DepartmentRef,
+            CustomerRef: line.AccountBasedExpenseLineDetail.CustomerRef,
+            BillableStatus: line.AccountBasedExpenseLineDetail.BillableStatus,
+          }
+        : undefined,
+      ItemBasedExpenseLineDetail: line.ItemBasedExpenseLineDetail
+        ? {
+            ItemRef: line.ItemBasedExpenseLineDetail.ItemRef,
+            Qty: line.ItemBasedExpenseLineDetail.Qty,
+            UnitPrice: line.ItemBasedExpenseLineDetail.UnitPrice,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`bill-${bill.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditBill(

@@ -266,7 +266,30 @@ export async function handleGetDeposit(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`deposit-${deposit.Id}`, deposit, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: deposit.Id,
+    SyncToken: deposit.SyncToken,
+    TxnDate: deposit.TxnDate,
+    PrivateNote: deposit.PrivateNote,
+    TotalAmt: deposit.TotalAmt,
+    DepositToAccountRef: deposit.DepositToAccountRef,
+    DepartmentRef: deposit.DepartmentRef,
+    Line: deposit.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      DepositLineDetail: line.DepositLineDetail
+        ? {
+            AccountRef: line.DepositLineDetail.AccountRef,
+            Entity: line.DepositLineDetail.Entity,
+            ClassRef: line.DepositLineDetail.ClassRef,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`deposit-${deposit.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditDeposit(

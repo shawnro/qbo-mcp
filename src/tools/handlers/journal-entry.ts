@@ -257,7 +257,29 @@ export async function handleGetJournalEntry(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`journal-entry-${je.Id}`, je, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: je.Id,
+    SyncToken: je.SyncToken,
+    TxnDate: je.TxnDate,
+    DocNumber: je.DocNumber,
+    PrivateNote: je.PrivateNote,
+    TotalAmt: je.TotalAmt,
+    Line: je.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      JournalEntryLineDetail: line.JournalEntryLineDetail
+        ? {
+            PostingType: line.JournalEntryLineDetail.PostingType,
+            AccountRef: line.JournalEntryLineDetail.AccountRef,
+            DepartmentRef: line.JournalEntryLineDetail.DepartmentRef,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`journal-entry-${je.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditJournalEntry(

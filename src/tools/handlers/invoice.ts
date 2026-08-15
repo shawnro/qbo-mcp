@@ -299,7 +299,46 @@ export async function handleGetInvoice(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`invoice-${invoice.Id}`, invoice, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: invoice.Id,
+    SyncToken: invoice.SyncToken,
+    TxnDate: invoice.TxnDate,
+    DueDate: invoice.DueDate,
+    DocNumber: invoice.DocNumber,
+    PrivateNote: invoice.PrivateNote,
+    TotalAmt: invoice.TotalAmt,
+    Balance: invoice.Balance,
+    CustomerRef: invoice.CustomerRef,
+    DepartmentRef: invoice.DepartmentRef,
+    BillEmail: invoice.BillEmail,
+    CustomerMemo: invoice.CustomerMemo,
+    EmailStatus: invoice.EmailStatus,
+    LinkedTxn: invoice.LinkedTxn?.map((txn) => ({
+      TxnId: txn.TxnId,
+      TxnType: txn.TxnType,
+    })),
+    AllowOnlineCreditCardPayment: invoice.AllowOnlineCreditCardPayment,
+    AllowOnlineACHPayment: invoice.AllowOnlineACHPayment,
+    SalesTermRef: invoice.SalesTermRef,
+    Line: invoice.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      SalesItemLineDetail: line.SalesItemLineDetail
+        ? {
+            ItemRef: line.SalesItemLineDetail.ItemRef,
+            Qty: line.SalesItemLineDetail.Qty,
+            UnitPrice: line.SalesItemLineDetail.UnitPrice,
+            ItemAccountRef: line.SalesItemLineDetail.ItemAccountRef,
+            ClassRef: line.SalesItemLineDetail.ClassRef,
+            TaxCodeRef: line.SalesItemLineDetail.TaxCodeRef,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`invoice-${invoice.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditInvoice(

@@ -260,7 +260,35 @@ export async function handleGetSalesReceipt(
   lines.push('');
   lines.push(`View in QuickBooks: ${qboUrl}`);
 
-  return outputReport(`salesreceipt-${salesReceipt.Id}`, salesReceipt, lines.join('\n'), context?.output);
+  const reportData = {
+    Id: salesReceipt.Id,
+    SyncToken: salesReceipt.SyncToken,
+    TxnDate: salesReceipt.TxnDate,
+    DocNumber: salesReceipt.DocNumber,
+    PrivateNote: salesReceipt.PrivateNote,
+    TotalAmt: salesReceipt.TotalAmt,
+    CustomerRef: salesReceipt.CustomerRef,
+    DepositToAccountRef: salesReceipt.DepositToAccountRef,
+    DepartmentRef: salesReceipt.DepartmentRef,
+    Line: salesReceipt.Line?.map((line) => ({
+      Id: line.Id,
+      Amount: line.Amount,
+      Description: line.Description,
+      DetailType: line.DetailType,
+      SalesItemLineDetail: line.SalesItemLineDetail
+        ? {
+            ItemRef: line.SalesItemLineDetail.ItemRef,
+            Qty: line.SalesItemLineDetail.Qty,
+            UnitPrice: line.SalesItemLineDetail.UnitPrice,
+            ItemAccountRef: line.SalesItemLineDetail.ItemAccountRef,
+            ClassRef: line.SalesItemLineDetail.ClassRef,
+            TaxCodeRef: line.SalesItemLineDetail.TaxCodeRef,
+          }
+        : undefined,
+    })),
+  };
+
+  return outputReport(`salesreceipt-${salesReceipt.Id}`, reportData, lines.join('\n'), context?.output);
 }
 
 export async function handleEditSalesReceipt(

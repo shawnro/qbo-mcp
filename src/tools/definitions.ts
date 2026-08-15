@@ -540,7 +540,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_journal_entry",
-    description: "Fetch a single journal entry by ID with full details including SyncToken (needed for edits). Returns formatted summary and writes full object to temp file.",
+    description: "Fetch a single journal entry by ID with workflow-relevant details including SyncToken and line IDs needed for edits.",
     inputSchema: {
       type: "object",
       properties: {
@@ -709,7 +709,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_bill",
-    description: "Fetch a single bill by ID with full details including SyncToken (needed for edits). Returns vendor, date, due date, amount, AP account, and line details including customer/job and billable status when present.",
+    description: "Fetch a single bill by ID with workflow-relevant details including SyncToken, vendor, dates, amount, AP account, and editable line IDs, customer/jobs, and billable status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -800,7 +800,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_expense",
-    description: "Fetch a single expense (Purchase) by ID with full details including SyncToken. Covers Expenses, Checks, and Credit Card charges. Returns payment type, account, date, amount, and line details including customer/job and billable status when present.",
+    description: "Fetch a single expense (Purchase) by ID with workflow-relevant details including SyncToken. Covers Expenses, Checks, and Credit Card charges, with payment, account, date, amount, and editable line details.",
     inputSchema: {
       type: "object",
       properties: {
@@ -972,7 +972,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_sales_receipt",
-    description: "Fetch a single sales receipt by ID with full details including SyncToken (needed for edits). Returns customer, date, deposit account, department, line details with items/qty/price.",
+    description: "Fetch a single sales receipt by ID with workflow-relevant details including SyncToken, customer, date, deposit account, department, and editable item line IDs, quantities, and prices.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1262,7 +1262,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_invoice",
-    description: "Fetch a single invoice by ID with full details including SyncToken (needed for edits). Returns customer, date, due date, balance, department, line details with items/qty/price.",
+    description: "Fetch a single invoice by ID with workflow-relevant details including SyncToken, customer, dates, balance, department, and editable item line IDs, quantities, and prices.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1446,7 +1446,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_deposit",
-    description: "Fetch a single deposit by ID with full details including SyncToken (needed for edits). Returns deposit account, date, memo, and line details showing source accounts and amounts.",
+    description: "Fetch a single deposit by ID with workflow-relevant details including SyncToken, deposit account, date, memo, and editable line IDs, source accounts, and amounts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1602,7 +1602,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_vendor_credit",
-    description: "Fetch a single vendor credit by ID with full details including SyncToken (needed for edits). Returns vendor, date, memo, ref number, AP account, and line details including expense account, customer/job, billable status, and amount.",
+    description: "Fetch a single vendor credit by ID with workflow-relevant details including SyncToken, vendor, date, memo, AP account, and editable line IDs, customer/jobs, billable status, and amounts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1762,7 +1762,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_bill_payment",
-    description: "Fetch a single bill payment by ID with full details including SyncToken. Shows vendor, date, pay type, bank account, linked bills/credits with applied amounts, and flags any unapplied amount (payment total not matching net applied lines).",
+    description: "Fetch a single bill payment by ID with workflow-relevant details including SyncToken, vendor, date, pay type, payment account, linked bills/credits, applied amounts, and any unapplied amount.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2016,7 +2016,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_customer",
-    description: "Fetch a single customer by ID with full details including SyncToken (needed for edits). Returns name, contact info, addresses, balance, hierarchy (parent/sub-customer), and active status.",
+    description: "Fetch a single customer by ID with workflow-relevant details including SyncToken, name, contact info, addresses, balance, hierarchy, and active status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2181,7 +2181,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_class",
-    description: "Fetch a single class by ID with full details including SyncToken (needed for edits). Returns name, active status, hierarchy (parent/sub-class), and metadata.",
+    description: "Fetch a single class by ID with workflow-relevant details including SyncToken, name, active status, hierarchy, and metadata.",
     inputSchema: {
       type: "object",
       properties: {
