@@ -5,6 +5,7 @@ import { asMCPToolResult } from "../types/index.js";
 import type { InternalToolResult, MCPToolResult } from "../types/index.js";
 import type { QboRequestContext } from "../runtime/types.js";
 import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
+import { isQboOperationTimeoutError } from "../client/promisify.js";
 import { formatQBOError, isAmbiguousMutationError } from "../utils/index.js";
 import { isToolDisabled } from "./crud-filter.js";
 import { getToolEffect } from "./effects.js";
@@ -181,6 +182,18 @@ async function executeToolAttempt(
   try {
     return asMCPToolResult(await executeOperation());
   } catch (error) {
+    if (isQboOperationTimeoutError(error)) {
+      return {
+        content: [{
+          type: "text",
+          text: effect === "committed-mutation"
+            ? indeterminateResultMessage(name, error)
+            : timeoutResultMessage(name, effect, error.timeoutMs),
+        }],
+        isError: true,
+      };
+    }
+
     if (isAuthError(error)) {
       try {
         if (context && failedCredentialFingerprint) {
@@ -211,6 +224,15 @@ async function executeToolAttempt(
       try {
         return asMCPToolResult(await executeOperation());
       } catch (retryError) {
+        if (isQboOperationTimeoutError(retryError)) {
+          return {
+            content: [{
+              type: "text",
+              text: timeoutResultMessage(name, effect, retryError.timeoutMs),
+            }],
+            isError: true,
+          };
+        }
         // If retry also fails, return that error
         return {
           content: [{ type: "text", text: `Error after retry: ${formatQBOError(retryError)}` }],
@@ -230,6 +252,17 @@ async function executeToolAttempt(
       isError: true,
     };
   }
+}
+
+function timeoutResultMessage(
+  name: string,
+  effect: "read" | "preview",
+  timeoutMs: number
+): string {
+  const guidance = effect === "read"
+    ? "Retry the read."
+    : "Retry the preview; no committed write was requested.";
+  return `timeout: "${name}" exceeded the ${timeoutMs} ms QuickBooks callback deadline. ${guidance}`;
 }
 
 function indeterminateResultMessage(name: string, error?: unknown): string {

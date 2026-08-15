@@ -409,6 +409,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_CREDENTIAL_FILE` | `~/.qbo-mcp/credentials.json` | Custom credential file path |
 | `QBO_INLINE_OUTPUT` | `false` | Return responses inline instead of writing to `/tmp` files. Required when using Claude Desktop or plugin environments where file-based output is not accessible to the model. |
 | `QBO_SANDBOX` | `false` | Use QuickBooks sandbox environment |
+| `QBO_REQUEST_TIMEOUT_MS` | `60000` | Maximum wait for a QuickBooks callback, from 1 to 600000 ms. Hosted deployments should keep this below the platform request timeout. |
 | `AWS_REGION` | `us-east-2` | AWS region (aws mode) |
 | `QBO_SECRET_NAME` | `prod/qbo` | Secrets Manager secret name (aws mode) |
 | `QBO_COMPANY_ID_PARAM` | `/prod/qbo/company_id` | SSM parameter path (aws mode) |
@@ -440,6 +441,8 @@ The hosted transport uses one configured QuickBooks company per endpoint. Local 
 Hosted deployments must currently run as one process/replica and set `MCP_SINGLE_REPLICA=true`. Refresh coordination is process-local, so Lambda reserved concurrency and container replica limits must both be one. Do not scale a hosted endpoint beyond one replica until distributed refresh locking is implemented and validated; that work is planned with the Azure deployment adapters.
 
 Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability policy live in a provider-neutral Web `Request` to `Response` application. AWS Lambda is an API Gateway adapter over that application; Azure Functions and Node/container adapters can use the same core without duplicating accounting or security policy.
+
+QuickBooks callback operations have a configurable deadline through `QBO_REQUEST_TIMEOUT_MS`. A deadline stops the MCP request from waiting but cannot cancel a request already sent by `node-quickbooks`. Timed-out reads and draft previews can be retried. A timed-out committed mutation returns `indeterminate_result` and is never replayed automatically; verify the record in QuickBooks before deciding whether to retry.
 
 ---
 

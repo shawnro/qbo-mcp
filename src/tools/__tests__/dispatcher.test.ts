@@ -68,6 +68,7 @@ vi.mock("../../tools/handlers/index.js", () => ({
 }));
 
 import { executeTool } from "../index.js";
+import { QboOperationTimeoutError } from "../../client/promisify.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 import {
   handleCreateAttachable,
@@ -210,6 +211,34 @@ describe("executeTool", () => {
     expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
   });
 
+  it("returns bounded retry guidance when a read exceeds its callback deadline", async () => {
+    mockHandleGetCompanyInfo.mockRejectedValue(new QboOperationTimeoutError(25));
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      'timeout: "get_company_info" exceeded the 25 ms QuickBooks callback deadline. Retry the read.'
+    );
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("returns safe retry guidance when a preview exceeds its callback deadline", async () => {
+    mockHandleCreateVendor.mockRejectedValue(new QboOperationTimeoutError(25));
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      'timeout: "create_vendor" exceeded the 25 ms QuickBooks callback deadline. ' +
+      "Retry the preview; no committed write was requested."
+    );
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+  });
+
   it("retries after refreshing token on auth error", async () => {
     // First call fails with auth error
     mockHandleGetCompanyInfo
@@ -226,6 +255,24 @@ describe("executeTool", () => {
     expect(mockRefreshTokens).toHaveBeenCalledOnce();
     // getClient called twice (once for initial, once for retry)
     expect(mockGetClient).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns timeout guidance when a read deadline expires after auth refresh", async () => {
+    mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(new Error("AuthenticationFailed"))
+      .mockRejectedValueOnce(new QboOperationTimeoutError(25));
+    mockIsAuthError.mockImplementation((error) =>
+      error instanceof Error && error.message === "AuthenticationFailed"
+    );
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const result = await executeTool("get_company_info", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      'timeout: "get_company_info" exceeded the 25 ms QuickBooks callback deadline. Retry the read.'
+    );
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(2);
   });
 
   it("stops when refresh fails instead of retrying with stale credentials", async () => {
@@ -283,6 +330,21 @@ describe("executeTool", () => {
       new Error("socket timed out"),
       { code: "ETIMEDOUT" }
     ));
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("indeterminate_result");
+    expect(result.content[0].text).toContain("ETIMEDOUT");
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("marks a callback-deadline committed result indeterminate without replay", async () => {
+    mockHandleCreateVendor.mockRejectedValue(new QboOperationTimeoutError(25));
 
     const result = await executeTool("create_vendor", {
       display_name: "Acme",

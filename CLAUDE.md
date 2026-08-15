@@ -140,6 +140,8 @@ npm run watch         # Watch mode for development
 
 Both builds must pass before committing. After changes, restart Claude Code to reload the MCP server.
 
+All node-quickbooks callbacks pass through a bounded deadline (`QBO_REQUEST_TIMEOUT_MS`, default 60 seconds). The deadline does not cancel an upstream request. Reads/previews may be retried after timeout; committed mutations return `indeterminate_result` and must never be replayed automatically.
+
 ## Workflow
 
 - Feature backlog is tracked in `wmc-reconcile/docs/qbo-mcp-backlog.md` — move items to Completed when done
