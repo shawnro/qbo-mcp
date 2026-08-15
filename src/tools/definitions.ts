@@ -1,5 +1,130 @@
 // Tool definitions for QuickBooks MCP server
 
+const requireAnyOf = (...fields: string[]) => ({
+  anyOf: fields.map((field) => ({
+    required: [field],
+    properties: { [field]: { minLength: 1 } },
+  })),
+});
+
+const requireExactlyOneOf = (...fields: string[]) => ({
+  oneOf: fields.map((field) => ({
+    required: [field],
+    properties: { [field]: { minLength: 1 } },
+  })),
+});
+
+const rejectCombination = (...fields: string[]) => ({
+  not: {
+    required: fields,
+    properties: Object.fromEntries(fields.map((field) => [field, { minLength: 1 }])),
+  },
+});
+
+const requireNewLine = (...constraints: object[]) => ({
+  allOf: [{
+    if: {
+      required: ["line_id"],
+      properties: { line_id: { minLength: 1 } },
+    },
+    else: { allOf: constraints },
+  }],
+});
+
+const newAccountLineConstraints = [
+  {
+    required: ["amount", "account_name"],
+    properties: { account_name: { minLength: 1 } },
+  },
+  {
+    not: {
+      required: ["clear_customer"],
+      properties: { clear_customer: { const: true } },
+    },
+  },
+];
+
+const newItemLineConstraints = [
+  requireAnyOf("item_name", "item_id"),
+  {
+    anyOf: [
+      { required: ["amount"] },
+      { required: ["qty", "unit_price"] },
+    ],
+  },
+];
+
+const lineCustomerRefCreateConstraints = rejectCombination("customer_name", "customer_id");
+
+const lineCustomerRefEditConstraints = {
+  allOf: [
+    lineCustomerRefCreateConstraints,
+    {
+      not: {
+        required: ["clear_customer"],
+        properties: { clear_customer: { const: true } },
+        anyOf: [
+          requireAnyOf("customer_name").anyOf[0],
+          requireAnyOf("customer_id").anyOf[0],
+        ],
+      },
+    },
+    {
+      not: {
+        required: ["delete"],
+        properties: { delete: { const: true } },
+        anyOf: [
+          requireAnyOf("customer_name").anyOf[0],
+          requireAnyOf("customer_id").anyOf[0],
+          {
+            required: ["clear_customer"],
+            properties: { clear_customer: { const: true } },
+          },
+        ],
+      },
+    },
+  ],
+};
+
+const attachableEntityLinkConstraint = {
+  oneOf: [
+    {
+      required: ["entity_type", "entity_id"],
+      properties: {
+        entity_type: { minLength: 1 },
+        entity_id: { minLength: 1 },
+      },
+    },
+    {
+      not: {
+        anyOf: [
+          { required: ["entity_type"] },
+          { required: ["entity_id"] },
+          { required: ["include_on_send"] },
+        ],
+      },
+    },
+  ],
+};
+
+const vendorClearFields = [
+  ["email", "clear_email"],
+  ["phone", "clear_phone"],
+  ["mobile", "clear_mobile"],
+  ["fax", "clear_fax"],
+  ["web_address", "clear_web_address"],
+  ["bill_address", "clear_bill_address"],
+  ["terms_ref", "clear_terms"],
+  ["account_number", "clear_account_number"],
+] as const;
+
+const vendorClearConstraints = vendorClearFields.map(([valueField, clearField]) => ({
+  not: {
+    required: [valueField, clearField],
+    properties: { [clearField]: { const: true } },
+  },
+}));
+
 const lineCustomerRefCreateProperties = {
   customer_name: {
     type: "string",
@@ -121,6 +246,17 @@ const vendorWriteProperties = {
   },
 };
 
+const vendorChangeConstraint = {
+  anyOf: [
+    ...Object.keys(vendorWriteProperties).map((field) => ({ required: [field] })),
+    { required: ["active"] },
+    ...vendorClearFields.map(([, clearField]) => ({
+      required: [clearField],
+      properties: { [clearField]: { const: true } },
+    })),
+  ],
+};
+
 export const toolDefinitions = [
   {
     name: "qbo_authenticate",
@@ -130,6 +266,16 @@ export const toolDefinitions = [
       "This tool only works when QBO_CREDENTIAL_MODE is 'local' (the default).",
     inputSchema: {
       type: "object",
+      allOf: [{
+        if: {
+          required: ["authorization_code"],
+          properties: { authorization_code: { minLength: 1 } },
+        },
+        then: {
+          required: ["realm_id"],
+          properties: { realm_id: { minLength: 1 } },
+        },
+      }],
       properties: {
         authorization_code: {
           type: "string",
@@ -340,6 +486,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of line items. Provide account_name OR account_id (name preferred). Optionally provide department_name OR department_id.",
           items: {
             type: "object",
@@ -375,6 +522,7 @@ export const toolDefinitions = [
               },
             },
             required: ["amount", "posting_type"],
+            ...requireAnyOf("account_name", "account_id"),
           },
         },
         draft: {
@@ -463,6 +611,10 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
+            ...requireNewLine({
+              required: ["amount", "posting_type", "account_name"],
+              properties: { account_name: { minLength: 1 } },
+            }),
           },
         },
         draft: {
@@ -478,6 +630,7 @@ export const toolDefinitions = [
     description: "Create a vendor bill. Accepts vendor/account/department names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Note: DepartmentRef is header-level only — for multi-department splits, create separate bills (one per department). Returns bill details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
+      ...requireAnyOf("vendor_name", "vendor_id"),
       properties: {
         vendor_name: {
           type: "string",
@@ -518,6 +671,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of expense line items. Provide account_name OR account_id (name preferred).",
           items: {
             type: "object",
@@ -541,6 +695,8 @@ export const toolDefinitions = [
               ...lineCustomerRefCreateProperties,
             },
             required: ["amount"],
+            ...requireAnyOf("account_name", "account_id"),
+            ...lineCustomerRefCreateConstraints,
           },
         },
         draft: {
@@ -628,6 +784,10 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
+            allOf: [
+              ...lineCustomerRefEditConstraints.allOf,
+              ...requireNewLine(...newAccountLineConstraints).allOf,
+            ],
           },
         },
         draft: {
@@ -702,6 +862,10 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
+            allOf: [
+              ...lineCustomerRefEditConstraints.allOf,
+              ...requireNewLine(...newAccountLineConstraints).allOf,
+            ],
           },
         },
         department_name: {
@@ -770,6 +934,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of expense line items. Provide account_name OR account_id (name preferred).",
           items: {
             type: "object",
@@ -793,6 +958,8 @@ export const toolDefinitions = [
               ...lineCustomerRefCreateProperties,
             },
             required: ["amount"],
+            ...requireAnyOf("account_name", "account_id"),
+            ...lineCustomerRefCreateConstraints,
           },
         },
         draft: {
@@ -882,6 +1049,7 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
+            ...requireNewLine(...newItemLineConstraints),
           },
         },
         draft: {
@@ -897,6 +1065,7 @@ export const toolDefinitions = [
     description: "Create a sales receipt. Accepts item/customer/department names (will lookup IDs automatically). Provide at most one of customer_name or customer_id. Lines reference items (products/services) not accounts. Returns receipt details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
+      ...rejectCombination("customer_name", "customer_id"),
       properties: {
         txn_date: {
           type: "string",
@@ -933,6 +1102,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of line items. Each line references an item (product/service). Provide item_name OR item_id (name preferred).",
           items: {
             type: "object",
@@ -963,6 +1133,13 @@ export const toolDefinitions = [
               },
             },
             required: [],
+            ...requireAnyOf("item_name", "item_id"),
+            allOf: [{
+              anyOf: [
+                { required: ["amount"] },
+                { required: ["qty", "unit_price"] },
+              ],
+            }],
           },
         },
         draft: {
@@ -978,6 +1155,7 @@ export const toolDefinitions = [
     description: "Create an invoice. Accepts item/customer/department names (will lookup IDs automatically). Exactly one of customer_name or customer_id is REQUIRED — invoices must have a customer. Lines use SalesItemLineDetail (product/service references, not accounts). Returns invoice details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
+      ...requireExactlyOneOf("customer_name", "customer_id"),
       properties: {
         txn_date: {
           type: "string",
@@ -1034,6 +1212,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of line items. Each line references an item (product/service). Provide item_name OR item_id (name preferred).",
           items: {
             type: "object",
@@ -1064,6 +1243,13 @@ export const toolDefinitions = [
               },
             },
             required: [],
+            ...requireAnyOf("item_name", "item_id"),
+            allOf: [{
+              anyOf: [
+                { required: ["amount"] },
+                { required: ["qty", "unit_price"] },
+              ],
+            }],
           },
         },
         draft: {
@@ -1177,6 +1363,7 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
+            ...requireNewLine(...newItemLineConstraints),
           },
         },
         draft: {
@@ -1203,6 +1390,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of deposit line items. Each line represents a source of the deposit. Amounts can be positive or negative.",
           items: {
             type: "object",
@@ -1233,6 +1421,7 @@ export const toolDefinitions = [
               },
             },
             required: ["amount"],
+            ...requireAnyOf("account_name", "account_id"),
           },
         },
         department_name: {
@@ -1338,6 +1527,7 @@ export const toolDefinitions = [
     description: "Create a vendor credit. Accepts vendor/account/department names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Lines represent credit amounts applied to expense accounts. Returns credit details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
+      ...requireAnyOf("vendor_name", "vendor_id"),
       properties: {
         vendor_name: {
           type: "string",
@@ -1374,6 +1564,7 @@ export const toolDefinitions = [
         },
         lines: {
           type: "array",
+          minItems: 1,
           description: "Array of line items. Each line credits an expense account.",
           items: {
             type: "object",
@@ -1397,6 +1588,8 @@ export const toolDefinitions = [
               ...lineCustomerRefCreateProperties,
             },
             required: ["amount"],
+            ...requireAnyOf("account_name", "account_id"),
+            ...lineCustomerRefCreateConstraints,
           },
         },
         draft: {
@@ -1476,6 +1669,10 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
+            allOf: [
+              ...lineCustomerRefEditConstraints.allOf,
+              ...requireNewLine(...newAccountLineConstraints).allOf,
+            ],
           },
         },
         draft: {
@@ -1491,6 +1688,7 @@ export const toolDefinitions = [
     description: "Create a bill payment (the QBO 'check' / 'pay bills' flow). Pays one or more existing bills and optionally applies vendor credits, clearing Accounts Payable. Use this to record vendor ACH/EFT debits or checks so the bank feed can match them — especially when a bank charge equals bills minus credit memos. Amounts default to each bill's open balance and each credit's remaining balance. Returns payment details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
+      ...requireAnyOf("vendor_name", "vendor_id"),
       properties: {
         vendor_name: {
           type: "string",
@@ -1519,6 +1717,7 @@ export const toolDefinitions = [
         },
         bills: {
           type: "array",
+          minItems: 1,
           description: "Bills to pay. Each bill must belong to the vendor and have an open balance.",
           items: {
             type: "object",
@@ -1609,6 +1808,8 @@ export const toolDefinitions = [
     description: "Modify a Vendor using its latest QBO SyncToken. Omitted fields are preserved. Use explicit clear_* directives to remove optional contact, address, terms, or account-number values. Defaults to draft mode. Set active=true to reactivate a vendor.",
     inputSchema: {
       type: "object",
+      allOf: vendorClearConstraints,
+      ...vendorChangeConstraint,
       properties: {
         id: {
           type: "string",
@@ -2031,6 +2232,11 @@ export const toolDefinitions = [
     description: "Create an attachable — either a file upload or a note. file_path must be an absolute path on the computer running qbo-mcp; files uploaded only to Claude Chat are not automatically available. Maximum 100 MB. At least one of file_path or note is required. Optionally link to a transaction using both entity_type and entity_id.",
     inputSchema: {
       type: "object",
+      anyOf: [
+        requireAnyOf("file_path").anyOf[0],
+        requireAnyOf("note").anyOf[0],
+      ],
+      allOf: [attachableEntityLinkConstraint],
       properties: {
         file_path: {
           type: "string",
@@ -2136,6 +2342,12 @@ export const toolDefinitions = [
     description: "Update an attachable's metadata. Can change note text, category, or set an entity link (replaces all existing links). Cannot replace the uploaded file — to change a file, delete and re-create.",
     inputSchema: {
       type: "object",
+      anyOf: [
+        { required: ["note"] },
+        { required: ["category"] },
+        { required: ["entity_type", "entity_id"] },
+      ],
+      allOf: [attachableEntityLinkConstraint],
       properties: {
         id: {
           type: "string",

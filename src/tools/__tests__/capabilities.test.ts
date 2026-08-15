@@ -2,7 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { MCPToolResult } from "../../types/index.js";
 import { createToolExecutor, getToolDefinitions } from "../capabilities.js";
 
-const definitions = [
+interface TestToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema: {
+    type: string;
+    properties: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+}
+
+const definitions: TestToolDefinition[] = [
   { name: "query", inputSchema: { type: "object", properties: {} } },
   { name: "qbo_authenticate", inputSchema: { type: "object", properties: {} } },
   { name: "list_qbo_profiles", inputSchema: { type: "object", properties: {} } },
@@ -26,6 +36,10 @@ describe("deployment capabilities", () => {
     const remote = getToolDefinitions(definitions, "remote");
     expect(remote.map((tool) => tool.name)).toEqual(["query", "create_attachable"]);
     expect(remote[1].inputSchema.properties).toEqual({ note: { type: "string" } });
+    expect(remote[1].inputSchema.anyOf).toEqual([{
+      required: ["note"],
+      properties: { note: { minLength: 1 } },
+    }]);
     expect(definitions[4].inputSchema.properties).toHaveProperty("file_path");
   });
 

@@ -83,6 +83,8 @@ Every new tool requires changes in **4 files** plus README:
 
 Follow the pattern of the nearest existing tool. Use `outputReport()` for any tool that returns data (handles stdio vs HTTP mode automatically).
 
+Encode structural input contracts in the tool's JSON Schema, including non-empty identities, mutually exclusive fields, paired fields, and create-versus-edit line requirements. Add semantic fixtures using the MCP SDK's `AjvJsonSchemaValidator` when introducing cross-field rules. Keep QBO-state-dependent and arithmetic validation, such as SyncTokens, open balances, existing line IDs, and balanced debits/credits, authoritative in handlers.
+
 ### HTTP Mode Context Budget
 
 `outputReport()` behaves differently by transport:
