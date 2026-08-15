@@ -4,8 +4,8 @@
 import { vi } from "vitest";
 
 /**
- * Promisify implementation for use in vi.mock() blocks.
- * Matches the real promisify from src/client/promisify.ts.
+ * Minimal callback adapter for handler tests. Deadline behavior is covered by
+ * the dedicated client/promisify tests rather than duplicated in every mock.
  */
 export function mockPromisify<T>(
   fn: (callback: (err: Error | null, result: T) => void) => void
