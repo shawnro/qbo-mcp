@@ -127,8 +127,7 @@ export async function handleCreateJournalEntry(
     TxnDate: txn_date,
     PrivateNote: memo,
     ...(doc_number && { DocNumber: doc_number }),
-    Line: resolvedLines.map((line, idx) => ({
-      Id: String(idx),
+    Line: resolvedLines.map((line) => ({
       Amount: line.amount,
       DetailType: "JournalEntryLineDetail",
       Description: line.description,

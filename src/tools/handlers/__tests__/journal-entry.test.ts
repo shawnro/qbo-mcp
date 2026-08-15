@@ -136,6 +136,8 @@ describe("handleCreateJournalEntry", () => {
     expect(result.content[0].text).toContain("Journal Entry Created");
     expect(result.content[0].text).toContain("JE-001");
     expect(client.createJournalEntry).toHaveBeenCalledOnce();
+    const payload = client.createJournalEntry.mock.calls[0][0];
+    expect(payload.Line.every((line: Record<string, unknown>) => !("Id" in line))).toBe(true);
   });
 
   it("shares one account refresh across lines and preserves line order", async () => {
@@ -581,6 +583,28 @@ describe("handleEditJournalEntry", () => {
     const payload = client.updateJournalEntry.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
     expect(payload.Line).toBeDefined();
+  });
+
+  it("lets QBO assign IDs to new lines added during edit", async () => {
+    mockSuccess(client.updateJournalEntry, { Id: "77", SyncToken: "3" });
+
+    await handleEditJournalEntry(client as never, {
+      id: "77",
+      draft: false,
+      lines: [
+        { account_name: "Rent Expense", amount: 50, posting_type: "Debit" },
+        { account_name: "Cash", amount: 50, posting_type: "Credit" },
+      ],
+    });
+
+    const payload = client.updateJournalEntry.mock.calls[0][0];
+    const persistedIds = payload.Line
+      .filter((line: Record<string, unknown>) => "Id" in line)
+      .map((line: Record<string, unknown>) => line.Id);
+    const newLines = payload.Line.filter((line: Record<string, unknown>) => !("Id" in line));
+
+    expect(persistedIds).toEqual(["0", "1"]);
+    expect(newLines).toHaveLength(2);
   });
 
   it("deletes a line by line_id", async () => {
