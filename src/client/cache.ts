@@ -2,6 +2,7 @@
 
 import QuickBooks from "node-quickbooks";
 import { promisify } from "./promisify.js";
+import { resolveUniqueName } from "./name-resolution.js";
 import {
   CachedAccount,
   CachedCustomer,
@@ -129,8 +130,11 @@ export async function resolveAccount(
     const lower = account.toLowerCase();
     return cache.byId.get(account)
       || cache.byAcctNum.get(lower)
-      || cache.byName.get(lower)
-      || cache.items.find(a => a.FullyQualifiedName?.toLowerCase().includes(lower));
+      || resolveUniqueName("Account", account, cache.items.map(item => ({
+        value: item,
+        names: [item.FullyQualifiedName, item.Name],
+        label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id}${item.AcctNum ? `, AcctNum: ${item.AcctNum}` : ""})`,
+      })));
   };
 
   let match = findAccount(await getAccountCache(client, {}, cache));
@@ -177,10 +181,12 @@ export async function resolveVendor(
   cache: QboLookupCache = defaultLookupCache
 ): Promise<{ value: string; name: string }> {
   const findVendor = (cache: VendorCache): CachedVendor | undefined => {
-    const lower = nameOrId.toLowerCase();
     return cache.byId.get(nameOrId)
-      || cache.byName.get(lower)
-      || cache.items.find(v => v.DisplayName.toLowerCase().includes(lower));
+      || resolveUniqueName("Vendor", nameOrId, cache.items.map(item => ({
+        value: item,
+        names: [item.DisplayName],
+        label: `${item.DisplayName} (ID: ${item.Id})`,
+      })));
   };
 
   let match = findVendor(await getVendorCache(client, {}, cache));
@@ -230,8 +236,14 @@ export async function resolveItem(
     throw new Error(`Item not found: "${nameOrId}". Try using the exact item name or ID.`);
   }
 
-  // Use first match and cache it
-  const item = items[0];
+  const item = resolveUniqueName("Item", nameOrId, items.map(candidate => ({
+    value: candidate,
+    names: [candidate.FullyQualifiedName, candidate.Name],
+    label: `${candidate.FullyQualifiedName || candidate.Name} (ID: ${candidate.Id})`,
+  })));
+  if (!item) {
+    throw new Error(`Item not found: "${nameOrId}". Try using the exact item name or ID.`);
+  }
   const entry: CachedItem = {
     Id: item.Id,
     Name: item.Name,
@@ -255,10 +267,12 @@ export async function resolveDepartmentId(
   cache: QboLookupCache = defaultLookupCache
 ): Promise<string> {
   const findDepartment = (cache: DepartmentCache): CachedDepartment | undefined => {
-    const lower = department.toLowerCase();
     return cache.byId.get(department)
-      || cache.byName.get(lower)
-      || cache.items.find(d => d.FullyQualifiedName?.toLowerCase().includes(lower));
+      || resolveUniqueName("Department", department, cache.items.map(item => ({
+        value: item,
+        names: [item.FullyQualifiedName, item.Name],
+        label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id})`,
+      })));
   };
 
   let match = findDepartment(await getDepartmentCache(client, {}, cache));
@@ -267,8 +281,7 @@ export async function resolveDepartmentId(
   match = findDepartment(await getDepartmentCache(client, { forceRefresh: true }, cache));
   if (match) return match.Id;
 
-  // If nothing found, return as-is (let API handle error)
-  return department;
+  throw new Error(`Department not found: "${department}". Try using the exact department name or ID.`);
 }
 
 function cacheCustomer(cache: QboLookupCache, customer: {
@@ -282,9 +295,11 @@ function cacheCustomer(cache: QboLookupCache, customer: {
     fetchedAt: Date.now(),
   };
   cache.customerById.set(entry.Id, entry);
-  cache.customerByName.set(entry.DisplayName.toLowerCase(), entry);
   if (entry.FullyQualifiedName) {
     cache.customerByName.set(entry.FullyQualifiedName.toLowerCase(), entry);
+  }
+  if (!entry.FullyQualifiedName || entry.FullyQualifiedName === entry.DisplayName) {
+    cache.customerByName.set(entry.DisplayName.toLowerCase(), entry);
   }
   return entry;
 }
@@ -373,17 +388,14 @@ export async function resolveCustomer(
     throw new Error(`Customer not found: "${nameOrId}". Try using the exact customer display name or ID.`);
   }
 
-  if (customers.length > 1) {
-    const matches = customers
-      .slice(0, 5)
-      .map(customer => customer.FullyQualifiedName || customer.DisplayName)
-      .join(', ');
-    throw new Error(
-      `Customer name is ambiguous: "${nameOrId}". ` +
-      `Use an exact display/fully qualified name or ID. Matches: ${matches}`
-    );
+  const customer = resolveUniqueName("Customer", nameOrId, customers.map(candidate => ({
+    value: candidate,
+    names: [candidate.FullyQualifiedName, candidate.DisplayName],
+    label: `${candidate.FullyQualifiedName || candidate.DisplayName} (ID: ${candidate.Id})`,
+  })));
+  if (!customer) {
+    throw new Error(`Customer not found: "${nameOrId}". Try using the exact customer display name or ID.`);
   }
 
-  // Use first match and cache it
-  return customerRef(cacheCustomer(cache, customers[0]));
+  return customerRef(cacheCustomer(cache, customer));
 }

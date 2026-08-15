@@ -3,6 +3,7 @@
 
 import QuickBooks from "node-quickbooks";
 import type { QboLookupCache } from "../client/cache.js";
+import { resolveUniqueName } from "../client/name-resolution.js";
 import {
   getAccountCache,
   getDepartmentCache,
@@ -50,13 +51,11 @@ export function resolveAccountRef(cache: AccountCache, nameOrId: string): Accoun
   const lower = nameOrId.toLowerCase();
 
   let match = cache.byAcctNum.get(lower);
-  if (!match) match = cache.byName.get(lower);
-  if (!match) {
-    match = cache.items.find(a =>
-      a.FullyQualifiedName?.toLowerCase().includes(lower) ||
-      a.FullyQualifiedName?.toLowerCase() === lower
-    );
-  }
+  if (!match) match = resolveUniqueName("Account", nameOrId, cache.items.map(item => ({
+    value: item,
+    names: [item.FullyQualifiedName, item.Name],
+    label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id}${item.AcctNum ? `, AcctNum: ${item.AcctNum}` : ""})`,
+  })));
   if (!match) throw new ResolutionNotFoundError("account", `Account not found: "${nameOrId}"`);
 
   return {
@@ -74,13 +73,11 @@ export function resolveDepartmentRef(cache: DepartmentCache, nameOrId: string): 
   const byId = cache.byId.get(nameOrId);
   if (byId) return { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
 
-  const lower = nameOrId.toLowerCase();
-  let match = cache.byName.get(lower);
-  if (!match) {
-    match = cache.items.find(d =>
-      d.FullyQualifiedName?.toLowerCase().includes(lower)
-    );
-  }
+  const match = resolveUniqueName("Department", nameOrId, cache.items.map(item => ({
+    value: item,
+    names: [item.FullyQualifiedName, item.Name],
+    label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id})`,
+  })));
   if (!match) throw new ResolutionNotFoundError("department", `Department not found: "${nameOrId}"`);
 
   return { value: match.Id, name: match.FullyQualifiedName || match.Name };
@@ -94,14 +91,12 @@ export function resolveVendorRef(cache: VendorCache, nameOrId: string): EntityRe
   const byId = cache.byId.get(nameOrId);
   if (byId) return { value: byId.Id, name: byId.DisplayName };
 
-  const lower = nameOrId.toLowerCase();
-  const byName = cache.byName.get(lower);
-  if (byName) return { value: byName.Id, name: byName.DisplayName };
-
-  const byPartial = cache.items.find(v =>
-    v.DisplayName.toLowerCase().includes(lower)
-  );
-  if (byPartial) return { value: byPartial.Id, name: byPartial.DisplayName };
+  const match = resolveUniqueName("Vendor", nameOrId, cache.items.map(item => ({
+    value: item,
+    names: [item.DisplayName],
+    label: `${item.DisplayName} (ID: ${item.Id})`,
+  })));
+  if (match) return { value: match.Id, name: match.DisplayName };
 
   throw new ResolutionNotFoundError("vendor", `Vendor not found: "${nameOrId}"`);
 }

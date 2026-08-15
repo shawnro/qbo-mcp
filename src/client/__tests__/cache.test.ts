@@ -94,6 +94,21 @@ describe("resolveAccount", () => {
     expect(acct.Name).toBe("Rent Expense");
   });
 
+  it("rejects an ambiguous partial account name", async () => {
+    mockSuccess(client.findAccounts, {
+      QueryResponse: {
+        Account: [
+          { Id: "3", Name: "Office Supplies", FullyQualifiedName: "Expense:Office Supplies", AcctNum: "6200" },
+          { Id: "4", Name: "Office Equipment", FullyQualifiedName: "Expense:Office Equipment", AcctNum: "6300" },
+        ],
+      },
+    });
+
+    await expect(resolveAccount(client as never, "Office")).rejects.toThrow(
+      'Account name is ambiguous: "Office"'
+    );
+  });
+
   it("throws when account not found", async () => {
     seedAccounts();
     await expect(resolveAccount(client as never, "nonexistent")).rejects.toThrow(
@@ -137,6 +152,21 @@ describe("resolveVendor", () => {
     expect(ref).toEqual({ value: "101", name: "Office Depot" });
   });
 
+  it("rejects an ambiguous partial vendor name", async () => {
+    mockSuccess(client.findVendors, {
+      QueryResponse: {
+        Vendor: [
+          { Id: "101", DisplayName: "Office Depot" },
+          { Id: "102", DisplayName: "Home Depot" },
+        ],
+      },
+    });
+
+    await expect(resolveVendor(client as never, "Depot")).rejects.toThrow(
+      'Vendor name is ambiguous: "Depot"'
+    );
+  });
+
   it("throws when vendor not found", async () => {
     seedVendors();
     await expect(resolveVendor(client as never, "nobody")).rejects.toThrow(
@@ -164,10 +194,26 @@ describe("resolveDepartmentId", () => {
     expect(id).toBe("20");
   });
 
-  it("returns input as-is when not found (does not throw)", async () => {
+  it("rejects an ambiguous partial department name", async () => {
+    mockSuccess(client.findDepartments, {
+      QueryResponse: {
+        Department: [
+          { Id: "20", Name: "Santa Rosa", FullyQualifiedName: "Santa Rosa" },
+          { Id: "21", Name: "Santa Monica", FullyQualifiedName: "Santa Monica" },
+        ],
+      },
+    });
+
+    await expect(resolveDepartmentId(client as never, "Santa")).rejects.toThrow(
+      'Department name is ambiguous: "Santa"'
+    );
+  });
+
+  it("throws when department not found", async () => {
     seedDepartments();
-    const id = await resolveDepartmentId(client as never, "unknown-dept");
-    expect(id).toBe("unknown-dept");
+    await expect(resolveDepartmentId(client as never, "unknown-dept")).rejects.toThrow(
+      'Department not found: "unknown-dept"'
+    );
   });
 });
 
@@ -204,6 +250,26 @@ describe("resolveItem (lazy cache)", () => {
     const ref = await resolveItem(client as never, "Widget");
     expect(ref).toEqual({ value: "201", name: "Premium Widget" });
     expect(client.findItems).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects an ambiguous partial item name", async () => {
+    let callCount = 0;
+    client.findItems.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, result: unknown) => void;
+      callCount++;
+      cb(null, {
+        QueryResponse: {
+          Item: callCount === 1 ? [] : [
+            { Id: "201", Name: "Premium Widget", Active: true },
+            { Id: "202", Name: "Basic Widget", Active: true },
+          ],
+        },
+      });
+    });
+
+    await expect(resolveItem(client as never, "Widget")).rejects.toThrow(
+      'Item name is ambiguous: "Widget"'
+    );
   });
 
   it("throws when item not found", async () => {
@@ -354,12 +420,46 @@ describe("resolveCustomer (lazy cache)", () => {
       value: "305",
       name: "Customer One:Phase One",
     });
-    await expect(resolveCustomer(client as never, "phase one")).resolves.toEqual({
+    await expect(resolveCustomer(client as never, "customer one:phase one")).resolves.toEqual({
       value: "305",
       name: "Customer One:Phase One",
     });
     expect(client.getCustomer).not.toHaveBeenCalled();
     expect(client.findCustomers).not.toHaveBeenCalled();
+  });
+
+  it("does not cache a hierarchical customer's potentially ambiguous leaf name", async () => {
+    mockSuccess(client.findCustomers, {
+      QueryResponse: {
+        Customer: [{
+          Id: "305",
+          DisplayName: "Phase One",
+          FullyQualifiedName: "Customer One:Phase One",
+          Active: true,
+        }],
+      },
+    });
+    await resolveCustomer(client as never, "Customer One:Phase One");
+    resetMockClient(client);
+
+    let callCount = 0;
+    client.findCustomers.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (error: Error | null, result: unknown) => void;
+      callCount++;
+      callback(null, {
+        QueryResponse: {
+          Customer: callCount === 1 ? [] : [
+            { Id: "305", DisplayName: "Phase One", FullyQualifiedName: "Customer One:Phase One", Active: true },
+            { Id: "306", DisplayName: "Phase One", FullyQualifiedName: "Customer Two:Phase One", Active: true },
+          ],
+        },
+      });
+    });
+
+    await expect(resolveCustomer(client as never, "phase one")).rejects.toThrow(
+      'Customer name is ambiguous: "phase one"'
+    );
+    expect(client.findCustomers).toHaveBeenCalledTimes(2);
   });
 
   it("throws when customer not found", async () => {
