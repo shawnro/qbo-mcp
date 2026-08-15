@@ -29,6 +29,54 @@ describe("resolveAccountRef", () => {
     expect(ref).toEqual({ value: "5", name: "Office Supplies", acctNum: "6200" });
   });
 
+  it("rejects an ambiguous partial name with bounded candidates", () => {
+    const ambiguousCache = createMockAccountCache();
+    const equipment = {
+      Id: "6",
+      Name: "Office Equipment",
+      FullyQualifiedName: "Office Equipment",
+      AcctNum: "6300",
+      AccountType: "Expense",
+      CurrentBalance: 0,
+    };
+    ambiguousCache.items = [...ambiguousCache.items, equipment];
+
+    expect(() => resolveAccountRef(ambiguousCache, "office")).toThrow(
+      'Account name is ambiguous: "office"'
+    );
+    expect(() => resolveAccountRef(ambiguousCache, "office")).toThrow("Office Supplies (ID: 5, AcctNum: 6200)");
+    expect(() => resolveAccountRef(ambiguousCache, "office")).toThrow("Office Equipment (ID: 6, AcctNum: 6300)");
+  });
+
+  it("prefers an exact fully qualified name over other partial matches", () => {
+    const hierarchicalCache = createMockAccountCache();
+    hierarchicalCache.items = [
+      ...hierarchicalCache.items,
+      {
+        Id: "6",
+        Name: "Supplies",
+        FullyQualifiedName: "Property A:Supplies",
+        AcctNum: "6210",
+        AccountType: "Expense",
+        CurrentBalance: 0,
+      },
+      {
+        Id: "7",
+        Name: "Property A Supplies Reserve",
+        FullyQualifiedName: "Property A Supplies Reserve",
+        AcctNum: "6220",
+        AccountType: "Expense",
+        CurrentBalance: 0,
+      },
+    ];
+
+    expect(resolveAccountRef(hierarchicalCache, "Property A:Supplies")).toEqual({
+      value: "6",
+      name: "Property A:Supplies",
+      acctNum: "6210",
+    });
+  });
+
   it("throws for unknown account", () => {
     expect(() => resolveAccountRef(cache, "nonexistent")).toThrow(
       'Account not found: "nonexistent"'
@@ -54,6 +102,18 @@ describe("resolveDepartmentRef", () => {
     expect(ref).toEqual({ value: "30", name: "Petaluma" });
   });
 
+  it("rejects an ambiguous partial name", () => {
+    const ambiguousCache = createMockDepartmentCache();
+    ambiguousCache.items = [
+      ...ambiguousCache.items,
+      { Id: "40", Name: "Santa Monica", FullyQualifiedName: "Santa Monica" },
+    ];
+
+    expect(() => resolveDepartmentRef(ambiguousCache, "santa")).toThrow(
+      'Department name is ambiguous: "santa"'
+    );
+  });
+
   it("throws for unknown department", () => {
     expect(() => resolveDepartmentRef(cache, "nonexistent")).toThrow(
       'Department not found: "nonexistent"'
@@ -77,6 +137,18 @@ describe("resolveVendorRef", () => {
   it("resolves by partial name", () => {
     const ref = resolveVendorRef(cache, "depot");
     expect(ref).toEqual({ value: "100", name: "Office Depot" });
+  });
+
+  it("rejects an ambiguous partial name", () => {
+    const ambiguousCache = createMockVendorCache();
+    ambiguousCache.items = [
+      ...ambiguousCache.items,
+      { Id: "102", DisplayName: "Home Depot" },
+    ];
+
+    expect(() => resolveVendorRef(ambiguousCache, "depot")).toThrow(
+      'Vendor name is ambiguous: "depot"'
+    );
   });
 
   it("throws for unknown vendor", () => {

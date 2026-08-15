@@ -184,6 +184,29 @@ describe("handleCreateInvoice", () => {
     expect(mockResolveCustomer).not.toHaveBeenCalled();
   });
 
+  it("uses item_id directly without a name lookup", async () => {
+    mockSuccess(client.createInvoice, { Id: "706" });
+
+    await handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01",
+      customer_id: "201",
+      draft: false,
+      lines: [{ item_id: "301", amount: 100 }],
+    });
+
+    const payload = client.createInvoice.mock.calls[0][0];
+    expect(payload.Line[0].SalesItemLineDetail.ItemRef).toEqual({ value: "301" });
+    expect(mockResolveItem).not.toHaveBeenCalled();
+  });
+
+  it("rejects item_name combined with item_id", async () => {
+    await expect(handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01",
+      customer_id: "201",
+      lines: [{ item_name: "Consulting Services", item_id: "301", amount: 100 }],
+    })).rejects.toThrow("Provide only one of item_name or item_id per line");
+  });
+
   it("throws when customer not found", async () => {
     mockResolveCustomer.mockRejectedValue(new Error("Customer not found: Unknown"));
 
@@ -348,6 +371,20 @@ describe("handleEditInvoice", () => {
 
     const payload = client.updateInvoice.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
+  });
+
+  it("uses item_id directly when adding a line", async () => {
+    mockSuccess(client.updateInvoice, { Id: "700", SyncToken: "5" });
+
+    await handleEditInvoice(client as never, {
+      id: "700",
+      draft: false,
+      lines: [{ item_id: "301", amount: 25 }],
+    });
+
+    const payload = client.updateInvoice.mock.calls[0][0];
+    expect(payload.Line[1].SalesItemLineDetail.ItemRef).toEqual({ value: "301" });
+    expect(mockResolveItem).not.toHaveBeenCalled();
   });
 
   it("propagates API errors", async () => {

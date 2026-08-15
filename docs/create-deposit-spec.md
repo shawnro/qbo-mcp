@@ -197,7 +197,7 @@ The object sent to `client.createDeposit()`:
 | Amount precision | `validateAmount()` rejects >2 decimal places, handles negatives |
 | Account resolution | All account names resolved via cache; throw on not found |
 | Department resolution | Optional; resolved via cache; throw on not found |
-| Vendor resolution | Optional; resolved via vendor cache with partial match; throw on not found |
+| Vendor resolution | Optional; resolved via vendor cache with one unique partial match; throw on ambiguity or not found |
 | Bank account type | Let QB API validate — it rejects non-Bank accounts with a clear error |
 | No total validation | Unlike `edit_deposit`, create does not validate totals (QB computes `TotalAmt`) |
 
@@ -211,8 +211,8 @@ The `Entity` field on deposit lines associates a vendor or customer with the lin
 Resolution uses the existing vendor cache (same as `create_bill`):
 1. Try exact ID match
 2. Try exact name match (case-insensitive)
-3. Try partial DisplayName match
-4. Throw if not found
+3. Try one unique partial DisplayName match
+4. Throw with bounded candidates if ambiguous; throw if not found
 
 The Entity `type` defaults to `"VENDOR"` for vendor cache matches. If customer entity support is needed later, a `entity_type` parameter can be added.
 

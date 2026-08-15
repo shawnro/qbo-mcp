@@ -150,6 +150,22 @@ describe("createResolutionCoordinator", () => {
     expect(mockGetVendorCache).toHaveBeenCalledOnce();
   });
 
+  it("does not refresh an ambiguous cache result", async () => {
+    const cache = createMockVendorCache();
+    cache.items = [
+      ...cache.items,
+      { Id: "201", DisplayName: "Home Depot" },
+    ];
+    const resolver = createResolutionCoordinator(client as never, {
+      vendor: cache as never,
+    });
+
+    await expect(resolver.vendor("Depot")).rejects.toThrow(
+      'Vendor name is ambiguous: "Depot"'
+    );
+    expect(mockGetVendorCache).not.toHaveBeenCalled();
+  });
+
   it("shares one in-flight refresh across concurrent misses", async () => {
     mockGetVendorCache.mockResolvedValue(vendorCacheWithNewVendor() as never);
     const resolver = createResolutionCoordinator(client as never, {

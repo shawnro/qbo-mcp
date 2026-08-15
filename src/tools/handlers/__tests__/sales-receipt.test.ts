@@ -245,6 +245,20 @@ describe("handleCreateSalesReceipt", () => {
 
     expect(mockResolveItem).toHaveBeenCalledWith(expect.anything(), "Widget", undefined);
   });
+
+  it("uses item_id directly without a name lookup", async () => {
+    mockSuccess(client.createSalesReceipt, { Id: "601" });
+
+    await handleCreateSalesReceipt(client as never, {
+      txn_date: "2024-06-15",
+      lines: [{ item_id: "201", amount: 50 }],
+      draft: false,
+    });
+
+    const payload = client.createSalesReceipt.mock.calls[0][0];
+    expect(payload.Line[0].SalesItemLineDetail.ItemRef).toEqual({ value: "201" });
+    expect(mockResolveItem).not.toHaveBeenCalled();
+  });
 });
 
 describe("handleGetSalesReceipt", () => {
@@ -331,6 +345,20 @@ describe("handleEditSalesReceipt", () => {
     expect(client.updateSalesReceipt).toHaveBeenCalledOnce();
     const payload = client.updateSalesReceipt.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
+  });
+
+  it("uses item_id directly when adding a line", async () => {
+    mockSuccess(client.updateSalesReceipt, { Id: "600", SyncToken: "2" });
+
+    await handleEditSalesReceipt(client as never, {
+      id: "600",
+      lines: [{ item_id: "201", amount: 25 }],
+      draft: false,
+    });
+
+    const payload = client.updateSalesReceipt.mock.calls[0][0];
+    expect(payload.Line[1].SalesItemLineDetail.ItemRef).toEqual({ value: "201" });
+    expect(mockResolveItem).not.toHaveBeenCalled();
   });
 
   it("deletes a line when delete=true", async () => {

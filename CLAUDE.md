@@ -69,6 +69,7 @@ Names are auto-resolved to IDs using cached lookups:
 - `account_name: "Tips"` → looks up ID from cache
 - `department_name: "Santa Rosa"` → looks up ID from cache
 - Caches are session-scoped with TTL
+- Resolution tries ID/account number, then exact name, then one unique partial name. Ambiguous names stop and return up to five candidates instead of selecting the first match.
 
 ## Adding a New Tool
 

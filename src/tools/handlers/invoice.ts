@@ -3,11 +3,11 @@
 import QuickBooks from "node-quickbooks";
 import {
   promisify,
-  resolveItem,
 } from "../../client/index.js";
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { createResolutionCoordinator } from "../resolve.js";
 import { resolveTermRef } from "../entity-fields.js";
+import { resolveItemReference } from "../item-resolution.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
 interface InvoiceLineChange {
@@ -97,19 +97,18 @@ export async function handleCreateInvoice(
       throw new Error(`Line for "${itemInput}" requires amount, or both qty and unit_price`);
     }
 
-    const itemRef = lookupCache
-      ? await resolveItem(client, itemInput, lookupCache)
-      : await resolveItem(client, itemInput, lookupCache);
+    const itemRef = await resolveItemReference(client, line, lookupCache);
+    const itemLabel = itemRef.name || itemRef.value;
 
     const qty = line.qty ?? 1;
     let amountCents: number;
     let unitPriceDollars: number;
 
     if (line.amount !== undefined) {
-      amountCents = validateAmount(line.amount, `Line for ${itemRef.name}`);
+      amountCents = validateAmount(line.amount, `Line for ${itemLabel}`);
       unitPriceDollars = toDollars(amountCents) / qty;
     } else {
-      const upCents = validateAmount(line.unit_price!, `Line unit_price for ${itemRef.name}`);
+      const upCents = validateAmount(line.unit_price!, `Line unit_price for ${itemLabel}`);
       unitPriceDollars = toDollars(upCents);
       amountCents = upCents * qty;
     }
@@ -171,7 +170,7 @@ export async function handleCreateInvoice(
       "",
       "Lines:",
       ...resolvedLines.map(l =>
-        `  ${l.itemRef.name}: Qty ${l.qty} × $${l.unitPriceDollars.toFixed(2)} = $${l.amountDollars.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
+        `  ${l.itemRef.name || l.itemRef.value}: Qty ${l.qty} × $${l.unitPriceDollars.toFixed(2)} = $${l.amountDollars.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
       ),
       "",
       "Set draft=false to create this invoice.",
@@ -478,19 +477,18 @@ export async function handleEditInvoice(
           throw new Error('New lines require amount, or both qty and unit_price');
         }
 
-        const itemRef = lookupCache
-          ? await resolveItem(client, itemInput, lookupCache)
-          : await resolveItem(client, itemInput, lookupCache);
+        const itemRef = await resolveItemReference(client, change, lookupCache);
+        const itemLabel = itemRef.name || itemRef.value;
 
         const qty = change.qty ?? 1;
         let amountCents: number;
         let unitPriceDollars: number;
 
         if (change.amount !== undefined) {
-          amountCents = validateAmount(change.amount, `New line for ${itemRef.name}`);
+          amountCents = validateAmount(change.amount, `New line for ${itemLabel}`);
           unitPriceDollars = toDollars(amountCents) / qty;
         } else {
-          const upCents = validateAmount(change.unit_price!, `New line unit_price for ${itemRef.name}`);
+          const upCents = validateAmount(change.unit_price!, `New line unit_price for ${itemLabel}`);
           unitPriceDollars = toDollars(upCents);
           amountCents = upCents * qty;
         }
