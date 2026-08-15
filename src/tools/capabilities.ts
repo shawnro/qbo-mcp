@@ -35,6 +35,10 @@ function projectRemoteDefinition<T extends ToolDefinition>(definition: T): T {
     inputSchema: {
       ...definition.inputSchema,
       properties,
+      anyOf: [{
+        required: ["note"],
+        properties: { note: { minLength: 1 } },
+      }],
     },
   };
 }
