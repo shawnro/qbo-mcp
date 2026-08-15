@@ -7,6 +7,7 @@ import type { OutputPolicy } from "../runtime/types.js";
 
 export type OutputMode = "stdio" | "http";
 export type ExecutionEnvironment = "local" | "lambda";
+export const MAX_INLINE_JSON_CHARS = 100_000;
 
 let currentOutputMode: OutputMode = "stdio";
 let currentExecutionEnvironment: ExecutionEnvironment = "local";
@@ -41,10 +42,28 @@ export function outputReport(
   policy?: OutputPolicy
 ): ToolResult {
   if (isHttpMode(policy)) {
+    const inlineJson = JSON.stringify(data);
+    if (inlineJson.length > MAX_INLINE_JSON_CHARS) {
+      const metadata = {
+        inlineDataOmitted: true,
+        serializedCharacters: inlineJson.length,
+        limit: MAX_INLINE_JSON_CHARS,
+        guidance: "Use narrower filters, a smaller date range, or paginated requests.",
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${summary}\nWarning: Inline data omitted because it exceeds the ${MAX_INLINE_JSON_CHARS}-character context limit.`,
+          },
+          { type: "text", text: JSON.stringify(metadata) },
+        ],
+      };
+    }
     return {
       content: [
         { type: "text", text: summary },
-        { type: "text", text: JSON.stringify(data) },
+        { type: "text", text: inlineJson },
       ],
     };
   }

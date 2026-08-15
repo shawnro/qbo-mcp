@@ -58,6 +58,8 @@ From [Intuit's Data Queries documentation](https://developer.intuit.com/app/deve
 - **No JOIN**: Cannot join entities
 - **Single quotes required**: Comparison values must use single quotes (`'value'`), not double quotes
 - **Max 1000 results**: Use `STARTPOSITION` for pagination
+
+Inline/HTTP query output is further capped at 100 records per request to protect model context, even if a larger `MAXRESULTS` is supplied. The response provides the next `STARTPOSITION`. Profit & Loss, Balance Sheet, and Trial Balance inline output similarly caps recursive detail at 100 rows while preserving totals and section summaries from the full QBO response. Default stdio file output remains complete.
 - **Wildcard limited to %**: Only `LIKE '%pattern%'` supported, no other wildcards
 
 ## Sparse Update Required Fields

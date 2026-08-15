@@ -30,9 +30,15 @@ vi.mock("../../../utils/index.js", async () => {
   };
 });
 
-vi.mock("../../../reports/index.js", () => ({
-  extractReportSummary: vi.fn((_result: unknown, reportType: string) => `${reportType} Summary`),
-}));
+vi.mock("../../../reports/index.js", async () => {
+  const actual = await vi.importActual<typeof import("../../../reports/index.js")>(
+    "../../../reports/index.js"
+  );
+  return {
+    ...actual,
+    extractReportSummary: vi.fn((_result: unknown, reportType: string) => `${reportType} Summary`),
+  };
+});
 
 import { handleGetProfitLoss, handleGetBalanceSheet, handleGetTrialBalance } from "../reports.js";
 import { resolveDepartmentId } from "../../../client/index.js";
@@ -103,6 +109,40 @@ describe("handleGetProfitLoss", () => {
       "Profit and Loss Summary",
       undefined
     );
+  });
+
+  it("caps nested detail for HTTP while retaining report totals", async () => {
+    const rows = Array.from({ length: 105 }, (_, index) => ({
+      type: "Data",
+      ColData: [{ value: `Account ${index}` }, { value: String(index) }],
+    }));
+    const largeReport = {
+      Header: { ReportName: "ProfitAndLoss" },
+      Rows: {
+        Row: [{
+          type: "Section",
+          group: "Income",
+          Rows: { Row: rows },
+          Summary: { ColData: [{ value: "Total Income" }, { value: "5460" }] },
+        }],
+      },
+    };
+    mockSuccess(client.reportProfitAndLoss, largeReport);
+    const output = { mode: "http", executionEnvironment: "node" } as const;
+
+    await handleGetProfitLoss(client as never, {}, { output } as never);
+
+    const [, data, summary] = mockOutputReport.mock.calls[0];
+    expect(data).toMatchObject({
+      InlineOutput: {
+        detailRowsReturned: 100,
+        totalDetailRows: 105,
+        detailTruncatedAt: 100,
+      },
+    });
+    expect(JSON.stringify(data)).toContain("Total Income");
+    expect(summary).toContain("HTTP mode detail capped at 100 of 105 report rows");
+    expect(rows).toHaveLength(105);
   });
 
   it("propagates API errors", async () => {

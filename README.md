@@ -367,7 +367,15 @@ Create `~/.qbo-mcp/profiles.json` (or set `QBO_PROFILES_FILE` to a custom path):
 
 By default, large responses (reports, query results) are written to `/tmp` files and the server returns a file path. This works well for Claude Code in terminal environments but breaks in **Claude Desktop** and **plugin environments** where the model cannot read from `/tmp`.
 
-Set `QBO_INLINE_OUTPUT=true` to return all responses inline instead.
+Set `QBO_INLINE_OUTPUT=true` to return bounded responses inline instead. Hosted HTTP uses the same inline policy automatically.
+
+Inline output protects the model context as follows:
+
+- Generic queries return at most 100 records per request, including when a larger `MAXRESULTS` is supplied. Use `STARTPOSITION` to continue.
+- Profit & Loss, Balance Sheet, and Trial Balance reports return at most 100 detail rows. Totals and section summaries are calculated from and preserved from the full QBO response.
+- Inline JSON above 100,000 serialized characters is replaced by compact size metadata and guidance to narrow or paginate the request.
+
+Default stdio mode still writes the complete response to a temporary file; these inline limits do not truncate that file.
 
 **Option A — via `.env` file** (recommended for local checkout):
 
@@ -407,7 +415,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_CLIENT_ID` | - | QuickBooks app Client ID (local mode) |
 | `QBO_CLIENT_SECRET` | - | QuickBooks app Client Secret (local mode) |
 | `QBO_CREDENTIAL_FILE` | `~/.qbo-mcp/credentials.json` | Custom credential file path |
-| `QBO_INLINE_OUTPUT` | `false` | Return responses inline instead of writing to `/tmp` files. Required when using Claude Desktop or plugin environments where file-based output is not accessible to the model. |
+| `QBO_INLINE_OUTPUT` | `false` | Return bounded responses inline instead of writing complete data to `/tmp` files. Required when using Claude Desktop or plugin environments where file-based output is not accessible to the model. |
 | `QBO_SANDBOX` | `false` | Use QuickBooks sandbox environment |
 | `QBO_REQUEST_TIMEOUT_MS` | `60000` | Maximum wait for a QuickBooks callback, from 1 to 600000 ms. Hosted deployments should keep this below the platform request timeout. |
 | `AWS_REGION` | `us-east-2` | AWS region (aws mode) |

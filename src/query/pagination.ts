@@ -10,6 +10,7 @@ import type { OutputPolicy } from "../runtime/types.js";
 export const BATCH_SIZE = 1000;
 export const SAFETY_LIMIT = 10000;
 export const WARNING_THRESHOLD = 5000;
+export const HTTP_QUERY_LIMIT = 100;
 
 // Entity type for paginated results
 interface PaginatedEntity {
@@ -35,13 +36,17 @@ function extractEntitiesFromResponse(result: unknown): { entityKey: string; enti
 
 // Parse pagination params from query string
 export function parsePaginationFromQuery(query: string, outputPolicy?: OutputPolicy): PaginationParams {
-  let maxResults = isHttpMode(outputPolicy) ? 100 : 1000; // Lower default for HTTP (results go into context)
+  const httpMode = isHttpMode(outputPolicy);
+  let maxResults = httpMode ? HTTP_QUERY_LIMIT : 1000;
   let startPosition: number | null = null;
 
   // Extract MAXRESULTS
   const maxMatch = query.match(/MAXRESULTS\s+(\d+)/i);
   if (maxMatch) {
     maxResults = parseInt(maxMatch[1], 10);
+  }
+  if (httpMode) {
+    maxResults = Math.min(maxResults, HTTP_QUERY_LIMIT);
   }
 
   // Extract STARTPOSITION (presence disables auto-pagination)
