@@ -511,6 +511,16 @@ describe("handleGetJournalEntry", () => {
     vi.clearAllMocks();
   });
 
+  it.each(["", " ", "0", "01", "-1", "1.5", "abc"])(
+    "rejects invalid top-level ID %j before calling QuickBooks",
+    async (id) => {
+      await expect(handleGetJournalEntry(client as never, { id })).rejects.toThrow(
+        "positive numeric QBO journal entry ID obtained from QuickBooks"
+      );
+      expect(client.getJournalEntry).not.toHaveBeenCalled();
+    }
+  );
+
   it("returns formatted journal entry", async () => {
     mockSuccess(client.getJournalEntry, {
       Id: "55",
@@ -622,6 +632,18 @@ describe("handleEditJournalEntry", () => {
     // Default: getJournalEntry returns the existing JE
     mockSuccess(client.getJournalEntry, existingJE);
   });
+
+  it.each(["", " ", "0", "01", "-1", "1.5", "abc"])(
+    "rejects invalid top-level ID %j before calling QuickBooks",
+    async (id) => {
+      await expect(handleEditJournalEntry(client as never, {
+        id,
+        memo: "Updated memo",
+      })).rejects.toThrow("positive numeric QBO journal entry ID obtained from QuickBooks");
+      expect(client.getJournalEntry).not.toHaveBeenCalled();
+      expect(client.updateJournalEntry).not.toHaveBeenCalled();
+    }
+  );
 
   it("returns preview in draft mode for simple field changes", async () => {
     const result = await handleEditJournalEntry(client as never, {

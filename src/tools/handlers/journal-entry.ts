@@ -16,6 +16,7 @@ import {
   outputReport,
   getQboUrl,
   validateDocNumber,
+  validateJournalEntryId,
 } from "../../utils/index.js";
 import { applyClassRefChange, createResolutionCoordinator, toEntityRef } from "../resolve.js";
 import type { QboRequestContext } from "../../runtime/types.js";
@@ -235,6 +236,7 @@ export async function handleGetJournalEntry(
   context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id } = args;
+  validateJournalEntryId(id);
 
   const je = await promisify<unknown>((cb) =>
     client.getJournalEntry(id, cb)
@@ -329,6 +331,7 @@ export async function handleEditJournalEntry(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const lookupCache = context?.runtime.lookupCache;
   const { id, txn_date, memo, doc_number, lines: rawLineChanges, draft = true } = args;
+  validateJournalEntryId(id);
   validateDocNumber(doc_number);
 
   // Defensive: MCP transports may deliver arrays as JSON strings

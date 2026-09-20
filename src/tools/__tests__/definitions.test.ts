@@ -9,6 +9,7 @@ interface TestToolDefinition {
 
 interface SchemaNode {
   type?: string;
+  pattern?: string;
   maxLength?: number;
   description?: string;
   enum?: string[];
@@ -308,6 +309,23 @@ describe("toolDefinitions semantic validation", () => {
       expect(() => provider.getValidator(definition.inputSchema as never), definition.name)
         .not.toThrow();
     }
+  });
+
+  it.each(["get_journal_entry", "edit_journal_entry"])(
+    "requires a positive numeric QBO ID for %s",
+    (name) => {
+      expect(validate(name, { id: "77" })).toBe(true);
+      for (const id of ["", " ", "0", "01", "-1", "1.5", "abc"]) {
+        expect(validate(name, { id }), id).toBe(false);
+      }
+    }
+  );
+
+  it("keeps QBO line ID zero valid for journal entry edits", () => {
+    expect(validate("edit_journal_entry", {
+      id: "77",
+      lines: [{ line_id: "0", amount: 10 }],
+    })).toBe(true);
   });
 
   it("enforces invoice customer, line identity, amount, and non-empty lines", () => {

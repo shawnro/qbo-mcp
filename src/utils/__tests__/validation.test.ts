@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { validateDocNumber } from "../validation.js";
+import { validateDocNumber, validateJournalEntryId } from "../validation.js";
+
+describe("validateJournalEntryId", () => {
+  it.each(["1", "77", "725394"])("accepts QBO entity ID %s", (id) => {
+    expect(validateJournalEntryId(id)).toBe(id);
+  });
+
+  it.each(["", " ", "0", "01", "-1", "1.5", "abc"])(
+    "rejects placeholder or malformed ID %j",
+    (id) => {
+      expect(() => validateJournalEntryId(id)).toThrow(
+        "positive numeric QBO journal entry ID obtained from QuickBooks"
+      );
+    }
+  );
+});
 
 describe("validateDocNumber", () => {
   it("allows an omitted document number", () => {
