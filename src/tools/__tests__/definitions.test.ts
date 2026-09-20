@@ -454,4 +454,48 @@ describe("toolDefinitions semantic validation", () => {
       lines: [{ account_name: "Checking", amount: 5, posting_type: "Debit" }],
     })).toBe(true);
   });
+
+  it("enforces journal-entry class assignment and clearing rules", () => {
+    const createBase = {
+      txn_date: "2026-09-19",
+      lines: [{ account_name: "Checking", amount: 5, posting_type: "Debit" }],
+    };
+    expect(validate("create_journal_entry", {
+      ...createBase,
+      lines: [{ ...createBase.lines[0], class_name: "632 Koslin Ct" }],
+    })).toBe(true);
+    expect(validate("create_journal_entry", {
+      ...createBase,
+      lines: [{ ...createBase.lines[0], class_name: "632 Koslin Ct", class_id: "40" }],
+    })).toBe(false);
+
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ line_id: "2", class_id: "40" }],
+    })).toBe(true);
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ line_id: "2", clear_class: true }],
+    })).toBe(true);
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ line_id: "2", class_name: "Koslin", clear_class: true }],
+    })).toBe(false);
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ line_id: "2", delete: true, clear_class: true }],
+    })).toBe(false);
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ line_id: "2", delete: true, class_name: "Koslin" }],
+    })).toBe(false);
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ line_id: "2", delete: true, class_id: "40" }],
+    })).toBe(false);
+    expect(validate("edit_journal_entry", {
+      id: "1",
+      lines: [{ account_name: "Checking", amount: 5, posting_type: "Debit", clear_class: true }],
+    })).toBe(false);
+  });
 });

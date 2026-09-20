@@ -16,7 +16,7 @@ import {
   getQboUrl,
   validateDocNumber,
 } from "../../utils/index.js";
-import { createResolutionCoordinator, toEntityRef } from "../resolve.js";
+import { applyClassRefChange, createResolutionCoordinator, toEntityRef } from "../resolve.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
 interface JournalEntryLine {
@@ -26,6 +26,8 @@ interface JournalEntryLine {
   posting_type: "Debit" | "Credit";
   department_id?: string;
   department_name?: string;
+  class_id?: string;
+  class_name?: string;
   description?: string;
 }
 
@@ -35,6 +37,9 @@ interface JournalEntryLineChange {
   amount?: number;
   posting_type?: "Debit" | "Credit";
   department_name?: string;
+  class_id?: string;
+  class_name?: string;
+  clear_class?: boolean;
   description?: string;
   delete?: boolean;
 }
@@ -78,6 +83,8 @@ export async function handleCreateJournalEntry(
     let accountNum: string | undefined;
     let departmentId = line.department_id;
     let departmentName = line.department_name;
+    let classId = line.class_id;
+    let className = line.class_name;
 
     // Resolve account
     if (!accountId && accountName) {
@@ -96,6 +103,15 @@ export async function handleCreateJournalEntry(
       departmentName = dept.name;
     }
 
+    if (classId && className) {
+      throw new Error("Provide only one of class_name or class_id per line");
+    }
+    if (classId || className) {
+      const cls = await resolver.class(classId || className!);
+      classId = cls.value;
+      className = cls.name;
+    }
+
     // Validate and convert amount to cents
     const amountCents = validateAmount(line.amount, `Line ${accountName || accountId}`);
 
@@ -106,6 +122,8 @@ export async function handleCreateJournalEntry(
       account_num: accountNum,
       department_id: departmentId,
       department_name: departmentName,
+      class_id: classId,
+      class_name: className,
       amount_cents: amountCents,
       // Normalize amount to exactly 2 decimal places
       amount: toDollars(amountCents)
@@ -141,6 +159,12 @@ export async function handleCreateJournalEntry(
           DepartmentRef: {
             value: line.department_id
           }
+        }),
+        ...(line.class_id && {
+          ClassRef: {
+            value: line.class_id,
+            name: line.class_name
+          }
         })
       }
     }))
@@ -163,7 +187,7 @@ export async function handleCreateJournalEntry(
       "",
       "Lines:",
       ...resolvedLines.map(l =>
-        `  ${l.posting_type.padEnd(6)} ${formatAccount(l)}${l.department_id ? ` [Dept: ${l.department_name || l.department_id}]` : ""}: $${l.amount.toFixed(2)}`
+        `  ${l.posting_type.padEnd(6)} ${formatAccount(l)}${l.department_id ? ` [Dept: ${l.department_name || l.department_id}]` : ""}${l.class_id ? ` [Class: ${l.class_name || l.class_id}]` : ""}: $${l.amount.toFixed(2)}`
       ),
       "",
       doc_number
@@ -224,6 +248,7 @@ export async function handleGetJournalEntry(
         PostingType: string;
         AccountRef: { value: string; name?: string };
         DepartmentRef?: { value: string; name?: string };
+        ClassRef?: { value: string; name?: string };
       };
     }>;
   };
@@ -248,9 +273,11 @@ export async function handleGetJournalEntry(
     if (!detail) continue;
     const acctName = detail.AccountRef.name || detail.AccountRef.value;
     const deptName = detail.DepartmentRef?.name || detail.DepartmentRef?.value;
+    const className = detail.ClassRef?.name || detail.ClassRef?.value;
     const deptStr = deptName ? ` [${deptName}]` : '';
+    const classStr = className ? ` [Class: ${className}]` : '';
     const descStr = line.Description ? ` "${line.Description}"` : '';
-    lines.push(`  Line ${line.Id}: ${detail.PostingType.padEnd(6)} ${acctName}${deptStr} $${line.Amount.toFixed(2)}${descStr}`);
+    lines.push(`  Line ${line.Id}: ${detail.PostingType.padEnd(6)} ${acctName}${deptStr}${classStr} $${line.Amount.toFixed(2)}${descStr}`);
   }
 
   lines.push('');
@@ -273,6 +300,7 @@ export async function handleGetJournalEntry(
             PostingType: line.JournalEntryLineDetail.PostingType,
             AccountRef: line.JournalEntryLineDetail.AccountRef,
             DepartmentRef: line.JournalEntryLineDetail.DepartmentRef,
+            ClassRef: line.JournalEntryLineDetail.ClassRef,
           }
         : undefined,
     })),
@@ -319,6 +347,7 @@ export async function handleEditJournalEntry(
         PostingType: string;
         AccountRef: { value: string; name?: string };
         DepartmentRef?: { value: string; name?: string };
+        ClassRef?: { value: string; name?: string };
       };
     }>;
   };
@@ -378,6 +407,7 @@ export async function handleEditJournalEntry(
         }
 
         if (change.delete) {
+          await applyClassRefChange(resolver, finalLines[lineIndex].JournalEntryLineDetail, change, `Line ${change.line_id}`);
           // Remove the line
           finalLines.splice(lineIndex, 1);
         } else {
@@ -394,6 +424,7 @@ export async function handleEditJournalEntry(
           if (change.posting_type !== undefined) detail.PostingType = change.posting_type;
           if (change.account_name !== undefined) detail.AccountRef = toEntityRef(await resolver.account(change.account_name));
           if (change.department_name !== undefined) detail.DepartmentRef = await resolver.department(change.department_name);
+          await applyClassRefChange(resolver, detail, change, `Line ${change.line_id}`);
 
           line.JournalEntryLineDetail = detail;
           finalLines[lineIndex] = line;
@@ -402,6 +433,12 @@ export async function handleEditJournalEntry(
         // New line
         if (!change.amount || !change.posting_type || !change.account_name) {
           throw new Error('New lines require amount, posting_type, and account_name');
+        }
+        if (change.clear_class) {
+          throw new Error("New lines cannot clear a class");
+        }
+        if (change.class_id && change.class_name) {
+          throw new Error("Provide only one of class_name or class_id per line");
         }
 
         // Validate and normalize the amount
@@ -415,7 +452,10 @@ export async function handleEditJournalEntry(
           JournalEntryLineDetail: {
             PostingType: change.posting_type,
             AccountRef: toEntityRef(await resolver.account(change.account_name)),
-            ...(change.department_name && { DepartmentRef: await resolver.department(change.department_name) })
+            ...(change.department_name && { DepartmentRef: await resolver.department(change.department_name) }),
+            ...((change.class_name || change.class_id) && {
+              ClassRef: await resolver.class(change.class_id || change.class_name!)
+            })
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);
@@ -462,7 +502,8 @@ export async function handleEditJournalEntry(
         const detail = line.JournalEntryLineDetail;
         const acctName = detail.AccountRef.name || detail.AccountRef.value;
         const deptStr = detail.DepartmentRef?.name ? ` [${detail.DepartmentRef.name}]` : '';
-        previewLines.push(`  ${detail.PostingType.padEnd(6)} ${acctName}${deptStr}: $${line.Amount.toFixed(2)}`);
+        const classStr = detail.ClassRef?.name ? ` [Class: ${detail.ClassRef.name}]` : '';
+        previewLines.push(`  ${detail.PostingType.padEnd(6)} ${acctName}${deptStr}${classStr}: $${line.Amount.toFixed(2)}`);
       }
     }
 

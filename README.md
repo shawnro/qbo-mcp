@@ -472,9 +472,9 @@ Entity getters return allowlisted, workflow-relevant data rather than raw QuickB
 | `query_account_transactions` | Authoritative General Ledger postings for an account, with Cash/Accrual and department filters |
 | `account_period_summary` | GL period summary for an account (opening/closing balance, normalized debits/credits, count) |
 | **Journal Entries** | |
-| `create_journal_entry` | Create a journal entry (validates debits = credits) |
-| `get_journal_entry` | Fetch a journal entry by ID |
-| `edit_journal_entry` | Modify an existing journal entry |
+| `create_journal_entry` | Create a journal entry with optional line-level department and class assignment (validates debits = credits) |
+| `get_journal_entry` | Fetch a journal entry by ID, including line IDs, departments, and classes |
+| `edit_journal_entry` | Modify an existing journal entry; omitted line classes are preserved and `clear_class` removes one explicitly |
 | **Bills** | |
 | `create_bill` | Create a vendor bill; account lines support optional customer/job tracking |
 | `get_bill` | Fetch a bill by ID, including line customer/job and billable status |

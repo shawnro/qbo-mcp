@@ -5,11 +5,13 @@ import { promisify } from "./promisify.js";
 import { resolveUniqueName } from "./name-resolution.js";
 import {
   CachedAccount,
+  CachedClass,
   CachedCustomer,
   CachedDepartment,
   CachedVendor,
   CachedItem,
   AccountCache,
+  ClassCache,
   DepartmentCache,
   VendorCache,
   QBQueryResponse,
@@ -25,6 +27,7 @@ export interface LookupCacheOptions {
 export interface QboLookupCache {
   department: DepartmentCache | null;
   account: AccountCache | null;
+  class: ClassCache | null;
   vendor: VendorCache | null;
   vendorGeneration: number;
   readonly itemById: Map<string, CachedItem>;
@@ -37,6 +40,7 @@ export function createLookupCache(): QboLookupCache {
   return {
     department: null,
     account: null,
+    class: null,
     vendor: null,
     vendorGeneration: 0,
     itemById: new Map(),
@@ -48,6 +52,10 @@ export function createLookupCache(): QboLookupCache {
 
 const defaultLookupCache = createLookupCache();
 
+export function clearClassCache(cache: QboLookupCache = defaultLookupCache): void {
+  cache.class = null;
+}
+
 export function clearVendorCache(cache: QboLookupCache = defaultLookupCache): void {
   cache.vendor = null;
   cache.vendorGeneration++;
@@ -56,6 +64,7 @@ export function clearVendorCache(cache: QboLookupCache = defaultLookupCache): vo
 export function clearLookupCache(cache: QboLookupCache = defaultLookupCache): void {
   cache.department = null;
   cache.account = null;
+  clearClassCache(cache);
   clearVendorCache(cache);
   cache.itemById.clear();
   cache.itemByName.clear();
@@ -118,6 +127,30 @@ export async function getAccountCache(
 
   cache.account = { items, byId, byName, byAcctNum, fetchedAt: Date.now() };
   return cache.account;
+}
+
+export async function getClassCache(
+  client: QuickBooks,
+  options: LookupCacheOptions = {},
+  cache: QboLookupCache = defaultLookupCache
+): Promise<ClassCache> {
+  if (!options.forceRefresh && cache.class && (Date.now() - cache.class.fetchedAt) < LOOKUP_CACHE_TTL_MS) {
+    return cache.class;
+  }
+
+  const result = await promisify<unknown>((cb) => client.findClasses({ fetchAll: true }, cb));
+  const items = extractQueryResults<CachedClass>(result, "Class")
+    .filter(cls => cls.Active !== false);
+  const byId = new Map<string, CachedClass>();
+  const byName = new Map<string, CachedClass>();
+  for (const cls of items) {
+    byId.set(cls.Id, cls);
+    byName.set(cls.Name.toLowerCase(), cls);
+    if (cls.FullyQualifiedName) byName.set(cls.FullyQualifiedName.toLowerCase(), cls);
+  }
+
+  cache.class = { items, byId, byName, fetchedAt: Date.now() };
+  return cache.class;
 }
 
 // Resolve account by name, AcctNum, or ID using cache

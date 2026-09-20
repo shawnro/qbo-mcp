@@ -19,6 +19,7 @@ import {
   clearLookupCache,
   clearVendorCache,
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveAccount,
@@ -53,6 +54,17 @@ function seedDepartments() {
       Department: [
         { Id: "10", Name: "Main Office", FullyQualifiedName: "Main Office" },
         { Id: "20", Name: "Santa Rosa", FullyQualifiedName: "Santa Rosa" },
+      ],
+    },
+  });
+}
+
+function seedClasses() {
+  mockSuccess(client.findClasses, {
+    QueryResponse: {
+      Class: [
+        { Id: "40", Name: "Koslin Ct", FullyQualifiedName: "632 Koslin Ct", Active: true },
+        { Id: "41", Name: "Operations", FullyQualifiedName: "Operations", Active: true },
       ],
     },
   });
@@ -172,6 +184,44 @@ describe("resolveVendor", () => {
     await expect(resolveVendor(client as never, "nobody")).rejects.toThrow(
       'Vendor not found: "nobody"'
     );
+  });
+});
+
+describe("getClassCache", () => {
+  it("caches classes by ID, name, and fully qualified name", async () => {
+    seedClasses();
+
+    const cache = await getClassCache(client as never);
+    expect(cache.byId.get("40")?.Name).toBe("Koslin Ct");
+    expect(cache.byName.get("koslin ct")?.Id).toBe("40");
+    expect(cache.byName.get("632 koslin ct")?.Id).toBe("40");
+
+    await getClassCache(client as never);
+    expect(client.findClasses).toHaveBeenCalledOnce();
+  });
+
+  it("is cleared by clearLookupCache", async () => {
+    seedClasses();
+    await getClassCache(client as never);
+    clearLookupCache();
+    await getClassCache(client as never);
+    expect(client.findClasses).toHaveBeenCalledTimes(2);
+  });
+
+  it("excludes inactive classes from assignment lookup", async () => {
+    mockSuccess(client.findClasses, {
+      QueryResponse: {
+        Class: [
+          { Id: "40", Name: "Active Class", Active: true },
+          { Id: "41", Name: "Inactive Class", Active: false },
+        ],
+      },
+    });
+
+    const cache = await getClassCache(client as never);
+    expect(cache.byId.has("40")).toBe(true);
+    expect(cache.byId.has("41")).toBe(false);
+    expect(cache.items).toHaveLength(1);
   });
 });
 

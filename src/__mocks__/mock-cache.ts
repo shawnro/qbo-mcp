@@ -15,6 +15,11 @@ export const TEST_DEPARTMENTS = [
   { Id: "30", Name: "Petaluma", FullyQualifiedName: "Petaluma" },
 ];
 
+export const TEST_CLASSES = [
+  { Id: "40", Name: "Koslin Ct", FullyQualifiedName: "632 Koslin Ct" },
+  { Id: "41", Name: "Operations", FullyQualifiedName: "Operations" },
+];
+
 function buildMap<T extends { Id: string }>(items: T[], keyFn: (item: T) => string | undefined): Map<string, T> {
   const map = new Map<string, T>();
   for (const item of items) {
@@ -39,6 +44,15 @@ export function createMockDepartmentCache() {
     items: TEST_DEPARTMENTS,
     byId: buildMap(TEST_DEPARTMENTS, (d) => d.Id),
     byName: buildMap(TEST_DEPARTMENTS, (d) => d.Name),
+    fetchedAt: Date.now(),
+  };
+}
+
+export function createMockClassCache() {
+  return {
+    items: TEST_CLASSES,
+    byId: buildMap(TEST_CLASSES, (cls) => cls.Id),
+    byName: buildMap(TEST_CLASSES, (cls) => cls.FullyQualifiedName || cls.Name),
     fetchedAt: Date.now(),
   };
 }

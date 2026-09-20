@@ -1,10 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { resolveAccountRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
+import { resolveAccountRef, resolveClassRef, resolveDepartmentRef, resolveVendorRef } from "../resolve.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../__mocks__/mock-cache.js";
+
+describe("resolveClassRef", () => {
+  const cache = createMockClassCache();
+
+  it("resolves by ID and fully qualified name", () => {
+    expect(resolveClassRef(cache, "40")).toEqual({ value: "40", name: "632 Koslin Ct" });
+    expect(resolveClassRef(cache, "632 koslin ct")).toEqual({ value: "40", name: "632 Koslin Ct" });
+  });
+
+  it("resolves one unique partial name", () => {
+    expect(resolveClassRef(cache, "koslin")).toEqual({ value: "40", name: "632 Koslin Ct" });
+  });
+
+  it("rejects an ambiguous partial name", () => {
+    const ambiguousCache = createMockClassCache();
+    ambiguousCache.items = [
+      ...ambiguousCache.items,
+      { Id: "42", Name: "Koslin Reserve", FullyQualifiedName: "Koslin Reserve" },
+    ];
+    expect(() => resolveClassRef(ambiguousCache, "koslin")).toThrow(
+      'Class name is ambiguous: "koslin"'
+    );
+  });
+});
 
 describe("resolveAccountRef", () => {
   const cache = createMockAccountCache();

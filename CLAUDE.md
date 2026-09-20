@@ -165,6 +165,8 @@ All node-quickbooks callbacks pass through a bounded deadline (`QBO_REQUEST_TIME
 - QBO infers `SubClass: true` from presence of `ParentRef` — do NOT send it explicitly
 - Classes cannot be deleted — deactivate with `active: false` via `edit_class`
 - Parent resolution accepts name (case-insensitive lookup) or numeric ID
+- Journal entry lines accept `class_name` or `class_id`. Edits preserve an omitted `ClassRef`; use `clear_class: true` to remove it explicitly.
+- Class assignment resolves ID, exact name, fully qualified subclass name, then one unique partial name. Ambiguous names must return candidates rather than selecting the first match.
 
 ### Attachables
 

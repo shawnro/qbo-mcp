@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMockClient, resetMockClient } from "../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../__mocks__/mock-cache.js";
 
 vi.mock("../../client/index.js", () => ({
   getAccountCache: vi.fn(),
+  getClassCache: vi.fn(),
   getDepartmentCache: vi.fn(),
   getVendorCache: vi.fn(),
   resolveCustomer: vi.fn(),
@@ -16,6 +18,7 @@ vi.mock("../../client/index.js", () => ({
 
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveCustomer,
@@ -24,6 +27,7 @@ import {
 import { createResolutionCoordinator } from "../resolve.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
@@ -57,6 +61,18 @@ function departmentCacheWithNewDepartment() {
     items: [...cache.items, department],
     byId: new Map(cache.byId).set(department.Id, department),
     byName: new Map(cache.byName).set(department.Name.toLowerCase(), department),
+    fetchedAt: Date.now(),
+  };
+}
+
+function classCacheWithNewClass() {
+  const cache = createMockClassCache();
+  const cls = { Id: "200", Name: "New Class", FullyQualifiedName: "Parent:New Class" };
+  return {
+    ...cache,
+    items: [...cache.items, cls],
+    byId: new Map(cache.byId).set(cls.Id, cls),
+    byName: new Map(cache.byName).set(cls.FullyQualifiedName.toLowerCase(), cls),
     fetchedAt: Date.now(),
   };
 }
@@ -125,6 +141,20 @@ describe("createResolutionCoordinator", () => {
     });
     expect(mockGetDepartmentCache).toHaveBeenCalledOnce();
     expect(mockGetDepartmentCache).toHaveBeenCalledWith(client, { forceRefresh: true });
+  });
+
+  it("refreshes a stale class cache once", async () => {
+    mockGetClassCache.mockResolvedValue(classCacheWithNewClass() as never);
+    const resolver = createResolutionCoordinator(client as never, {
+      class: createMockClassCache() as never,
+    });
+
+    await expect(resolver.class("Parent:New Class")).resolves.toEqual({
+      value: "200",
+      name: "Parent:New Class",
+    });
+    expect(mockGetClassCache).toHaveBeenCalledOnce();
+    expect(mockGetClassCache).toHaveBeenCalledWith(client, { forceRefresh: true });
   });
 
   it("refreshes a stale vendor cache once", async () => {
