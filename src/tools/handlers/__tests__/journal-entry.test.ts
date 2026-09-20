@@ -8,6 +8,7 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
 } from "../../../__mocks__/mock-cache.js";
 
@@ -15,6 +16,7 @@ import {
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
@@ -44,10 +46,13 @@ import {
   handleGetJournalEntry,
   handleEditJournalEntry,
 } from "../journal-entry.js";
-import { getAccountCache, getDepartmentCache } from "../../../client/index.js";
+import { getAccountCache, getClassCache, getDepartmentCache } from "../../../client/index.js";
+import { outputReport } from "../../../utils/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
+const mockOutputReport = vi.mocked(outputReport);
 
 function createAccountCacheWithNewAccounts() {
   const cache = createMockAccountCache();
@@ -81,6 +86,7 @@ describe("handleCreateJournalEntry", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
   });
 
@@ -192,6 +198,28 @@ describe("handleCreateJournalEntry", () => {
 
     expect(result.content[0].text).toContain("Journal Entry Created");
     expect(client.createJournalEntry).toHaveBeenCalledOnce();
+  });
+
+  it("resolves and includes a class on create", async () => {
+    mockSuccess(client.createJournalEntry, { Id: "457", DocNumber: "JE-003" });
+
+    await handleCreateJournalEntry(client as never, {
+      txn_date: "2026-03-01",
+      draft: false,
+      lines: [
+        { account_name: "Cash", amount: 75.50, posting_type: "Debit", class_name: "632 Koslin Ct" },
+        { account_name: "Tips", amount: 75.50, posting_type: "Credit", class_id: "40" },
+      ],
+    });
+
+    const payload = client.createJournalEntry.mock.calls[0][0];
+    expect(payload.Line.map((line: { JournalEntryLineDetail: { ClassRef?: unknown } }) =>
+      line.JournalEntryLineDetail.ClassRef
+    )).toEqual([
+      { value: "40", name: "632 Koslin Ct" },
+      { value: "40", name: "632 Koslin Ct" },
+    ]);
+    expect(mockGetClassCache).toHaveBeenCalledOnce();
   });
 
   // --- Payload inspection ---
@@ -451,6 +479,7 @@ describe("handleGetJournalEntry", () => {
           JournalEntryLineDetail: {
             PostingType: "Debit",
             AccountRef: { value: "1", name: "Cash" },
+            ClassRef: { value: "40", name: "632 Koslin Ct" },
           },
         },
         {
@@ -472,6 +501,12 @@ describe("handleGetJournalEntry", () => {
     expect(result.content[0].text).toContain("JE-055");
     expect(result.content[0].text).toContain("Cash");
     expect(result.content[0].text).toContain("Tips");
+    expect(result.content[0].text).toContain("Class: 632 Koslin Ct");
+    const reportData = mockOutputReport.mock.calls[0][1] as {
+      Line: Array<{ JournalEntryLineDetail: { ClassRef?: { value: string; name?: string } } }>;
+    };
+    expect(reportData.Line[0].JournalEntryLineDetail.ClassRef)
+      .toEqual({ value: "40", name: "632 Koslin Ct" });
     expect(client.getJournalEntry).toHaveBeenCalledOnce();
   });
 
@@ -534,6 +569,7 @@ describe("handleEditJournalEntry", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     // Default: getJournalEntry returns the existing JE
     mockSuccess(client.getJournalEntry, existingJE);
@@ -583,6 +619,77 @@ describe("handleEditJournalEntry", () => {
     const payload = client.updateJournalEntry.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
     expect(payload.Line).toBeDefined();
+  });
+
+  it("preserves an existing class when another line field changes", async () => {
+    const classifiedJE = structuredClone(existingJE);
+    Object.assign(classifiedJE.Line[0].JournalEntryLineDetail, {
+      ClassRef: { value: "40", name: "632 Koslin Ct" },
+    });
+    mockSuccess(client.getJournalEntry, classifiedJE);
+    mockSuccess(client.updateJournalEntry, { Id: "77", SyncToken: "3" });
+
+    await handleEditJournalEntry(client as never, {
+      id: "77",
+      draft: false,
+      lines: [{ line_id: "0", description: "Updated debit" }],
+    });
+
+    expect(client.updateJournalEntry.mock.calls[0][0].Line[0].JournalEntryLineDetail.ClassRef)
+      .toEqual({ value: "40", name: "632 Koslin Ct" });
+  });
+
+  it("replaces and clears existing line classes", async () => {
+    const classifiedJE = structuredClone(existingJE);
+    for (const line of classifiedJE.Line) {
+      Object.assign(line.JournalEntryLineDetail, {
+        ClassRef: { value: "41", name: "Operations" },
+      });
+    }
+    mockSuccess(client.getJournalEntry, classifiedJE);
+    mockSuccess(client.updateJournalEntry, { Id: "77", SyncToken: "3" });
+
+    await handleEditJournalEntry(client as never, {
+      id: "77",
+      draft: false,
+      lines: [
+        { line_id: "0", class_name: "632 Koslin Ct" },
+        { line_id: "1", clear_class: true },
+      ],
+    });
+
+    const payload = client.updateJournalEntry.mock.calls[0][0];
+    expect(payload.Line[0].JournalEntryLineDetail.ClassRef)
+      .toEqual({ value: "40", name: "632 Koslin Ct" });
+    expect(payload.Line[1].JournalEntryLineDetail).not.toHaveProperty("ClassRef");
+  });
+
+  it("rejects conflicting class directives when adding a line", async () => {
+    await expect(handleEditJournalEntry(client as never, {
+      id: "77",
+      draft: false,
+      lines: [{
+        account_name: "Cash",
+        amount: 50,
+        posting_type: "Debit",
+        class_name: "632 Koslin Ct",
+        class_id: "40",
+      }],
+    })).rejects.toThrow("Provide only one of class_name or class_id per line");
+    expect(client.updateJournalEntry).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { clear_class: true },
+    { class_name: "632 Koslin Ct" },
+    { class_id: "40" },
+  ])("rejects class directives when deleting a line: %j", async (directive) => {
+    await expect(handleEditJournalEntry(client as never, {
+      id: "77",
+      draft: false,
+      lines: [{ line_id: "0", delete: true, ...directive }],
+    })).rejects.toThrow("delete cannot be combined with class assignment or clearing");
+    expect(client.updateJournalEntry).not.toHaveBeenCalled();
   });
 
   it("lets QBO assign IDs to new lines added during edit", async () => {

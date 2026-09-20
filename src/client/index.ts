@@ -11,9 +11,11 @@ export {
 export {
   createLookupCache,
   clearLookupCache,
+  clearClassCache,
   clearVendorCache,
   getDepartmentCache,
   getAccountCache,
+  getClassCache,
   getVendorCache,
   resolveAccount,
   resolveVendor,

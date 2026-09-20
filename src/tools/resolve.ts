@@ -6,12 +6,13 @@ import type { QboLookupCache } from "../client/cache.js";
 import { resolveUniqueName } from "../client/name-resolution.js";
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveCustomer,
   resolveCustomerById,
 } from "../client/index.js";
-import type { AccountCache, DepartmentCache, VendorCache } from "../types/cache.js";
+import type { AccountCache, ClassCache, DepartmentCache, VendorCache } from "../types/cache.js";
 
 export interface AccountRef {
   value: string;
@@ -28,7 +29,7 @@ export function toEntityRef(ref: AccountRef): EntityRef {
   return { value: ref.value, name: ref.name };
 }
 
-type ResolutionEntity = "account" | "department" | "vendor";
+type ResolutionEntity = "account" | "class" | "department" | "vendor";
 
 export class ResolutionNotFoundError extends Error {
   constructor(
@@ -83,6 +84,20 @@ export function resolveDepartmentRef(cache: DepartmentCache, nameOrId: string): 
   return { value: match.Id, name: match.FullyQualifiedName || match.Name };
 }
 
+export function resolveClassRef(cache: ClassCache, nameOrId: string): EntityRef {
+  const byId = cache.byId.get(nameOrId);
+  if (byId) return { value: byId.Id, name: byId.FullyQualifiedName || byId.Name };
+
+  const match = resolveUniqueName("Class", nameOrId, cache.items.map(item => ({
+    value: item,
+    names: [item.FullyQualifiedName, item.Name],
+    label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id})`,
+  })));
+  if (!match) throw new ResolutionNotFoundError("class", `Class not found: "${nameOrId}"`);
+
+  return { value: match.Id, name: match.FullyQualifiedName || match.Name };
+}
+
 /**
  * Resolve a vendor by ID, DisplayName, or partial DisplayName match.
  * Returns a QB API VendorRef shape (no type field — caller adds if needed).
@@ -103,12 +118,14 @@ export function resolveVendorRef(cache: VendorCache, nameOrId: string): EntityRe
 
 export interface ResolutionCaches {
   account?: AccountCache;
+  class?: ClassCache;
   department?: DepartmentCache;
   vendor?: VendorCache;
 }
 
 export interface ResolutionCoordinator {
   account(nameOrId: string): Promise<AccountRef>;
+  class(nameOrId: string): Promise<EntityRef>;
   department(nameOrId: string): Promise<EntityRef>;
   vendor(nameOrId: string): Promise<EntityRef>;
   customer(input: CustomerResolutionInput): Promise<EntityRef>;
@@ -117,6 +134,47 @@ export interface ResolutionCoordinator {
 export type CustomerResolutionInput =
   | { id: string; name?: never }
   | { name: string; id?: never };
+
+export interface ClassRefInput {
+  class_name?: string;
+  class_id?: string;
+}
+
+export interface ClassRefChange extends ClassRefInput {
+  clear_class?: boolean;
+}
+
+export async function resolveOptionalClassRef(
+  resolver: ResolutionCoordinator,
+  input: ClassRefInput
+): Promise<EntityRef | undefined> {
+  const name = input.class_name?.trim();
+  const id = input.class_id?.trim();
+  if (name && id) throw new Error("Provide only one of class_name or class_id per line");
+  if (id) return resolver.class(id);
+  if (name) return resolver.class(name);
+  return undefined;
+}
+
+export async function applyClassRefChange(
+  resolver: ResolutionCoordinator,
+  detail: { ClassRef?: { value: string; name?: string } },
+  change: ClassRefChange & { delete?: boolean },
+  label: string
+): Promise<void> {
+  const hasAssignment = Boolean(change.class_name?.trim() || change.class_id?.trim());
+  if (change.delete && (hasAssignment || change.clear_class)) {
+    throw new Error(`${label}: delete cannot be combined with class assignment or clearing`);
+  }
+  if (change.clear_class && hasAssignment) {
+    throw new Error(`${label}: clear_class cannot be combined with class_name or class_id`);
+  }
+  if (change.clear_class) {
+    delete detail.ClassRef;
+  } else if (hasAssignment) {
+    detail.ClassRef = await resolveOptionalClassRef(resolver, change);
+  }
+}
 
 export async function resolveOptionalCustomerRef(
   resolver: ResolutionCoordinator,
@@ -193,14 +251,17 @@ export function createResolutionCoordinator(
   lookupCache?: QboLookupCache
 ): ResolutionCoordinator {
   let accountCache = caches.account;
+  let classCache = caches.class;
   let departmentCache = caches.department;
   let vendorCache = caches.vendor;
 
   let accountLoad: Promise<AccountCache> | undefined;
+  let classLoad: Promise<ClassCache> | undefined;
   let departmentLoad: Promise<DepartmentCache> | undefined;
   let vendorLoad: Promise<VendorCache> | undefined;
 
   let accountRefresh: Promise<AccountCache> | undefined;
+  let classRefresh: Promise<ClassCache> | undefined;
   let departmentRefresh: Promise<DepartmentCache> | undefined;
   let vendorRefresh: Promise<VendorCache> | undefined;
   const customerResolutions = new Map<string, Promise<EntityRef>>();
@@ -221,6 +282,15 @@ export function createResolutionCoordinator(
       : getDepartmentCache(client);
     departmentCache = await departmentLoad;
     return departmentCache;
+  };
+
+  const loadClassCache = async (): Promise<ClassCache> => {
+    if (classCache) return classCache;
+    classLoad ??= lookupCache
+      ? getClassCache(client, {}, lookupCache)
+      : getClassCache(client);
+    classCache = await classLoad;
+    return classCache;
   };
 
   const loadVendorCache = async (): Promise<VendorCache> => {
@@ -252,6 +322,16 @@ export function createResolutionCoordinator(
     return departmentRefresh;
   };
 
+  const refreshClassCache = (): Promise<ClassCache> => {
+    classRefresh ??= (lookupCache
+      ? getClassCache(client, { forceRefresh: true }, lookupCache)
+      : getClassCache(client, { forceRefresh: true })).then(cache => {
+      classCache = cache;
+      return cache;
+    });
+    return classRefresh;
+  };
+
   const refreshVendorCache = (): Promise<VendorCache> => {
     vendorRefresh ??= (lookupCache
       ? getVendorCache(client, { forceRefresh: true }, lookupCache)
@@ -269,6 +349,15 @@ export function createResolutionCoordinator(
       } catch (error) {
         if (!(error instanceof ResolutionNotFoundError) || error.entity !== "account") throw error;
         return resolveAccountRef(await refreshAccountCache(), nameOrId);
+      }
+    },
+
+    async class(nameOrId: string): Promise<EntityRef> {
+      try {
+        return resolveClassRef(await loadClassCache(), nameOrId);
+      } catch (error) {
+        if (!(error instanceof ResolutionNotFoundError) || error.entity !== "class") throw error;
+        return resolveClassRef(await refreshClassCache(), nameOrId);
       }
     },
 

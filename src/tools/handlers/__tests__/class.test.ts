@@ -9,6 +9,7 @@ import {
 
 vi.mock("../../../client/index.js", () => ({
   promisify: mockPromisify,
+  clearClassCache: vi.fn(),
   getClient: vi.fn(),
   clearCredentialsCache: vi.fn(),
   refreshTokens: vi.fn(),
@@ -25,6 +26,9 @@ vi.mock("../../../utils/index.js", async () => {
 });
 
 import { handleCreateClass, handleGetClass, handleEditClass } from "../class.js";
+import { clearClassCache } from "../../../client/index.js";
+
+const mockClearClassCache = vi.mocked(clearClassCache);
 
 describe("handleCreateClass", () => {
   let client: ReturnType<typeof createMockClient>;
@@ -56,6 +60,7 @@ describe("handleCreateClass", () => {
     expect(client.createClass).toHaveBeenCalledOnce();
     expect(result.content[0].text).toContain("Class Created");
     expect(result.content[0].text).toContain("100");
+    expect(mockClearClassCache).toHaveBeenCalledOnce();
   });
 
   it("resolves parent by name for sub-class", async () => {
@@ -217,6 +222,7 @@ describe("handleEditClass", () => {
     expect(payload.Name).toBe("Wholesale");
     expect(payload.sparse).toBe(true);
     expect(result.content[0].text).toContain("Class Updated");
+    expect(mockClearClassCache).toHaveBeenCalledOnce();
   });
 
   it("deactivates class via active=false", async () => {
@@ -239,6 +245,7 @@ describe("handleEditClass", () => {
     });
 
     const payload = client.updateClass.mock.calls[0][0];
+    expect(payload.Name).toBe("Retail");
     expect(payload.Active).toBe(false);
   });
 

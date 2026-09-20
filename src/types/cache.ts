@@ -6,6 +6,13 @@ export interface CachedDepartment {
   FullyQualifiedName?: string;
 }
 
+export interface CachedClass {
+  Id: string;
+  Name: string;
+  FullyQualifiedName?: string;
+  Active?: boolean;
+}
+
 export interface CachedAccount {
   Id: string;
   Name: string;
@@ -20,6 +27,13 @@ export interface DepartmentCache {
   items: CachedDepartment[];
   byId: Map<string, CachedDepartment>;
   byName: Map<string, CachedDepartment>;  // lowercase key
+  fetchedAt: number;
+}
+
+export interface ClassCache {
+  items: CachedClass[];
+  byId: Map<string, CachedClass>;
+  byName: Map<string, CachedClass>;        // lowercase key
   fetchedAt: number;
 }
 

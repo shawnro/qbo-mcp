@@ -56,6 +56,38 @@ const newItemLineConstraints = [
 
 const lineCustomerRefCreateConstraints = rejectCombination("customer_name", "customer_id");
 
+const lineClassRefCreateConstraints = rejectCombination("class_name", "class_id");
+
+const lineClassRefEditConstraints = {
+  allOf: [
+    lineClassRefCreateConstraints,
+    {
+      not: {
+        required: ["clear_class"],
+        properties: { clear_class: { const: true } },
+        anyOf: [
+          requireAnyOf("class_name").anyOf[0],
+          requireAnyOf("class_id").anyOf[0],
+        ],
+      },
+    },
+    {
+      not: {
+        required: ["delete"],
+        properties: { delete: { const: true } },
+        anyOf: [
+          requireAnyOf("class_name").anyOf[0],
+          requireAnyOf("class_id").anyOf[0],
+          {
+            required: ["clear_class"],
+            properties: { clear_class: { const: true } },
+          },
+        ],
+      },
+    },
+  ],
+};
+
 const lineCustomerRefEditConstraints = {
   allOf: [
     lineCustomerRefCreateConstraints,
@@ -472,7 +504,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_journal_entry",
-    description: "Create a journal entry. Accepts account/department names (will lookup IDs automatically). Validates debits=credits before creating. Returns entry details and a link to view in QuickBooks.",
+    description: "Create a journal entry. Accepts account, department, and class names or IDs (will look up names automatically). Validates debits=credits before creating. Returns entry details and a link to view in QuickBooks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -487,7 +519,7 @@ export const toolDefinitions = [
         lines: {
           type: "array",
           minItems: 1,
-          description: "Array of line items. Provide account_name OR account_id (name preferred). Optionally provide department_name OR department_id.",
+          description: "Array of line items. Provide account_name OR account_id (name preferred). Optionally provide department and class names or IDs.",
           items: {
             type: "object",
             properties: {
@@ -516,6 +548,16 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Department/Location ID (use if you already know it, otherwise use department_name)",
               },
+              class_name: {
+                type: "string",
+                minLength: 1,
+                description: "Class name or fully qualified subclass name. Will be looked up to get its ID.",
+              },
+              class_id: {
+                type: "string",
+                minLength: 1,
+                description: "Class ID (use if you already know it, otherwise use class_name)",
+              },
               description: {
                 type: "string",
                 description: "Line description (optional)",
@@ -523,6 +565,7 @@ export const toolDefinitions = [
             },
             required: ["amount", "posting_type"],
             ...requireAnyOf("account_name", "account_id"),
+            allOf: [lineClassRefCreateConstraints],
           },
         },
         draft: {
@@ -554,7 +597,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_journal_entry",
-    description: "Modify an existing journal entry. Can update date, memo, doc_number, and/or lines. For lines: provide line_id to update existing line, omit line_id to add new line, set delete=true to remove a line. Validates debits=credits before saving.",
+    description: "Modify an existing journal entry. Can update date, memo, doc_number, and/or lines, including class assignment. For lines: provide line_id to update an existing line, omit line_id to add one, set clear_class=true to remove its class, or set delete=true to remove the line. Validates debits=credits before saving.",
     inputSchema: {
       type: "object",
       properties: {
@@ -602,6 +645,20 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Department/Location name (auto-resolved to ID)",
               },
+              class_name: {
+                type: "string",
+                minLength: 1,
+                description: "Class name or fully qualified subclass name (auto-resolved to ID)",
+              },
+              class_id: {
+                type: "string",
+                minLength: 1,
+                description: "Class ID to assign",
+              },
+              clear_class: {
+                type: "boolean",
+                description: "Set true to remove the existing class from this line",
+              },
               description: {
                 type: "string",
                 description: "Line description",
@@ -611,10 +668,21 @@ export const toolDefinitions = [
                 description: "Set true to remove this line (requires line_id)",
               },
             },
-            ...requireNewLine({
-              required: ["amount", "posting_type", "account_name"],
-              properties: { account_name: { minLength: 1 } },
-            }),
+            allOf: [
+              ...requireNewLine(
+                {
+                  required: ["amount", "posting_type", "account_name"],
+                  properties: { account_name: { minLength: 1 } },
+                },
+                {
+                  not: {
+                    required: ["clear_class"],
+                    properties: { clear_class: { const: true } },
+                  },
+                }
+              ).allOf,
+              ...lineClassRefEditConstraints.allOf,
+            ],
           },
         },
         draft: {

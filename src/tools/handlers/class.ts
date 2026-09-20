@@ -1,7 +1,7 @@
 // Handlers for class tools (create, get, edit)
 
 import QuickBooks from "node-quickbooks";
-import { promisify } from "../../client/index.js";
+import { clearClassCache, promisify } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
@@ -57,7 +57,8 @@ export async function handleCreateClass(
     parent_id?: string;
     active?: boolean;
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { name, parent_name, parent_id, active, draft = true } = args;
 
@@ -90,6 +91,7 @@ export async function handleCreateClass(
   const result = (await promisify<unknown>((cb) =>
     client.createClass(classObj, cb)
   )) as QBClass;
+  clearClassCache(context?.runtime.lookupCache);
 
   const response = [
     "Class Created!",
@@ -161,7 +163,8 @@ export async function handleEditClass(
     parent_name?: string;
     parent_id?: string;
     draft?: boolean;
-  }
+  },
+  context?: QboRequestContext
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const { id, name, active, parent_name, parent_id, draft = true } = args;
 
@@ -174,6 +177,7 @@ export async function handleEditClass(
   const updated: Record<string, unknown> = {
     Id: current.Id,
     SyncToken: current.SyncToken,
+    Name: current.Name,
     sparse: true,
   };
 
@@ -232,6 +236,7 @@ export async function handleEditClass(
   const result = (await promisify<unknown>((cb) =>
     client.updateClass(updated, cb)
   )) as QBClass;
+  clearClassCache(context?.runtime.lookupCache);
 
   const response = [
     "Class Updated!",
