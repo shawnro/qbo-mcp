@@ -4,6 +4,7 @@ import QuickBooks from "node-quickbooks";
 import {
   promisify,
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
 } from "../../client/index.js";
 import {
@@ -66,14 +67,18 @@ export async function handleCreateJournalEntry(
     throw new Error("At least one line is required");
   }
 
-  // Get cached accounts and departments (uses TTL-based cache)
-  const [acctCache, deptCache] = await Promise.all([
-    getAccountCache(client, {}, lookupCache),
-    getDepartmentCache(client, {}, lookupCache)
+  const needsAccountCache = lines.some(line => !line.account_id && line.account_name);
+  const needsDepartmentCache = lines.some(line => !line.department_id && line.department_name);
+  const needsClassCache = lines.some(line => line.class_id || line.class_name);
+  const [acctCache, deptCache, classCache] = await Promise.all([
+    needsAccountCache ? getAccountCache(client, {}, lookupCache) : undefined,
+    needsDepartmentCache ? getDepartmentCache(client, {}, lookupCache) : undefined,
+    needsClassCache ? getClassCache(client, {}, lookupCache) : undefined,
   ]);
   const resolver = createResolutionCoordinator(client, {
     account: acctCache,
     department: deptCache,
+    class: classCache,
   }, lookupCache);
 
   // Resolve account and department names to IDs (all lookups are from cache)
@@ -86,28 +91,29 @@ export async function handleCreateJournalEntry(
     let classId = line.class_id;
     let className = line.class_name;
 
-    // Resolve account
-    if (!accountId && accountName) {
-      const account = await resolver.account(accountName);
-      accountId = account.value;
-      accountName = account.name;
-      accountNum = account.acctNum;
-    } else if (!accountId && !accountName) {
+    if (!accountId && !accountName) {
       throw new Error("Each line must have either account_id or account_name");
     }
-
-    // Resolve department
-    if (!departmentId && departmentName) {
-      const dept = await resolver.department(departmentName);
-      departmentId = dept.value;
-      departmentName = dept.name;
-    }
-
     if (classId && className) {
       throw new Error("Provide only one of class_name or class_id per line");
     }
-    if (classId || className) {
-      const cls = await resolver.class(classId || className!);
+
+    const [account, department, cls] = await Promise.all([
+      !accountId && accountName ? resolver.account(accountName) : undefined,
+      !departmentId && departmentName ? resolver.department(departmentName) : undefined,
+      classId || className ? resolver.class(classId || className!) : undefined,
+    ]);
+
+    if (account) {
+      accountId = account.value;
+      accountName = account.name;
+      accountNum = account.acctNum;
+    }
+    if (department) {
+      departmentId = department.value;
+      departmentName = department.name;
+    }
+    if (cls) {
       classId = cls.value;
       className = cls.name;
     }
