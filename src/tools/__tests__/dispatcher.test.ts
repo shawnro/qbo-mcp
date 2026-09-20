@@ -239,6 +239,36 @@ describe("executeTool", () => {
     expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
   });
 
+  it("does not start a committed mutation after its queue wait expires", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    mockHandleGetCompanyInfo.mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ content: [{ type: "text", text: "Company Info" }] });
+    }));
+    const blockingCall = executeTool("get_company_info", {});
+    await vi.advanceTimersByTimeAsync(0);
+
+    const queuedCall = executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(queuedCall).resolves.toEqual({
+      content: [{
+        type: "text",
+        text: 'queue_timeout: "create_vendor" waited 60000 ms for a prior local operation and did not start. Retry after the prior operation finishes.',
+      }],
+      isError: true,
+    });
+    expect(mockHandleCreateVendor).not.toHaveBeenCalled();
+
+    release();
+    await blockingCall;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockHandleCreateVendor).not.toHaveBeenCalled();
+  });
+
   it("retries after refreshing token on auth error", async () => {
     // First call fails with auth error
     mockHandleGetCompanyInfo

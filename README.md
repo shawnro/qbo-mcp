@@ -417,7 +417,7 @@ QBO_INLINE_OUTPUT=true
 | `QBO_CREDENTIAL_FILE` | `~/.qbo-mcp/credentials.json` | Custom credential file path |
 | `QBO_INLINE_OUTPUT` | `false` | Return bounded responses inline instead of writing complete data to `/tmp` files. Required when using Claude Desktop or plugin environments where file-based output is not accessible to the model. |
 | `QBO_SANDBOX` | `false` | Use QuickBooks sandbox environment |
-| `QBO_REQUEST_TIMEOUT_MS` | `60000` | Maximum wait for a QuickBooks callback, from 1 to 600000 ms. Hosted deployments should keep this below the platform request timeout. |
+| `QBO_REQUEST_TIMEOUT_MS` | `60000` | Maximum wait for a QuickBooks callback or a local queued operation to start, from 1 to 600000 ms. Hosted deployments should keep this below the platform request timeout. |
 | `AWS_REGION` | `us-east-2` | AWS region (aws mode) |
 | `QBO_SECRET_NAME` | `prod/qbo` | Secrets Manager secret name (aws mode) |
 | `QBO_COMPANY_ID_PARAM` | `/prod/qbo/company_id` | SSM parameter path (aws mode) |
@@ -450,7 +450,7 @@ Hosted deployments must currently run as one process/replica and set `MCP_SINGLE
 
 Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability policy live in a provider-neutral Web `Request` to `Response` application. AWS Lambda is an API Gateway adapter over that application; Azure Functions and Node/container adapters can use the same core without duplicating accounting or security policy.
 
-QuickBooks callback operations have a configurable deadline through `QBO_REQUEST_TIMEOUT_MS`. A deadline stops the MCP request from waiting but cannot cancel a request already sent by `node-quickbooks`. Timed-out reads and draft previews can be retried. A timed-out committed mutation returns `indeterminate_result` and is never replayed automatically; verify the record in QuickBooks before deciding whether to retry.
+QuickBooks callback operations and local operation queue waits have a configurable deadline through `QBO_REQUEST_TIMEOUT_MS`. A callback deadline stops the MCP request from waiting but cannot cancel a request already sent by `node-quickbooks`. A local queue deadline expires before the operation starts, so the expired operation is skipped rather than executed later. Timed-out reads and draft previews can be retried. A timed-out committed mutation returns `indeterminate_result` and is never replayed automatically; verify the record in QuickBooks before deciding whether to retry.
 
 Entity getters return allowlisted, workflow-relevant data rather than raw QuickBooks API objects. IDs, `SyncToken`, editable line IDs, linked transactions, and references needed for follow-up work are retained; unsupported upstream fields and opaque nested payloads are excluded from both inline HTTP output and local report files. Generic queries and financial reports remain broader read surfaces and use the bounded output policy described above.
 

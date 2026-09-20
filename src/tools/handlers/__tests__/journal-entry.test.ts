@@ -125,6 +125,54 @@ describe("handleCreateJournalEntry", () => {
     expect(client.createJournalEntry).not.toHaveBeenCalled();
   });
 
+  it("does not load lookup caches when draft lines use only account IDs", async () => {
+    const result = await handleCreateJournalEntry(client as never, {
+      txn_date: "2026-01-15",
+      lines: [
+        { account_id: "35", amount: 100, posting_type: "Debit" },
+        { account_id: "83", amount: 100, posting_type: "Credit" },
+      ],
+    });
+
+    expect(result.content[0].text).toContain("DRAFT");
+    expect(mockGetAccountCache).not.toHaveBeenCalled();
+    expect(mockGetDepartmentCache).not.toHaveBeenCalled();
+    expect(mockGetClassCache).not.toHaveBeenCalled();
+  });
+
+  it("starts all required lookup caches together", async () => {
+    let resolveAccounts!: (value: ReturnType<typeof createMockAccountCache>) => void;
+    let resolveDepartments!: (value: ReturnType<typeof createMockDepartmentCache>) => void;
+    let resolveClasses!: (value: ReturnType<typeof createMockClassCache>) => void;
+    mockGetAccountCache.mockReturnValue(new Promise((resolve) => { resolveAccounts = resolve; }) as never);
+    mockGetDepartmentCache.mockReturnValue(new Promise((resolve) => { resolveDepartments = resolve; }) as never);
+    mockGetClassCache.mockReturnValue(new Promise((resolve) => { resolveClasses = resolve; }) as never);
+
+    const result = handleCreateJournalEntry(client as never, {
+      txn_date: "2026-01-15",
+      lines: [
+        {
+          account_name: "Cash",
+          department_name: "Santa Rosa",
+          class_name: "632 Koslin Ct",
+          amount: 100,
+          posting_type: "Debit",
+        },
+        { account_name: "Tips", amount: 100, posting_type: "Credit" },
+      ],
+    });
+
+    await Promise.resolve();
+    expect(mockGetAccountCache).toHaveBeenCalledOnce();
+    expect(mockGetDepartmentCache).toHaveBeenCalledOnce();
+    expect(mockGetClassCache).toHaveBeenCalledOnce();
+
+    resolveAccounts(createMockAccountCache());
+    resolveDepartments(createMockDepartmentCache());
+    resolveClasses(createMockClassCache());
+    await expect(result).resolves.toMatchObject({ content: [{ type: "text" }] });
+  });
+
   // --- Create success (minimal fields) ---
 
   it("creates journal entry when draft=false", async () => {

@@ -9,7 +9,10 @@ import { isQboOperationTimeoutError } from "../client/promisify.js";
 import { formatQBOError, isAmbiguousMutationError } from "../utils/index.js";
 import { isToolDisabled } from "./crud-filter.js";
 import { getToolEffect } from "./effects.js";
-import { runLocalOperation } from "../runtime/local-operation-coordinator.js";
+import {
+  LocalOperationQueueTimeoutError,
+  runLocalOperation,
+} from "../runtime/local-operation-coordinator.js";
 import {
   handleGetCompanyInfo,
   handleQuery,
@@ -129,10 +132,23 @@ export async function executeTool(
   args: Record<string, unknown>,
   context?: QboRequestContext
 ): Promise<MCPToolResult> {
-  if (!context && name !== "switch_qbo_profile") {
-    return runLocalOperation(() => executeToolAttempt(name, args));
+  try {
+    if (!context && name !== "switch_qbo_profile") {
+      return await runLocalOperation(() => executeToolAttempt(name, args));
+    }
+    return await executeToolAttempt(name, args, context);
+  } catch (error) {
+    if (error instanceof LocalOperationQueueTimeoutError) {
+      return {
+        content: [{
+          type: "text",
+          text: `queue_timeout: "${name}" waited ${error.timeoutMs} ms for a prior local operation and did not start. Retry after the prior operation finishes.`,
+        }],
+        isError: true,
+      };
+    }
+    throw error;
   }
-  return executeToolAttempt(name, args, context);
 }
 
 async function executeToolAttempt(
