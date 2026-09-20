@@ -166,6 +166,7 @@ All node-quickbooks callbacks and local operation queue waits use a bounded dead
 - Classes cannot be deleted — deactivate with `active: false` via `edit_class`
 - Parent resolution accepts name (case-insensitive lookup) or numeric ID
 - Journal entry lines accept `class_name` or `class_id`. Edits preserve an omitted `ClassRef`; use `clear_class: true` to remove it explicitly.
+- Journal entry get/edit IDs must be positive numeric entity IDs returned by QBO. Line IDs are separate and may legitimately be `"0"`.
 - Class assignment resolves ID, exact name, fully qualified subclass name, then one unique partial name. Ambiguous names must return candidates rather than selecting the first match.
 
 ### Attachables

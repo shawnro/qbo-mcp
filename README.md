@@ -473,8 +473,8 @@ Entity getters return allowlisted, workflow-relevant data rather than raw QuickB
 | `account_period_summary` | GL period summary for an account (opening/closing balance, normalized debits/credits, count) |
 | **Journal Entries** | |
 | `create_journal_entry` | Create a journal entry with optional line-level department and class assignment (validates debits = credits) |
-| `get_journal_entry` | Fetch a journal entry by ID, including line IDs, departments, and classes |
-| `edit_journal_entry` | Modify an existing journal entry; omitted line classes are preserved and `clear_class` removes one explicitly |
+| `get_journal_entry` | Fetch a journal entry by its positive numeric QBO entity ID, including line IDs, departments, and classes |
+| `edit_journal_entry` | Modify a journal entry using its positive numeric QBO entity ID; omitted line classes are preserved and `clear_class` removes one explicitly |
 | **Bills** | |
 | `create_bill` | Create a vendor bill; account lines support optional customer/job tracking |
 | `get_bill` | Fetch a bill by ID, including line customer/job and billable status |

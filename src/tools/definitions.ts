@@ -589,7 +589,8 @@ export const toolDefinitions = [
       properties: {
         id: {
           type: "string",
-          description: "The journal entry ID",
+          pattern: "^[1-9][0-9]*$",
+          description: "Positive numeric journal entry ID returned by QuickBooks",
         },
       },
       required: ["id"],
@@ -603,7 +604,8 @@ export const toolDefinitions = [
       properties: {
         id: {
           type: "string",
-          description: "Journal entry ID to edit",
+          pattern: "^[1-9][0-9]*$",
+          description: "Positive numeric journal entry ID returned by QuickBooks",
         },
         txn_date: {
           type: "string",
