@@ -241,7 +241,7 @@ describe("toolDefinitions cross-field contracts", () => {
 
   it("rejects conflicting customer directives on account-based lines", () => {
     const createLine = getDefinition("create_bill").inputSchema.properties.lines.items!;
-    expect(createLine.not?.required).toEqual(["customer_name", "customer_id"]);
+    expect(createLine.allOf?.[0].not?.required).toEqual(["customer_name", "customer_id"]);
 
     const editLine = getDefinition("edit_bill").inputSchema.properties.lines.items!;
     expect(editLine.allOf?.[0].not?.required).toEqual(["customer_name", "customer_id"]);
@@ -452,6 +452,10 @@ describe("toolDefinitions semantic validation", () => {
         id: "1",
         lines: [{ account_name: "Expense", amount: 5, clear_customer: true }],
       })).toBe(false);
+      expect(validate(name, {
+        id: "1",
+        lines: [{ account_name: "Expense", amount: 5, clear_class: true }],
+      })).toBe(false);
     }
 
     for (const name of ["edit_invoice", "edit_sales_receipt"]) {
@@ -514,6 +518,38 @@ describe("toolDefinitions semantic validation", () => {
     expect(validate("edit_journal_entry", {
       id: "1",
       lines: [{ account_name: "Checking", amount: 5, posting_type: "Debit", clear_class: true }],
+    })).toBe(false);
+  });
+
+  it("enforces class assignment and clearing rules for supported transaction lines", () => {
+    const creates = [
+      ["create_bill", { vendor_name: "Vendor", txn_date: "2026-09-19", lines: [{ account_name: "Expense", amount: 5 }] }],
+      ["create_expense", { payment_type: "Cash", payment_account: "Checking", txn_date: "2026-09-19", lines: [{ account_name: "Expense", amount: 5 }] }],
+      ["create_vendor_credit", { vendor_name: "Vendor", txn_date: "2026-09-19", lines: [{ account_name: "Expense", amount: 5 }] }],
+      ["create_deposit", { deposit_to_account: "Checking", txn_date: "2026-09-19", lines: [{ account_name: "Income", amount: 5 }] }],
+      ["create_invoice", { customer_name: "Customer", txn_date: "2026-09-19", lines: [{ item_name: "Services", amount: 5 }] }],
+      ["create_sales_receipt", { txn_date: "2026-09-19", lines: [{ item_name: "Services", amount: 5 }] }],
+    ] as const;
+    for (const [name, base] of creates) {
+      const line = base.lines[0];
+      expect(validate(name, { ...base, lines: [{ ...line, class_name: "Operations" }] }), name).toBe(true);
+      expect(validate(name, { ...base, lines: [{ ...line, class_name: "Operations", class_id: "40" }] }), name).toBe(false);
+    }
+
+    for (const name of ["edit_bill", "edit_expense", "edit_vendor_credit", "edit_invoice", "edit_sales_receipt"]) {
+      expect(validate(name, { id: "1", lines: [{ line_id: "2", class_id: "40" }] }), name).toBe(true);
+      expect(validate(name, { id: "1", lines: [{ line_id: "2", clear_class: true }] }), name).toBe(true);
+      expect(validate(name, { id: "1", lines: [{ line_id: "2", class_name: "Operations", clear_class: true }] }), name).toBe(false);
+      expect(validate(name, { id: "1", lines: [{ line_id: "2", delete: true, class_id: "40" }] }), name).toBe(false);
+    }
+
+    expect(validate("edit_deposit", {
+      id: "1",
+      lines: [{ line_id: "2", account_name: "Income", amount: 5, clear_class: true }],
+    })).toBe(true);
+    expect(validate("edit_deposit", {
+      id: "1",
+      lines: [{ account_name: "Income", amount: 5, clear_class: true }],
     })).toBe(false);
   });
 });

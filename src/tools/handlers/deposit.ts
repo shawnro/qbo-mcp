@@ -8,7 +8,7 @@ import {
   getVendorCache,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, toCents, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { createResolutionCoordinator, ResolutionNotFoundError, toEntityRef } from "../resolve.js";
+import { applyClassRefChange, createResolutionCoordinator, ResolutionNotFoundError, resolveOptionalClassRef, toEntityRef } from "../resolve.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
 // --- Interfaces ---
@@ -21,6 +21,8 @@ interface CreateDepositLineInput {
   description?: string;
   entity_name?: string;
   entity_id?: string;
+  class_name?: string;
+  class_id?: string;
 }
 
 // For edit_deposit lines (has line_id, no entity support)
@@ -29,6 +31,9 @@ interface DepositLineInput {
   amount: number;
   account_name: string;
   description?: string;
+  class_name?: string;
+  class_id?: string;
+  clear_class?: boolean;
 }
 
 interface DepositLine {
@@ -138,6 +143,7 @@ export async function handleCreateDeposit(
       const ref = await resolver.vendor(line.entity_name);
       entityRef = { ...ref, type: "VENDOR" };
     }
+    const classRef = await resolveOptionalClassRef(resolver, line);
 
     return {
       accountRef,
@@ -145,6 +151,7 @@ export async function handleCreateDeposit(
       amount: toDollars(amountCents),
       description: line.description,
       entityRef,
+      classRef,
     };
   }));
 
@@ -163,6 +170,9 @@ export async function handleCreateDeposit(
       };
       if (line.entityRef) {
         depositLineDetail.Entity = line.entityRef;
+      }
+      if (line.classRef) {
+        depositLineDetail.ClassRef = line.classRef;
       }
       return {
         Amount: line.amount,
@@ -420,13 +430,19 @@ export async function handleEditDeposit(
           ...line.DepositLineDetail,
           AccountRef: toEntityRef(await resolver.account(input.account_name)),
         };
+        await applyClassRefChange(resolver, line.DepositLineDetail, input, `Line ${input.line_id}`);
       } else {
         // Create new line
+        const classRef = await resolveOptionalClassRef(resolver, input);
+        if (input.clear_class) {
+          throw new Error("New lines cannot clear a class assignment");
+        }
         line = {
           Amount: toDollars(amountCents),
           DetailType: 'DepositLineDetail',
           DepositLineDetail: {
             AccountRef: toEntityRef(await resolver.account(input.account_name)),
+            ...(classRef && { ClassRef: classRef }),
           },
         };
       }

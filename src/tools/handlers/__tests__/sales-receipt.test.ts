@@ -10,12 +10,14 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
 } from "../../../__mocks__/mock-cache.js";
 
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveItem: vi.fn(),
@@ -49,6 +51,7 @@ import {
 } from "../sales-receipt.js";
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   resolveItem,
   resolveCustomer,
@@ -56,6 +59,7 @@ import {
 } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockResolveItem = vi.mocked(resolveItem);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
@@ -69,10 +73,21 @@ describe("handleCreateSalesReceipt", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockResolveItem.mockResolvedValue({ value: "200", name: "Widget" });
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "John Doe" });
     mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
+  });
+
+  it("assigns a class to an item line", async () => {
+    mockSuccess(client.createSalesReceipt, { Id: "900" });
+    await handleCreateSalesReceipt(client as never, {
+      txn_date: "2026-04-01", draft: false,
+      lines: [{ item_name: "Consulting Services", amount: 10, class_id: "41" }],
+    });
+    expect(client.createSalesReceipt.mock.calls[0][0].Line[0].SalesItemLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
   });
 
   it("returns preview in draft mode", async () => {

@@ -5,7 +5,7 @@ import {
   promisify,
 } from "../../client/index.js";
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { createResolutionCoordinator } from "../resolve.js";
+import { applyClassRefChange, assertNoClassRefChangeOnDelete, createResolutionCoordinator, resolveOptionalClassRef } from "../resolve.js";
 import { resolveItemReference } from "../item-resolution.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
@@ -17,6 +17,9 @@ interface SalesReceiptLineChange {
   qty?: number;
   unit_price?: number;
   description?: string;
+  class_name?: string;
+  class_id?: string;
+  clear_class?: boolean;
   delete?: boolean;
 }
 
@@ -27,6 +30,8 @@ interface CreateSalesReceiptLine {
   qty?: number;
   unit_price?: number;
   description?: string;
+  class_name?: string;
+  class_id?: string;
 }
 
 export async function handleCreateSalesReceipt(
@@ -94,6 +99,7 @@ export async function handleCreateSalesReceipt(
     }
 
     const itemRef = await resolveItemReference(client, line, lookupCache);
+    const classRef = await resolveOptionalClassRef(resolver, line);
     const itemLabel = itemRef.name || itemRef.value;
 
     const qty = line.qty ?? 1;
@@ -116,6 +122,7 @@ export async function handleCreateSalesReceipt(
       amountCents,
       amountDollars: toDollars(amountCents),
       description: line.description,
+      classRef,
     };
   }));
 
@@ -138,6 +145,7 @@ export async function handleCreateSalesReceipt(
         ItemRef: line.itemRef,
         Qty: line.qty,
         UnitPrice: line.unitPriceDollars,
+        ...(line.classRef && { ClassRef: line.classRef }),
       },
     })),
   };
@@ -387,6 +395,7 @@ export async function handleEditSalesReceipt(
 
   if (lineChanges && lineChanges.length > 0) {
     for (const change of lineChanges) {
+      assertNoClassRefChangeOnDelete(change, `Line ${change.line_id || "new"}`);
       if (change.line_id) {
         const lineIndex = finalLines.findIndex(l => l.Id === change.line_id);
         if (lineIndex === -1) {
@@ -403,6 +412,7 @@ export async function handleEditSalesReceipt(
             UnitPrice?: number;
             ItemAccountRef?: { value: string; name?: string };
             TaxCodeRef?: { value: string; name?: string };
+            ClassRef?: { value: string; name?: string };
           };
 
           if (change.amount !== undefined) {
@@ -414,6 +424,7 @@ export async function handleEditSalesReceipt(
             }
           }
           if (change.description !== undefined) line.Description = change.description;
+          await applyClassRefChange(resolver, detail, change, `Line ${change.line_id}`);
 
           line.SalesItemLineDetail = detail as typeof line.SalesItemLineDetail;
           line.DetailType = 'SalesItemLineDetail';
@@ -430,6 +441,10 @@ export async function handleEditSalesReceipt(
         }
 
         const itemRef = await resolveItemReference(client, change, lookupCache);
+        const classRef = await resolveOptionalClassRef(resolver, change);
+        if (change.clear_class) {
+          throw new Error("New lines cannot clear a class assignment");
+        }
         const itemLabel = itemRef.name || itemRef.value;
 
         const qty = change.qty ?? 1;
@@ -453,6 +468,7 @@ export async function handleEditSalesReceipt(
             ItemRef: itemRef,
             Qty: qty,
             UnitPrice: unitPriceDollars,
+            ...(classRef && { ClassRef: classRef }),
           },
         } as typeof finalLines[0];
         finalLines.push(newLine);

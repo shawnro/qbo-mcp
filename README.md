@@ -476,29 +476,29 @@ Entity getters return allowlisted, workflow-relevant data rather than raw QuickB
 | `get_journal_entry` | Fetch a journal entry by its positive numeric QBO entity ID, including line IDs, departments, and classes |
 | `edit_journal_entry` | Modify a journal entry using its positive numeric QBO entity ID; omitted line classes are preserved and `clear_class` removes one explicitly |
 | **Bills** | |
-| `create_bill` | Create a vendor bill; account lines support optional customer/job tracking |
-| `get_bill` | Fetch a bill by ID, including line customer/job and billable status |
-| `edit_bill` | Modify a bill and preserve, assign, change, or clear account-line customer/jobs |
+| `create_bill` | Create a vendor bill; account lines support optional customer/job and class tracking |
+| `get_bill` | Fetch a bill by ID, including line customer/job, class, and billable status |
+| `edit_bill` | Modify a bill and preserve, assign, change, or clear account-line customer/jobs and classes |
 | **Expenses** | |
-| `create_expense` | Create an expense (Cash, Check, or Credit Card) with optional line customer/job tracking |
-| `get_expense` | Fetch an expense by ID, including line customer/job and billable status |
-| `edit_expense` | Modify an expense and preserve, assign, change, or clear account-line customer/jobs |
+| `create_expense` | Create an expense (Cash, Check, or Credit Card) with optional line customer/job and class tracking |
+| `get_expense` | Fetch an expense by ID, including line customer/job, class, and billable status |
+| `edit_expense` | Modify an expense and preserve, assign, change, or clear account-line customer/jobs and classes |
 | **Sales Receipts** | |
-| `create_sales_receipt` | Create a sales receipt with item lines |
-| `get_sales_receipt` | Fetch a sales receipt by ID |
-| `edit_sales_receipt` | Modify an existing sales receipt |
+| `create_sales_receipt` | Create a sales receipt with optional item-line classes |
+| `get_sales_receipt` | Fetch a sales receipt by ID, including item-line classes |
+| `edit_sales_receipt` | Modify a sales receipt and preserve, assign, change, or clear item-line classes |
 | **Invoices** | |
-| `create_invoice` | Create an invoice with item lines (customer required) |
-| `get_invoice` | Fetch an invoice by ID |
-| `edit_invoice` | Modify an existing invoice |
+| `create_invoice` | Create an invoice with optional item-line classes (customer required) |
+| `get_invoice` | Fetch an invoice by ID, including item-line classes |
+| `edit_invoice` | Modify an invoice and preserve, assign, change, or clear item-line classes |
 | **Deposits** | |
-| `create_deposit` | Create a bank deposit |
-| `get_deposit` | Fetch a deposit by ID |
-| `edit_deposit` | Modify an existing deposit |
+| `create_deposit` | Create a bank deposit with optional line classes |
+| `get_deposit` | Fetch a deposit by ID, including line classes |
+| `edit_deposit` | Modify a deposit and preserve, assign, change, or clear line classes |
 | **Vendor Credits** | |
-| `create_vendor_credit` | Create a vendor credit with optional line customer/job tracking |
-| `get_vendor_credit` | Fetch a vendor credit by ID, including line customer/job and billable status |
-| `edit_vendor_credit` | Modify a vendor credit and preserve, assign, change, or clear account-line customer/jobs |
+| `create_vendor_credit` | Create a vendor credit with optional line customer/job and class tracking |
+| `get_vendor_credit` | Fetch a vendor credit by ID, including line customer/job, class, and billable status |
+| `edit_vendor_credit` | Modify a vendor credit and preserve, assign, change, or clear account-line customer/jobs and classes |
 | **Bill Payments** | |
 | `create_bill_payment` | Pay bills and apply vendor credits (the QBO "check" / pay-bills flow) |
 | `get_bill_payment` | Fetch a bill payment by ID; flags unapplied amounts |

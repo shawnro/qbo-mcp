@@ -8,6 +8,7 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../../__mocks__/mock-cache.js";
@@ -15,6 +16,7 @@ import {
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveCustomer: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("../../../utils/index.js", async () => {
 import { handleCreateExpense, handleGetExpense, handleEditExpense } from "../expense.js";
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveCustomer,
@@ -50,6 +53,7 @@ import {
 } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
@@ -63,6 +67,7 @@ describe("handleCreateExpense", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
@@ -81,6 +86,16 @@ describe("handleCreateExpense", () => {
     expect(result.content[0].text).toContain("CreditCard");
     expect(result.content[0].text).toContain("$45.99");
     expect(client.createPurchase).not.toHaveBeenCalled();
+  });
+
+  it("assigns a class to an account-based line", async () => {
+    mockSuccess(client.createPurchase, { Id: "600" });
+    await handleCreateExpense(client as never, {
+      payment_type: "Cash", payment_account: "Cash", txn_date: "2026-03-01", draft: false,
+      lines: [{ account_name: "Office Supplies", amount: 10, class_id: "41" }],
+    });
+    expect(client.createPurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
   });
 
   it("creates expense with minimal fields", async () => {

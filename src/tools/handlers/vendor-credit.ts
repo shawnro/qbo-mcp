@@ -10,9 +10,12 @@ import {
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import {
   applyCustomerRefChange,
+  applyClassRefChange,
+  assertNoClassRefChangeOnDelete,
   assertNoCustomerRefChangeOnDelete,
   createResolutionCoordinator,
   hasCustomerRefChange,
+  resolveOptionalClassRef,
   resolveOptionalCustomerRef,
   toEntityRef,
 } from "../resolve.js";
@@ -23,6 +26,8 @@ interface CreateVendorCreditLine {
   account_name?: string;
   customer_id?: string;
   customer_name?: string;
+  class_id?: string;
+  class_name?: string;
   amount: number;
   description?: string;
 }
@@ -33,6 +38,9 @@ interface VendorCreditLineChange {
   customer_id?: string;
   customer_name?: string;
   clear_customer?: boolean;
+  class_id?: string;
+  class_name?: string;
+  clear_class?: boolean;
   amount?: number;
   description?: string;
   delete?: boolean;
@@ -119,6 +127,7 @@ export async function handleCreateVendorCredit(
 
     const amountCents = validateAmount(line.amount, `Line ${accountName || accountId}`);
     const customerRef = await resolveOptionalCustomerRef(resolver, line);
+    const classRef = await resolveOptionalClassRef(resolver, line);
 
     return {
       ...line,
@@ -128,6 +137,7 @@ export async function handleCreateVendorCredit(
       amount_cents: amountCents,
       amount: toDollars(amountCents),
       customer_ref: customerRef,
+      class_ref: classRef,
     };
   }));
 
@@ -152,6 +162,7 @@ export async function handleCreateVendorCredit(
           name: line.account_name,
         },
         ...(line.customer_ref && { CustomerRef: line.customer_ref }),
+        ...(line.class_ref && { ClassRef: line.class_ref }),
         BillableStatus: "NotBillable",
       },
     })),
@@ -243,6 +254,7 @@ export async function handleGetVendorCredit(
         AccountRef: { value: string; name?: string };
         DepartmentRef?: { value: string; name?: string };
         CustomerRef?: { value: string; name?: string };
+        ClassRef?: { value: string; name?: string };
         BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
       };
     }>;
@@ -311,6 +323,7 @@ export async function handleGetVendorCredit(
             AccountRef: line.AccountBasedExpenseLineDetail.AccountRef,
             DepartmentRef: line.AccountBasedExpenseLineDetail.DepartmentRef,
             CustomerRef: line.AccountBasedExpenseLineDetail.CustomerRef,
+            ClassRef: line.AccountBasedExpenseLineDetail.ClassRef,
             BillableStatus: line.AccountBasedExpenseLineDetail.BillableStatus,
           }
         : undefined,
@@ -364,6 +377,7 @@ export async function handleEditVendorCredit(
         AccountRef: { value: string; name?: string };
         DepartmentRef?: { value: string; name?: string };
         CustomerRef?: { value: string; name?: string };
+        ClassRef?: { value: string; name?: string };
         BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
       };
     }>;
@@ -423,6 +437,7 @@ export async function handleEditVendorCredit(
   if (lineChanges && lineChanges.length > 0) {
     for (const change of lineChanges) {
       assertNoCustomerRefChangeOnDelete(change, `Line ${change.line_id || "new"}`);
+      assertNoClassRefChangeOnDelete(change, `Line ${change.line_id || "new"}`);
       if (change.line_id) {
         const lineIndex = finalLines.findIndex(l => l.Id === change.line_id);
         if (lineIndex === -1) {
@@ -440,6 +455,7 @@ export async function handleEditVendorCredit(
             AccountRef: { value: string; name?: string };
             DepartmentRef?: { value: string; name?: string };
             CustomerRef?: { value: string; name?: string };
+            ClassRef?: { value: string; name?: string };
             BillableStatus?: "Billable" | "NotBillable" | "HasBeenBilled";
           };
 
@@ -450,6 +466,7 @@ export async function handleEditVendorCredit(
           if (change.description !== undefined) line.Description = change.description;
           if (change.account_name !== undefined) detail.AccountRef = toEntityRef(await resolver.account(change.account_name));
           await applyCustomerRefChange(resolver, detail, change, `Line ${change.line_id}`);
+          await applyClassRefChange(resolver, detail, change, `Line ${change.line_id}`);
 
           line.AccountBasedExpenseLineDetail = detail;
           line.DetailType = 'AccountBasedExpenseLineDetail';
@@ -462,9 +479,13 @@ export async function handleEditVendorCredit(
         if (change.clear_customer) {
           throw new Error('New lines cannot clear a customer/job assignment');
         }
+        if (change.clear_class) {
+          throw new Error('New lines cannot clear a class assignment');
+        }
 
         const amountCents = validateAmount(change.amount, `New line for ${change.account_name}`);
         const customerRef = await resolveOptionalCustomerRef(resolver, change);
+        const classRef = await resolveOptionalClassRef(resolver, change);
 
         const newLine = {
           Amount: toDollars(amountCents),
@@ -476,6 +497,7 @@ export async function handleEditVendorCredit(
               CustomerRef: customerRef,
               BillableStatus: "NotBillable",
             }),
+            ...(classRef && { ClassRef: classRef }),
           }
         } as typeof finalLines[0];
         finalLines.push(newLine);
