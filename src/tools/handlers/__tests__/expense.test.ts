@@ -8,6 +8,7 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../../__mocks__/mock-cache.js";
@@ -15,6 +16,7 @@ import {
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveCustomer: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("../../../utils/index.js", async () => {
 import { handleCreateExpense, handleGetExpense, handleEditExpense } from "../expense.js";
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveCustomer,
@@ -50,6 +53,7 @@ import {
 } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
@@ -63,6 +67,7 @@ describe("handleCreateExpense", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
@@ -81,6 +86,21 @@ describe("handleCreateExpense", () => {
     expect(result.content[0].text).toContain("CreditCard");
     expect(result.content[0].text).toContain("$45.99");
     expect(client.createPurchase).not.toHaveBeenCalled();
+  });
+
+  it("assigns a class to an account-based line", async () => {
+    mockSuccess(client.createPurchase, { Id: "600" });
+    await handleCreateExpense(client as never, {
+      payment_type: "Cash", payment_account: "Cash", txn_date: "2026-03-01", draft: false,
+      lines: [{ account_name: "Office Supplies", amount: 10, class_id: "41" }],
+    });
+    expect(client.createPurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateExpense(client as never, {
+      payment_type: "Cash", payment_account: "Cash", txn_date: "2026-03-01",
+      lines: [{ account_name: "Office Supplies", amount: 10, class_id: "41" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("creates expense with minimal fields", async () => {
@@ -374,6 +394,7 @@ describe("handleEditExpense", () => {
         AccountBasedExpenseLineDetail: {
           AccountRef: { value: "5", name: "Office Supplies" },
           CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          ClassRef: { value: "40", name: "Koslin Ct" },
           BillableStatus: "NotBillable",
           TaxCodeRef: { value: "NON" },
         },
@@ -386,6 +407,7 @@ describe("handleEditExpense", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
@@ -433,6 +455,30 @@ describe("handleEditExpense", () => {
       BillableStatus: "NotBillable",
       TaxCodeRef: { value: "NON" },
     });
+  });
+
+  it("preserves, replaces, and clears an account-line class", async () => {
+    mockSuccess(client.updatePurchase, { Id: "600", SyncToken: "2" });
+
+    await handleEditExpense(client as never, {
+      id: "600", draft: false, lines: [{ line_id: "1", amount: 50 }],
+    });
+    expect(client.updatePurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "40", name: "Koslin Ct" });
+
+    client.updatePurchase.mockClear();
+    await handleEditExpense(client as never, {
+      id: "600", draft: false, lines: [{ line_id: "1", class_name: "Operations" }],
+    });
+    expect(client.updatePurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+
+    client.updatePurchase.mockClear();
+    await handleEditExpense(client as never, {
+      id: "600", draft: false, lines: [{ line_id: "1", clear_class: true }],
+    });
+    expect(client.updatePurchase.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toBeUndefined();
   });
 
   it("changes an existing line customer/job by name", async () => {
@@ -543,6 +589,17 @@ describe("handleEditExpense", () => {
       lines: [{ line_id: "2", customer_name: "Customer One:Job One" }],
       draft: false,
     })).rejects.toThrow("account-based lines");
+    expect(client.updatePurchase).not.toHaveBeenCalled();
+  });
+
+  it("rejects class mutation on an item-based line", async () => {
+    mockSuccess(client.getPurchase, {
+      ...existingExpense,
+      Line: [{ Id: "2", Amount: 50, DetailType: "ItemBasedExpenseLineDetail", ItemBasedExpenseLineDetail: { ItemRef: { value: "10", name: "Widget" } } }],
+    });
+    await expect(handleEditExpense(client as never, {
+      id: "600", draft: false, lines: [{ line_id: "2", clear_class: true }],
+    })).rejects.toThrow("class can only be changed on account-based lines");
     expect(client.updatePurchase).not.toHaveBeenCalled();
   });
 

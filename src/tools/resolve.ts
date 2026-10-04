@@ -144,6 +144,19 @@ export interface ClassRefChange extends ClassRefInput {
   clear_class?: boolean;
 }
 
+export function hasClassRefChange(change: ClassRefChange): boolean {
+  return Boolean(change.class_name?.trim() || change.class_id?.trim() || change.clear_class);
+}
+
+export function assertNoClassRefChangeOnDelete(
+  change: ClassRefChange & { delete?: boolean },
+  label: string
+): void {
+  if (change.delete && hasClassRefChange(change)) {
+    throw new Error(`${label}: delete cannot be combined with class assignment or clearing`);
+  }
+}
+
 export async function resolveOptionalClassRef(
   resolver: ResolutionCoordinator,
   input: ClassRefInput
@@ -163,9 +176,7 @@ export async function applyClassRefChange(
   label: string
 ): Promise<void> {
   const hasAssignment = Boolean(change.class_name?.trim() || change.class_id?.trim());
-  if (change.delete && (hasAssignment || change.clear_class)) {
-    throw new Error(`${label}: delete cannot be combined with class assignment or clearing`);
-  }
+  assertNoClassRefChangeOnDelete(change, label);
   if (change.clear_class && hasAssignment) {
     throw new Error(`${label}: clear_class cannot be combined with class_name or class_id`);
   }

@@ -8,11 +8,13 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockDepartmentCache,
+  createMockClassCache,
 } from "../../../__mocks__/mock-cache.js";
 
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     resolveItem: vi.fn(),
     resolveCustomer: vi.fn(),
@@ -39,9 +41,10 @@ vi.mock("../../../utils/index.js", async () => {
 });
 
 import { handleCreateInvoice, handleGetInvoice, handleEditInvoice } from "../invoice.js";
-import { getDepartmentCache, resolveItem, resolveCustomer, resolveCustomerById } from "../../../client/index.js";
+import { getClassCache, getDepartmentCache, resolveItem, resolveCustomer, resolveCustomerById } from "../../../client/index.js";
 
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockResolveItem = vi.mocked(resolveItem);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
 const mockResolveCustomerById = vi.mocked(resolveCustomerById);
@@ -54,6 +57,7 @@ describe("handleCreateInvoice", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "200", name: "Acme Corp" });
     mockResolveCustomerById.mockResolvedValue({ value: "201", name: "Customer By ID" });
     mockResolveItem.mockResolvedValue({ value: "300", name: "Consulting Services" });
@@ -83,6 +87,21 @@ describe("handleCreateInvoice", () => {
 
     expect(result.content[0].text).toContain("Invoice Created");
     expect(client.createInvoice).toHaveBeenCalledOnce();
+  });
+
+  it("assigns a class to an item line", async () => {
+    mockSuccess(client.createInvoice, { Id: "702" });
+    await handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01", customer_name: "Acme Corp", draft: false,
+      lines: [{ item_name: "Consulting Services", amount: 10, class_name: "Operations" }],
+    });
+    expect(client.createInvoice.mock.calls[0][0].Line[0].SalesItemLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01", customer_name: "Acme Corp",
+      lines: [{ item_name: "Consulting Services", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("creates with all optional fields", async () => {
@@ -331,7 +350,7 @@ describe("handleEditInvoice", () => {
         Id: "1",
         Amount: 500,
         DetailType: "SalesItemLineDetail",
-        SalesItemLineDetail: { ItemRef: { value: "300", name: "Consulting" }, Qty: 5, UnitPrice: 100 },
+        SalesItemLineDetail: { ItemRef: { value: "300", name: "Consulting" }, Qty: 5, UnitPrice: 100, ClassRef: { value: "40", name: "Koslin Ct" } },
       },
     ],
   };
@@ -341,6 +360,7 @@ describe("handleEditInvoice", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "200", name: "Acme Corp" });
     mockResolveItem.mockResolvedValue({ value: "300", name: "Consulting Services" });
     mockSuccess(client.getInvoice, existingInvoice);
@@ -371,6 +391,16 @@ describe("handleEditInvoice", () => {
 
     const payload = client.updateInvoice.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
+    expect(payload.Line[0].SalesItemLineDetail.ClassRef).toEqual({ value: "40", name: "Koslin Ct" });
+  });
+
+  it("clears an existing item-line class explicitly", async () => {
+    mockSuccess(client.updateInvoice, { Id: "700", SyncToken: "5" });
+    await handleEditInvoice(client as never, {
+      id: "700", draft: false, lines: [{ line_id: "1", clear_class: true }],
+    });
+    expect(client.updateInvoice.mock.calls[0][0].Line[0].SalesItemLineDetail.ClassRef)
+      .toBeUndefined();
   });
 
   it("uses item_id directly when adding a line", async () => {
@@ -385,6 +415,17 @@ describe("handleEditInvoice", () => {
     const payload = client.updateInvoice.mock.calls[0][0];
     expect(payload.Line[1].SalesItemLineDetail.ItemRef).toEqual({ value: "301" });
     expect(mockResolveItem).not.toHaveBeenCalled();
+  });
+
+  it("rejects class mutation on a subtotal line", async () => {
+    mockSuccess(client.getInvoice, {
+      ...existingInvoice,
+      Line: [{ Id: "2", Amount: 500, DetailType: "SubTotalLineDetail", SubTotalLineDetail: {} }],
+    });
+    await expect(handleEditInvoice(client as never, {
+      id: "700", draft: false, lines: [{ line_id: "2", class_id: "41" }],
+    })).rejects.toThrow("class can only be changed on item lines");
+    expect(client.updateInvoice).not.toHaveBeenCalled();
   });
 
   it("propagates API errors", async () => {

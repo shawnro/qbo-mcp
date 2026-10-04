@@ -8,6 +8,7 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../../__mocks__/mock-cache.js";
@@ -15,6 +16,7 @@ import {
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     getClient: vi.fn(),
@@ -39,9 +41,10 @@ vi.mock("../../../utils/index.js", async () => {
 });
 
 import { handleCreateDeposit, handleGetDeposit, handleEditDeposit } from "../deposit.js";
-import { getAccountCache, getDepartmentCache, getVendorCache } from "../../../client/index.js";
+import { getAccountCache, getClassCache, getDepartmentCache, getVendorCache } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 
@@ -77,6 +80,7 @@ describe("handleCreateDeposit", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
   });
@@ -105,6 +109,21 @@ describe("handleCreateDeposit", () => {
 
     expect(result.content[0].text).toContain("Deposit Created");
     expect(client.createDeposit).toHaveBeenCalledOnce();
+  });
+
+  it("assigns a class to a deposit line", async () => {
+    mockSuccess(client.createDeposit, { Id: "801" });
+    await handleCreateDeposit(client as never, {
+      deposit_to_account: "Cash", txn_date: "2026-05-01", draft: false,
+      lines: [{ account_name: "Tips", amount: 10, class_name: "Operations" }],
+    });
+    expect(client.createDeposit.mock.calls[0][0].Line[0].DepositLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateDeposit(client as never, {
+      deposit_to_account: "Cash", txn_date: "2026-05-01",
+      lines: [{ account_name: "Tips", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("creates with entity per line", async () => {
@@ -282,6 +301,7 @@ describe("handleEditDeposit", () => {
         DepositLineDetail: {
           AccountRef: { value: "2", name: "Tips" },
           Entity: { value: "100", name: "Office Depot", type: "Vendor" },
+          ClassRef: { value: "40", name: "Koslin Ct" },
         },
       },
     ],
@@ -292,6 +312,7 @@ describe("handleEditDeposit", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockSuccess(client.getDeposit, existingDeposit);
@@ -323,6 +344,24 @@ describe("handleEditDeposit", () => {
     const payload = client.updateDeposit.mock.calls[0][0];
     expect(payload.sparse).toBe(false);
     expect(payload.Line).toHaveLength(1);
+  });
+
+  it("preserves or clears an existing line class explicitly", async () => {
+    mockSuccess(client.updateDeposit, { Id: "800", SyncToken: "2" });
+    await handleEditDeposit(client as never, {
+      id: "800", draft: false,
+      lines: [{ line_id: "1", account_name: "Tips", amount: 200 }],
+    });
+    expect(client.updateDeposit.mock.calls[0][0].Line[0].DepositLineDetail.ClassRef)
+      .toEqual({ value: "40", name: "Koslin Ct" });
+
+    client.updateDeposit.mockClear();
+    await handleEditDeposit(client as never, {
+      id: "800", draft: false,
+      lines: [{ line_id: "1", account_name: "Tips", amount: 200, clear_class: true }],
+    });
+    expect(client.updateDeposit.mock.calls[0][0].Line[0].DepositLineDetail.ClassRef)
+      .toBeUndefined();
   });
 
   it("throws when new total doesn't match original", async () => {

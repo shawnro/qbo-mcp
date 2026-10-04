@@ -10,6 +10,7 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../../__mocks__/mock-cache.js";
@@ -17,6 +18,7 @@ import {
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveVendor: vi.fn(),
@@ -50,6 +52,7 @@ import {
 } from "../vendor-credit.js";
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveCustomer,
@@ -57,6 +60,7 @@ import {
 } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
@@ -70,10 +74,26 @@ describe("handleCreateVendorCredit", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
     mockResolveCustomerById.mockResolvedValue({ value: "301", name: "Customer By ID" });
+  });
+
+  it("assigns a class to an account-based line", async () => {
+    mockSuccess(client.createVendorCredit, { Id: "700" });
+    await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot", txn_date: "2026-03-01", draft: false,
+      lines: [{ account_name: "Office Supplies", amount: 10, class_name: "Operations" }],
+    });
+    expect(client.createVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateVendorCredit(client as never, {
+      vendor_name: "Office Depot", txn_date: "2026-03-01",
+      lines: [{ account_name: "Office Supplies", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("returns preview in draft mode", async () => {
@@ -356,6 +376,7 @@ describe("handleEditVendorCredit", () => {
         AccountBasedExpenseLineDetail: {
           AccountRef: { value: "3", name: "Rent Expense" },
           CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          ClassRef: { value: "40", name: "Koslin Ct" },
           BillableStatus: "NotBillable",
           TaxCodeRef: { value: "NON" },
         },
@@ -368,6 +389,7 @@ describe("handleEditVendorCredit", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
@@ -414,6 +436,30 @@ describe("handleEditVendorCredit", () => {
     expect(payload.ExchangeRate).toBe(1);
     expect(payload.IncludeInAnnualTPAR).toBe(false);
     expect(payload.LinkedTxn).toEqual(existingVC.LinkedTxn);
+  });
+
+  it("preserves, replaces, and clears an account-line class", async () => {
+    mockSuccess(client.updateVendorCredit, { Id: "500", SyncToken: "4" });
+
+    await handleEditVendorCredit(client as never, {
+      id: "500", draft: false, lines: [{ line_id: "1", amount: 210 }],
+    });
+    expect(client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "40", name: "Koslin Ct" });
+
+    client.updateVendorCredit.mockClear();
+    await handleEditVendorCredit(client as never, {
+      id: "500", draft: false, lines: [{ line_id: "1", class_id: "41" }],
+    });
+    expect(client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+
+    client.updateVendorCredit.mockClear();
+    await handleEditVendorCredit(client as never, {
+      id: "500", draft: false, lines: [{ line_id: "1", clear_class: true }],
+    });
+    expect(client.updateVendorCredit.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toBeUndefined();
   });
 
   it("changes an existing line customer/job", async () => {

@@ -8,6 +8,7 @@ import {
 } from "../../../__mocks__/mock-client.js";
 import {
   createMockAccountCache,
+  createMockClassCache,
   createMockDepartmentCache,
   createMockVendorCache,
 } from "../../../__mocks__/mock-cache.js";
@@ -15,6 +16,7 @@ import {
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
     getAccountCache: vi.fn(),
+    getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
     resolveVendor: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock("../../../utils/index.js", async () => {
 import { handleCreateBill, handleGetBill, handleEditBill } from "../bill.js";
 import {
   getAccountCache,
+  getClassCache,
   getDepartmentCache,
   getVendorCache,
   resolveCustomer,
@@ -51,6 +54,7 @@ import {
 } from "../../../client/index.js";
 
 const mockGetAccountCache = vi.mocked(getAccountCache);
+const mockGetClassCache = vi.mocked(getClassCache);
 const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockGetVendorCache = vi.mocked(getVendorCache);
 const mockResolveCustomer = vi.mocked(resolveCustomer);
@@ -76,6 +80,7 @@ describe("handleCreateBill", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
@@ -93,6 +98,21 @@ describe("handleCreateBill", () => {
     expect(result.content[0].text).toContain("Office Depot");
     expect(result.content[0].text).toContain("$150.00");
     expect(client.createBill).not.toHaveBeenCalled();
+  });
+
+  it("assigns a class to an account-based line", async () => {
+    mockSuccess(client.createBill, { Id: "500" });
+    await handleCreateBill(client as never, {
+      vendor_name: "Office Depot", txn_date: "2026-03-01", draft: false,
+      lines: [{ account_name: "Office Supplies", amount: 10, class_name: "Operations" }],
+    });
+    expect(client.createBill.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateBill(client as never, {
+      vendor_name: "Office Depot", txn_date: "2026-03-01",
+      lines: [{ account_name: "Office Supplies", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("returns preview with stale vendor cache in default draft mode", async () => {
@@ -459,6 +479,7 @@ describe("handleEditBill", () => {
         AccountBasedExpenseLineDetail: {
           AccountRef: { value: "5", name: "Office Supplies" },
           CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+          ClassRef: { value: "40", name: "Koslin Ct" },
           BillableStatus: "NotBillable",
           TaxCodeRef: { value: "NON" },
         },
@@ -471,6 +492,7 @@ describe("handleEditBill", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockGetAccountCache.mockResolvedValue(createMockAccountCache() as never);
+    mockGetClassCache.mockResolvedValue(createMockClassCache() as never);
     mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
     mockGetVendorCache.mockResolvedValue(createMockVendorCache() as never);
     mockResolveCustomer.mockResolvedValue({ value: "300", name: "Customer One:Job One" });
@@ -507,6 +529,7 @@ describe("handleEditBill", () => {
     expect(payload.Line).toBeDefined();
     expect(payload.Line[0].AccountBasedExpenseLineDetail).toMatchObject({
       CustomerRef: { value: "299", name: "Original Customer:Original Job" },
+      ClassRef: { value: "40", name: "Koslin Ct" },
       BillableStatus: "NotBillable",
       TaxCodeRef: { value: "NON" },
     });
@@ -626,6 +649,17 @@ describe("handleEditBill", () => {
     expect(client.updateBill).not.toHaveBeenCalled();
   });
 
+  it("rejects class mutation on an item-based line", async () => {
+    mockSuccess(client.getBill, {
+      ...existingBill,
+      Line: [{ Id: "2", Amount: 50, DetailType: "ItemBasedExpenseLineDetail", ItemBasedExpenseLineDetail: { ItemRef: { value: "10", name: "Widget" } } }],
+    });
+    await expect(handleEditBill(client as never, {
+      id: "500", draft: false, lines: [{ line_id: "2", class_name: "Operations" }],
+    })).rejects.toThrow("class can only be changed on account-based lines");
+    expect(client.updateBill).not.toHaveBeenCalled();
+  });
+
   it("propagates API errors", async () => {
     mockError(client.updateBill, "Stale Object");
     await expect(
@@ -664,6 +698,16 @@ describe("handleEditBill", () => {
     expect(client.updateBill).not.toHaveBeenCalled();
   });
 
+  it("rejects class clearing on deleted or new lines", async () => {
+    await expect(handleEditBill(client as never, {
+      id: "500", lines: [{ line_id: "1", delete: true, clear_class: true }], draft: false,
+    })).rejects.toThrow("delete cannot be combined with class assignment or clearing");
+    await expect(handleEditBill(client as never, {
+      id: "500", lines: [{ account_name: "Office Supplies", amount: 10, clear_class: true }], draft: false,
+    })).rejects.toThrow("New lines cannot clear a class assignment");
+    expect(client.updateBill).not.toHaveBeenCalled();
+  });
+
   it("throws when line_id not found", async () => {
     await expect(
       handleEditBill(client as never, {
@@ -673,4 +717,13 @@ describe("handleEditBill", () => {
       })
     ).rejects.toThrow('Line ID nonexistent not found in bill');
   });
-});
+
+  it("clears an existing line class explicitly", async () => {
+    mockSuccess(client.updateBill, { Id: "500", SyncToken: "3" });
+    await handleEditBill(client as never, {
+      id: "500", draft: false, lines: [{ line_id: "1", clear_class: true }],
+    });
+    expect(client.updateBill.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
+      .toBeUndefined();
+  });
+    });

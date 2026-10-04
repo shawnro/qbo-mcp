@@ -42,6 +42,12 @@ const newAccountLineConstraints = [
       properties: { clear_customer: { const: true } },
     },
   },
+  {
+    not: {
+      required: ["clear_class"],
+      properties: { clear_class: { const: true } },
+    },
+  },
 ];
 
 const newItemLineConstraints = [
@@ -57,6 +63,27 @@ const newItemLineConstraints = [
 const lineCustomerRefCreateConstraints = rejectCombination("customer_name", "customer_id");
 
 const lineClassRefCreateConstraints = rejectCombination("class_name", "class_id");
+
+const lineClassRefCreateProperties = {
+  class_name: {
+    type: "string",
+    minLength: 1,
+    description: "Class name or fully qualified subclass name. Will be looked up to get its ID.",
+  },
+  class_id: {
+    type: "string",
+    minLength: 1,
+    description: "Class ID (use if you already know it, otherwise use class_name)",
+  },
+};
+
+const lineClassRefEditProperties = {
+  ...lineClassRefCreateProperties,
+  clear_class: {
+    type: "boolean",
+    description: "Set true to remove the existing class from this line",
+  },
+};
 
 const lineClassRefEditConstraints = {
   allOf: [
@@ -697,7 +724,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_bill",
-    description: "Create a vendor bill. Accepts vendor/account/department names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Note: DepartmentRef is header-level only — for multi-department splits, create separate bills (one per department). Returns bill details and a link to view in QuickBooks.",
+    description: "Create a vendor bill with optional line-level customer/job and class assignments. Customer/job tagging does not make a line billable. DepartmentRef is header-level only.",
     inputSchema: {
       type: "object",
       ...requireAnyOf("vendor_name", "vendor_id"),
@@ -763,10 +790,11 @@ export const toolDefinitions = [
                 description: "Line description (optional)",
               },
               ...lineCustomerRefCreateProperties,
+              ...lineClassRefCreateProperties,
             },
             required: ["amount"],
             ...requireAnyOf("account_name", "account_id"),
-            ...lineCustomerRefCreateConstraints,
+            allOf: [lineCustomerRefCreateConstraints, lineClassRefCreateConstraints],
           },
         },
         draft: {
@@ -793,7 +821,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_bill",
-    description: "Modify an existing bill. Can update vendor, date, due date, memo, and/or lines. Account-based lines can preserve, assign, change, or clear a customer/job without changing billable status. Provide line_id to update existing, omit to add new, or set delete=true to remove. Note: DepartmentRef is header-level only.",
+    description: "Modify a bill. Account-based lines preserve omitted customer/jobs and classes; assign or replace them by name/ID, or clear them explicitly.",
     inputSchema: {
       type: "object",
       properties: {
@@ -849,6 +877,7 @@ export const toolDefinitions = [
                 description: "Line description",
               },
               ...lineCustomerRefEditProperties,
+              ...lineClassRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
@@ -856,6 +885,7 @@ export const toolDefinitions = [
             },
             allOf: [
               ...lineCustomerRefEditConstraints.allOf,
+              ...lineClassRefEditConstraints.allOf,
               ...requireNewLine(...newAccountLineConstraints).allOf,
             ],
           },
@@ -884,7 +914,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_expense",
-    description: "Modify an existing expense (Purchase). Can update date, memo, payment account, vendor/payee, department, and/or lines. Account-based lines can preserve, assign, change, or clear a customer/job without changing billable status. PaymentType cannot be changed after creation.",
+    description: "Modify an expense. Account-based lines preserve omitted customer/jobs and classes; assign or replace them by name/ID, or clear them explicitly. PaymentType cannot change.",
     inputSchema: {
       type: "object",
       properties: {
@@ -927,6 +957,7 @@ export const toolDefinitions = [
                 description: "Line description",
               },
               ...lineCustomerRefEditProperties,
+              ...lineClassRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
@@ -934,6 +965,7 @@ export const toolDefinitions = [
             },
             allOf: [
               ...lineCustomerRefEditConstraints.allOf,
+              ...lineClassRefEditConstraints.allOf,
               ...requireNewLine(...newAccountLineConstraints).allOf,
             ],
           },
@@ -960,7 +992,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_expense",
-    description: "Create an expense (Purchase). Accepts account/department/vendor names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Covers Cash, Check, and Credit Card payment types. Note: PaymentType cannot be changed after creation. DepartmentRef is header-level only. Returns expense details and a link to view in QuickBooks.",
+    description: "Create an expense with optional line-level customer/job and class assignments. Covers Cash, Check, and Credit Card payment types; PaymentType cannot change after creation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1026,10 +1058,11 @@ export const toolDefinitions = [
                 description: "Line description (optional)",
               },
               ...lineCustomerRefCreateProperties,
+              ...lineClassRefCreateProperties,
             },
             required: ["amount"],
             ...requireAnyOf("account_name", "account_id"),
-            ...lineCustomerRefCreateConstraints,
+            allOf: [lineCustomerRefCreateConstraints, lineClassRefCreateConstraints],
           },
         },
         draft: {
@@ -1056,7 +1089,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_sales_receipt",
-    description: "Modify an existing sales receipt. Can update date, memo, deposit account, department, and/or lines. For lines: provide line_id to update existing line, omit line_id to add new line (requires item_name), set delete=true to remove.",
+    description: "Modify a sales receipt, including item-line classes. Omitted classes are preserved; assign or replace by name/ID, or clear explicitly.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1114,12 +1147,18 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description",
               },
+              ...lineClassRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
               },
             },
-            ...requireNewLine(...newItemLineConstraints),
+            allOf: [
+              ...requireNewLine(...newItemLineConstraints, {
+                not: { required: ["clear_class"], properties: { clear_class: { const: true } } },
+              }).allOf,
+              ...lineClassRefEditConstraints.allOf,
+            ],
           },
         },
         draft: {
@@ -1132,7 +1171,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_sales_receipt",
-    description: "Create a sales receipt. Accepts item/customer/department names (will lookup IDs automatically). Provide at most one of customer_name or customer_id. Lines reference items (products/services) not accounts. Returns receipt details and a link to view in QuickBooks.",
+    description: "Create a sales receipt with optional item-line class assignments. Lines reference items (products/services), not accounts.",
     inputSchema: {
       type: "object",
       ...rejectCombination("customer_name", "customer_id"),
@@ -1201,15 +1240,19 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
+              ...lineClassRefCreateProperties,
             },
             required: [],
             ...requireAnyOf("item_name", "item_id"),
-            allOf: [{
-              anyOf: [
-                { required: ["amount"] },
-                { required: ["qty", "unit_price"] },
-              ],
-            }],
+            allOf: [
+              {
+                anyOf: [
+                  { required: ["amount"] },
+                  { required: ["qty", "unit_price"] },
+                ],
+              },
+              lineClassRefCreateConstraints,
+            ],
           },
         },
         draft: {
@@ -1222,7 +1265,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_invoice",
-    description: "Create an invoice. Accepts item/customer/department names (will lookup IDs automatically). Exactly one of customer_name or customer_id is REQUIRED — invoices must have a customer. Lines use SalesItemLineDetail (product/service references, not accounts). Returns invoice details and a link to view in QuickBooks.",
+    description: "Create an invoice with optional item-line class assignments. Exactly one customer name or ID is required.",
     inputSchema: {
       type: "object",
       ...requireExactlyOneOf("customer_name", "customer_id"),
@@ -1311,15 +1354,19 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description (optional)",
               },
+              ...lineClassRefCreateProperties,
             },
             required: [],
             ...requireAnyOf("item_name", "item_id"),
-            allOf: [{
-              anyOf: [
-                { required: ["amount"] },
-                { required: ["qty", "unit_price"] },
-              ],
-            }],
+            allOf: [
+              {
+                anyOf: [
+                  { required: ["amount"] },
+                  { required: ["qty", "unit_price"] },
+                ],
+              },
+              lineClassRefCreateConstraints,
+            ],
           },
         },
         draft: {
@@ -1346,7 +1393,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_invoice",
-    description: "Modify an existing invoice. Can update date, due date, memo, customer, department, terms, email, online payment settings, and/or lines. For lines: provide line_id to update existing line, omit line_id to add new line (requires item_name), set delete=true to remove.",
+    description: "Modify an invoice, including item-line classes. Omitted classes are preserved; assign or replace by name/ID, or clear explicitly.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1428,12 +1475,18 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description",
               },
+              ...lineClassRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
               },
             },
-            ...requireNewLine(...newItemLineConstraints),
+            allOf: [
+              ...requireNewLine(...newItemLineConstraints, {
+                not: { required: ["clear_class"], properties: { clear_class: { const: true } } },
+              }).allOf,
+              ...lineClassRefEditConstraints.allOf,
+            ],
           },
         },
         draft: {
@@ -1446,7 +1499,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_deposit",
-    description: "Create a bank deposit. Accepts account/department/vendor names (will lookup IDs automatically). Lines represent the sources of the deposit — amounts can be positive (income) or negative (fees, deductions). QuickBooks computes the total from line amounts. Returns deposit details and a link to view in QuickBooks.",
+    description: "Create a bank deposit with optional line-level class assignments. Lines represent deposit sources and can be positive or negative.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1489,9 +1542,11 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Entity ID (use if you already know it, otherwise use entity_name)",
               },
+              ...lineClassRefCreateProperties,
             },
             required: ["amount"],
             ...requireAnyOf("account_name", "account_id"),
+            allOf: [lineClassRefCreateConstraints],
           },
         },
         department_name: {
@@ -1530,7 +1585,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_deposit",
-    description: "Modify an existing deposit. Can update date, memo, deposit account, department, and/or lines. CRITICAL for line changes: The QB Deposit API does NOT replace lines - it merges them. Lines WITH line_id update existing lines. Lines WITHOUT line_id are ADDED as new. Lines NOT included are KEPT unchanged. To 'delete' a line, you must include ALL existing lines with their line_ids and set unwanted lines to amount: 0. Line amounts must sum to the original deposit total (use expected_total to override for corrupted deposits).",
+    description: "Modify a deposit, including line classes. Omitted classes are preserved; assign or replace by name/ID, or clear explicitly. Deposit line updates merge and must retain the required total.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1576,8 +1631,15 @@ export const toolDefinitions = [
                 type: "string",
                 description: "Line description",
               },
+              ...lineClassRefEditProperties,
             },
             required: ["amount", "account_name"],
+            allOf: [
+              ...requireNewLine({
+                not: { required: ["clear_class"], properties: { clear_class: { const: true } } },
+              }).allOf,
+              ...lineClassRefEditConstraints.allOf,
+            ],
           },
         },
         draft: {
@@ -1594,7 +1656,7 @@ export const toolDefinitions = [
   },
   {
     name: "create_vendor_credit",
-    description: "Create a vendor credit. Accepts vendor/account/department names and optional line-level customer/job assignments (will lookup IDs automatically). Customer/job tagging does not make a line billable. Lines represent credit amounts applied to expense accounts. Returns credit details and a link to view in QuickBooks.",
+    description: "Create a vendor credit with optional line-level customer/job and class assignments. Lines credit expense accounts.",
     inputSchema: {
       type: "object",
       ...requireAnyOf("vendor_name", "vendor_id"),
@@ -1656,10 +1718,11 @@ export const toolDefinitions = [
                 description: "Line description (optional)",
               },
               ...lineCustomerRefCreateProperties,
+              ...lineClassRefCreateProperties,
             },
             required: ["amount"],
             ...requireAnyOf("account_name", "account_id"),
-            ...lineCustomerRefCreateConstraints,
+            allOf: [lineCustomerRefCreateConstraints, lineClassRefCreateConstraints],
           },
         },
         draft: {
@@ -1686,7 +1749,7 @@ export const toolDefinitions = [
   },
   {
     name: "edit_vendor_credit",
-    description: "Modify an existing vendor credit. Can update vendor, date, memo, ref number, and/or lines. Account-based lines can preserve, assign, change, or clear a customer/job without changing billable status. Provide line_id to update existing, omit to add new, or set delete=true to remove. Note: DepartmentRef is header-level only.",
+    description: "Modify a vendor credit. Account-based lines preserve omitted customer/jobs and classes; assign or replace them by name/ID, or clear them explicitly.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1734,6 +1797,7 @@ export const toolDefinitions = [
                 description: "Line description",
               },
               ...lineCustomerRefEditProperties,
+              ...lineClassRefEditProperties,
               delete: {
                 type: "boolean",
                 description: "Set true to remove this line (requires line_id)",
@@ -1741,6 +1805,7 @@ export const toolDefinitions = [
             },
             allOf: [
               ...lineCustomerRefEditConstraints.allOf,
+              ...lineClassRefEditConstraints.allOf,
               ...requireNewLine(...newAccountLineConstraints).allOf,
             ],
           },
