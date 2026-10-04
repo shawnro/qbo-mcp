@@ -144,11 +144,15 @@ export interface ClassRefChange extends ClassRefInput {
   clear_class?: boolean;
 }
 
+export function hasClassRefChange(change: ClassRefChange): boolean {
+  return Boolean(change.class_name?.trim() || change.class_id?.trim() || change.clear_class);
+}
+
 export function assertNoClassRefChangeOnDelete(
   change: ClassRefChange & { delete?: boolean },
   label: string
 ): void {
-  if (change.delete && (change.class_name?.trim() || change.class_id?.trim() || change.clear_class)) {
+  if (change.delete && hasClassRefChange(change)) {
     throw new Error(`${label}: delete cannot be combined with class assignment or clearing`);
   }
 }

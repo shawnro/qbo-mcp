@@ -5,7 +5,7 @@ import {
   promisify,
 } from "../../client/index.js";
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
-import { applyClassRefChange, assertNoClassRefChangeOnDelete, createResolutionCoordinator, resolveOptionalClassRef } from "../resolve.js";
+import { applyClassRefChange, assertNoClassRefChangeOnDelete, createResolutionCoordinator, hasClassRefChange, resolveOptionalClassRef } from "../resolve.js";
 import { resolveItemReference } from "../item-resolution.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
@@ -164,7 +164,7 @@ export async function handleCreateSalesReceipt(
       "",
       "Lines:",
       ...resolvedLines.map(l =>
-        `  ${l.itemRef.name || l.itemRef.value}: Qty ${l.qty} × $${l.unitPriceDollars.toFixed(2)} = $${l.amountDollars.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
+        `  ${l.itemRef.name || l.itemRef.value}${l.classRef ? ` [Class: ${l.classRef.name || l.classRef.value}]` : ""}: Qty ${l.qty} × $${l.unitPriceDollars.toFixed(2)} = $${l.amountDollars.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
       ),
       "",
       "Set draft=false to create this sales receipt.",
@@ -406,6 +406,9 @@ export async function handleEditSalesReceipt(
           finalLines.splice(lineIndex, 1);
         } else {
           const line = { ...finalLines[lineIndex] };
+          if (hasClassRefChange(change) && !line.SalesItemLineDetail) {
+            throw new Error(`Line ${change.line_id}: class can only be changed on item lines`);
+          }
           const detail = { ...(line.SalesItemLineDetail || {}) } as {
             ItemRef?: { value: string; name?: string };
             Qty?: number;
@@ -508,8 +511,10 @@ export async function handleEditSalesReceipt(
         const detail = line.SalesItemLineDetail;
         if (detail) {
           const itemName = detail.ItemRef?.name || detail.ItemRef?.value || '(item)';
+          const className = detail.ClassRef?.name || detail.ClassRef?.value;
+          const classStr = className ? ` [Class: ${className}]` : '';
           const descStr = line.Description ? ` "${line.Description}"` : '';
-          previewLines.push(`  ${itemName}: $${line.Amount.toFixed(2)}${descStr}`);
+          previewLines.push(`  ${itemName}${classStr}: $${line.Amount.toFixed(2)}${descStr}`);
         }
       }
     }

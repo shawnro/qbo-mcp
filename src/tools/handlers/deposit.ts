@@ -195,8 +195,9 @@ export async function handleCreateDeposit(
       "Lines:",
       ...resolvedLines.map(l => {
         const entityStr = l.entityRef ? ` [${l.entityRef.name}]` : "";
+        const classStr = l.classRef ? ` [Class: ${l.classRef.name || l.classRef.value}]` : "";
         const descStr = l.description ? ` "${l.description}"` : "";
-        return `  ${l.accountRef.name}: $${l.amount.toFixed(2)}${entityStr}${descStr}`;
+        return `  ${l.accountRef.name}: $${l.amount.toFixed(2)}${entityStr}${classStr}${descStr}`;
       }),
       "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
       `  Total: $${formatDollars(totalCents)}`,
@@ -507,9 +508,10 @@ export async function handleEditDeposit(
         const detail = line.DepositLineDetail;
         if (detail) {
           const acctName = detail.AccountRef?.name || detail.AccountRef?.value || '(account)';
-          const deptStr = detail.ClassRef?.name ? ` [${detail.ClassRef.name}]` : '';
+          const className = detail.ClassRef?.name || detail.ClassRef?.value;
+          const classStr = className ? ` [Class: ${className}]` : '';
           const descStr = line.Description ? ` "${line.Description}"` : '';
-          previewLines.push(`  ${acctName}: $${line.Amount.toFixed(2)}${deptStr}${descStr}`);
+          previewLines.push(`  ${acctName}: $${line.Amount.toFixed(2)}${classStr}${descStr}`);
           lineTotal += line.Amount;
         }
       }

@@ -108,6 +108,11 @@ describe("handleCreateBill", () => {
     });
     expect(client.createBill.mock.calls[0][0].Line[0].AccountBasedExpenseLineDetail.ClassRef)
       .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateBill(client as never, {
+      vendor_name: "Office Depot", txn_date: "2026-03-01",
+      lines: [{ account_name: "Office Supplies", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("returns preview with stale vendor cache in default draft mode", async () => {
@@ -641,6 +646,17 @@ describe("handleEditBill", () => {
       draft: false,
       lines: [{ line_id: "2", customer_name: "Customer One:Job One" }],
     })).rejects.toThrow("account-based lines");
+    expect(client.updateBill).not.toHaveBeenCalled();
+  });
+
+  it("rejects class mutation on an item-based line", async () => {
+    mockSuccess(client.getBill, {
+      ...existingBill,
+      Line: [{ Id: "2", Amount: 50, DetailType: "ItemBasedExpenseLineDetail", ItemBasedExpenseLineDetail: { ItemRef: { value: "10", name: "Widget" } } }],
+    });
+    await expect(handleEditBill(client as never, {
+      id: "500", draft: false, lines: [{ line_id: "2", class_name: "Operations" }],
+    })).rejects.toThrow("class can only be changed on account-based lines");
     expect(client.updateBill).not.toHaveBeenCalled();
   });
 

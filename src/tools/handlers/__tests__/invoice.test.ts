@@ -97,6 +97,11 @@ describe("handleCreateInvoice", () => {
     });
     expect(client.createInvoice.mock.calls[0][0].Line[0].SalesItemLineDetail.ClassRef)
       .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01", customer_name: "Acme Corp",
+      lines: [{ item_name: "Consulting Services", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("creates with all optional fields", async () => {
@@ -410,6 +415,17 @@ describe("handleEditInvoice", () => {
     const payload = client.updateInvoice.mock.calls[0][0];
     expect(payload.Line[1].SalesItemLineDetail.ItemRef).toEqual({ value: "301" });
     expect(mockResolveItem).not.toHaveBeenCalled();
+  });
+
+  it("rejects class mutation on a subtotal line", async () => {
+    mockSuccess(client.getInvoice, {
+      ...existingInvoice,
+      Line: [{ Id: "2", Amount: 500, DetailType: "SubTotalLineDetail", SubTotalLineDetail: {} }],
+    });
+    await expect(handleEditInvoice(client as never, {
+      id: "700", draft: false, lines: [{ line_id: "2", class_id: "41" }],
+    })).rejects.toThrow("class can only be changed on item lines");
+    expect(client.updateInvoice).not.toHaveBeenCalled();
   });
 
   it("propagates API errors", async () => {

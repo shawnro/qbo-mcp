@@ -119,6 +119,11 @@ describe("handleCreateDeposit", () => {
     });
     expect(client.createDeposit.mock.calls[0][0].Line[0].DepositLineDetail.ClassRef)
       .toEqual({ value: "41", name: "Operations" });
+    const preview = await handleCreateDeposit(client as never, {
+      deposit_to_account: "Cash", txn_date: "2026-05-01",
+      lines: [{ account_name: "Tips", amount: 10, class_name: "Operations" }],
+    });
+    expect(preview.content[0].text).toContain("[Class: Operations]");
   });
 
   it("creates with entity per line", async () => {

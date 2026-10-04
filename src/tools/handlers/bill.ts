@@ -15,6 +15,7 @@ import {
   assertNoCustomerRefChangeOnDelete,
   createResolutionCoordinator,
   hasCustomerRefChange,
+  hasClassRefChange,
   resolveOptionalClassRef,
   resolveOptionalCustomerRef,
   toEntityRef,
@@ -190,7 +191,7 @@ export async function handleCreateBill(
       "",
       "Lines:",
       ...resolvedLines.map(l =>
-        `  ${formatAccount(l)}${l.customer_ref ? ` [Customer/Job: ${l.customer_ref.name}]` : ""}: $${l.amount.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
+        `  ${formatAccount(l)}${l.customer_ref ? ` [Customer/Job: ${l.customer_ref.name}]` : ""}${l.class_ref ? ` [Class: ${l.class_ref.name || l.class_ref.value}]` : ""}: $${l.amount.toFixed(2)}${l.description ? ` "${l.description}"` : ""}`
       ),
       "",
       "Set draft=false to create this bill.",
@@ -492,6 +493,9 @@ export async function handleEditBill(
           if (hasCustomerRefChange(change) && !line.AccountBasedExpenseLineDetail) {
             throw new Error(`Line ${change.line_id}: customer/job can only be changed on account-based lines`);
           }
+          if (hasClassRefChange(change) && !line.AccountBasedExpenseLineDetail) {
+            throw new Error(`Line ${change.line_id}: class can only be changed on account-based lines`);
+          }
           const detail = { ...(line.AccountBasedExpenseLineDetail || {}) } as {
             AccountRef: { value: string; name?: string };
             DepartmentRef?: { value: string; name?: string };
@@ -579,8 +583,10 @@ export async function handleEditBill(
           const deptStr = detail.DepartmentRef?.name ? ` [${detail.DepartmentRef.name}]` : '';
           const customerName = detail.CustomerRef?.name || detail.CustomerRef?.value;
           const customerStr = customerName ? ` [Customer/Job: ${customerName}]` : '';
+          const className = detail.ClassRef?.name || detail.ClassRef?.value;
+          const classStr = className ? ` [Class: ${className}]` : '';
           const billableStr = detail.BillableStatus ? ` [${detail.BillableStatus}]` : '';
-          previewLines.push(`  ${acctName}${deptStr}${customerStr}${billableStr}: $${line.Amount.toFixed(2)}`);
+          previewLines.push(`  ${acctName}${deptStr}${customerStr}${classStr}${billableStr}: $${line.Amount.toFixed(2)}`);
         }
       }
     }
