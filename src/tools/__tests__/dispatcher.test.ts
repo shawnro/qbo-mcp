@@ -1,6 +1,6 @@
 // Tests for tool dispatcher (auth retry logic)
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // Mock the client module
 const mockGetClient = vi.fn();
@@ -105,6 +105,10 @@ describe("executeTool", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("executes handler successfully on first try", async () => {
     const result = await executeTool("get_company_info", {});
 
@@ -199,7 +203,7 @@ describe("executeTool", () => {
     expect(mockHandleReadAttachableContent).toHaveBeenCalledWith(fakeClient, { id: "200" }, undefined);
   });
 
-  it("does not retry on non-auth errors", async () => {
+  it("does not retry permanent read errors", async () => {
     mockHandleGetCompanyInfo.mockRejectedValue(new Error("Network timeout"));
 
     const result = await executeTool("get_company_info", {});
@@ -211,16 +215,51 @@ describe("executeTool", () => {
     expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
   });
 
-  it("returns bounded retry guidance when a read exceeds its callback deadline", async () => {
+  it("retries a transient read once after a bounded delay", async () => {
+    vi.useFakeTimers();
+    mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(Object.assign(new Error("Service unavailable"), { statusCode: 503 }))
+      .mockResolvedValueOnce({ content: [{ type: "text", text: "Recovered" }] });
+
+    const resultPromise = executeTool("get_company_info", {});
+    await vi.runAllTimersAsync();
+
+    await expect(resultPromise).resolves.toMatchObject({
+      content: [{ type: "text", text: "Recovered" }],
+    });
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(2);
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("stops after one transient read retry", async () => {
+    vi.useFakeTimers();
+    mockHandleGetCompanyInfo.mockRejectedValue(
+      Object.assign(new Error("Service unavailable"), { statusCode: 503 })
+    );
+
+    const resultPromise = executeTool("get_company_info", {});
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe("Error after retry: HTTP 503: Service unavailable");
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(2);
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it("returns bounded retry guidance after a read callback deadline repeats", async () => {
+    vi.useFakeTimers();
     mockHandleGetCompanyInfo.mockRejectedValue(new QboOperationTimeoutError(25));
 
-    const result = await executeTool("get_company_info", {});
+    const resultPromise = executeTool("get_company_info", {});
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(
       'timeout: "get_company_info" exceeded the 25 ms QuickBooks callback deadline. Retry the read.'
     );
-    expect(mockHandleGetCompanyInfo).toHaveBeenCalledOnce();
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(2);
     expect(mockRefreshTokens).not.toHaveBeenCalled();
   });
 
@@ -236,6 +275,17 @@ describe("executeTool", () => {
       'timeout: "create_vendor" exceeded the 25 ms QuickBooks callback deadline. ' +
       "Retry the preview; no committed write was requested."
     );
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+  });
+
+  it("does not transient-retry a preview", async () => {
+    mockHandleCreateVendor.mockRejectedValue(
+      Object.assign(new Error("Service unavailable"), { statusCode: 503 })
+    );
+
+    const result = await executeTool("create_vendor", { display_name: "Acme" });
+
+    expect(result.isError).toBe(true);
     expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
   });
 
@@ -287,22 +337,59 @@ describe("executeTool", () => {
     expect(mockGetClient).toHaveBeenCalledTimes(2);
   });
 
-  it("returns timeout guidance when a read deadline expires after auth refresh", async () => {
+  it("shares the read attempt budget between transient retry and auth refresh", async () => {
+    vi.useFakeTimers();
     mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(Object.assign(new Error("Service unavailable"), { statusCode: 503 }))
       .mockRejectedValueOnce(new Error("AuthenticationFailed"))
-      .mockRejectedValueOnce(new QboOperationTimeoutError(25));
+      .mockResolvedValueOnce({ content: [{ type: "text", text: "Recovered" }] });
     mockIsAuthError.mockImplementation((error) =>
       error instanceof Error && error.message === "AuthenticationFailed"
     );
     mockRefreshTokens.mockResolvedValue(undefined);
 
-    const result = await executeTool("get_company_info", {});
+    const resultPromise = executeTool("get_company_info", {});
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.content[0].text).toBe("Recovered");
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(3);
+    expect(mockRefreshTokens).toHaveBeenCalledOnce();
+  });
+
+  it("auth-retries a preview once without enabling transient retry", async () => {
+    mockHandleCreateVendor
+      .mockRejectedValueOnce(new Error("AuthenticationFailed"))
+      .mockResolvedValueOnce({ content: [{ type: "text", text: "Vendor draft" }] });
+    mockIsAuthError.mockReturnValue(true);
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const result = await executeTool("create_vendor", { display_name: "Acme" });
+
+    expect(result.content[0].text).toBe("Vendor draft");
+    expect(mockHandleCreateVendor).toHaveBeenCalledTimes(2);
+    expect(mockRefreshTokens).toHaveBeenCalledOnce();
+  });
+
+  it("returns timeout guidance when a read deadline expires after auth refresh", async () => {
+    vi.useFakeTimers();
+    mockHandleGetCompanyInfo
+      .mockRejectedValueOnce(new Error("AuthenticationFailed"))
+      .mockRejectedValue(new QboOperationTimeoutError(25));
+    mockIsAuthError.mockImplementation((error) =>
+      error instanceof Error && error.message === "AuthenticationFailed"
+    );
+    mockRefreshTokens.mockResolvedValue(undefined);
+
+    const resultPromise = executeTool("get_company_info", {});
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(
       'timeout: "get_company_info" exceeded the 25 ms QuickBooks callback deadline. Retry the read.'
     );
-    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(2);
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledTimes(3);
   });
 
   it("stops when refresh fails instead of retrying with stale credentials", async () => {
@@ -402,6 +489,23 @@ describe("executeTool", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("indeterminate_result");
     expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+  });
+
+  it("marks an HTTP 503 committed result indeterminate without replay", async () => {
+    mockHandleCreateVendor.mockRejectedValue(Object.assign(
+      new Error("Service Unavailable"),
+      { statusCode: 503 }
+    ));
+
+    const result = await executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("indeterminate_result");
+    expect(mockHandleCreateVendor).toHaveBeenCalledOnce();
+    expect(mockRefreshTokens).not.toHaveBeenCalled();
   });
 
   it("returns ordinary committed validation failures without indeterminate wording", async () => {

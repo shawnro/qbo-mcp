@@ -14,6 +14,7 @@ const AMBIGUOUS_NETWORK_CODES = new Set([
   "UND_ERR_CONNECT_TIMEOUT",
   "UND_ERR_HEADERS_TIMEOUT",
 ]);
+const TRANSIENT_READ_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
 
 function bounded(value: unknown, limit = MAX_FIELD_LENGTH): string | undefined {
   if (typeof value !== "string" && typeof value !== "number") return undefined;
@@ -83,4 +84,15 @@ export function isAmbiguousMutationError(error: unknown): boolean {
     return /\b(timeout|timed out|connection reset|socket hang up)\b/i.test(error.message);
   }
   return false;
+}
+
+export function isTransientReadError(error: unknown): boolean {
+  const status = extractHttpStatus(error);
+  if (status !== undefined) return TRANSIENT_READ_HTTP_STATUSES.has(status);
+
+  // Keep automatic replay narrower than mutation ambiguity detection: messages alone
+  // are not stable enough to prove that a read failure was transient.
+  if (typeof error !== "object" || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && AMBIGUOUS_NETWORK_CODES.has(code.toUpperCase());
 }

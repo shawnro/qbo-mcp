@@ -6,7 +6,11 @@ import type { InternalToolResult, MCPToolResult } from "../types/index.js";
 import type { QboRequestContext } from "../runtime/types.js";
 import { getClient, clearCredentialsCache, refreshTokens, isAuthError } from "../client/index.js";
 import { isQboOperationTimeoutError } from "../client/promisify.js";
-import { formatQBOError, isAmbiguousMutationError } from "../utils/index.js";
+import {
+  formatQBOError,
+  isAmbiguousMutationError,
+  isTransientReadError,
+} from "../utils/index.js";
 import { isToolDisabled } from "./crud-filter.js";
 import { getToolEffect } from "./effects.js";
 import {
@@ -73,6 +77,10 @@ type ToolHandler = (
   args: Record<string, unknown>,
   context?: QboRequestContext
 ) => Promise<InternalToolResult>;
+
+const READ_RETRY_DELAY_MS = 250;
+// One transient retry plus the existing one-time auth refresh may share this budget.
+const MAX_READ_ATTEMPTS = 3;
 
 // Tool handler registry
 const toolHandlers = new Map<string, ToolHandler>();
@@ -194,80 +202,92 @@ async function executeToolAttempt(
     return handler(client, args);
   };
 
-  // Execute with retry on auth failure
-  try {
-    return asMCPToolResult(await executeOperation());
-  } catch (error) {
-    if (isQboOperationTimeoutError(error)) {
-      return {
-        content: [{
-          type: "text",
-          text: effect === "committed-mutation"
-            ? indeterminateResultMessage(name, error)
-            : timeoutResultMessage(name, effect, error.timeoutMs),
-        }],
-        isError: true,
-      };
-    }
+  let attemptCount = 0;
+  let authRefreshAttempted = false;
+  let transientRetryAttempted = false;
+  const maxAttempts = effect === "read" ? MAX_READ_ATTEMPTS : 2;
 
-    if (isAuthError(error)) {
-      try {
-        if (context && failedCredentialFingerprint) {
-          await context.runtime.refreshAfterAuthError(failedCredentialFingerprint);
-        } else {
-          await refreshTokens();
-        }
-      } catch (refreshError) {
-        if (context) context.runtime.clearCaches();
-        else clearCredentialsCache();
+  while (attemptCount < maxAttempts) {
+    attemptCount += 1;
+    try {
+      return asMCPToolResult(await executeOperation());
+    } catch (error) {
+      const callbackTimedOut = isQboOperationTimeoutError(error);
+      if (
+        effect === "read"
+        && !transientRetryAttempted
+        && (callbackTimedOut || isTransientReadError(error))
+        && attemptCount < maxAttempts
+      ) {
+        transientRetryAttempted = true;
+        await delay(READ_RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (callbackTimedOut) {
         return {
           content: [{
             type: "text",
             text: effect === "committed-mutation"
-              ? indeterminateResultMessage(name)
-              : `Authentication refresh failed: ${formatQBOError(refreshError)}`,
+              ? indeterminateResultMessage(name, error)
+              : timeoutResultMessage(name, effect, error.timeoutMs),
           }],
           isError: true,
         };
       }
 
-      if (effect === "committed-mutation") {
-        return {
-          content: [{ type: "text", text: indeterminateResultMessage(name) }],
-          isError: true,
-        };
-      }
-      try {
-        return asMCPToolResult(await executeOperation());
-      } catch (retryError) {
-        if (isQboOperationTimeoutError(retryError)) {
+      if (isAuthError(error) && !authRefreshAttempted) {
+        authRefreshAttempted = true;
+        try {
+          if (context && failedCredentialFingerprint) {
+            await context.runtime.refreshAfterAuthError(failedCredentialFingerprint);
+          } else {
+            await refreshTokens();
+          }
+        } catch (refreshError) {
+          if (context) context.runtime.clearCaches();
+          else clearCredentialsCache();
           return {
             content: [{
               type: "text",
-              text: timeoutResultMessage(name, effect, retryError.timeoutMs),
+              text: effect === "committed-mutation"
+                ? indeterminateResultMessage(name)
+                : `Authentication refresh failed: ${formatQBOError(refreshError)}`,
             }],
             isError: true,
           };
         }
-        // If retry also fails, return that error
+
+        if (effect === "committed-mutation") {
+          return {
+            content: [{ type: "text", text: indeterminateResultMessage(name) }],
+            isError: true,
+          };
+        }
+        continue;
+      }
+
+      if (effect === "committed-mutation" && isAmbiguousMutationError(error)) {
         return {
-          content: [{ type: "text", text: `Error after retry: ${formatQBOError(retryError)}` }],
+          content: [{ type: "text", text: indeterminateResultMessage(name, error) }],
           isError: true,
         };
       }
-    }
-
-    if (effect === "committed-mutation" && isAmbiguousMutationError(error)) {
       return {
-        content: [{ type: "text", text: indeterminateResultMessage(name, error) }],
+        content: [{
+          type: "text",
+          text: `${attemptCount > 1 ? "Error after retry" : "Error"}: ${formatQBOError(error)}`,
+        }],
         isError: true,
       };
     }
-    return {
-      content: [{ type: "text", text: `Error: ${formatQBOError(error)}` }],
-      isError: true,
-    };
   }
+
+  throw new Error(`Tool "${name}" exhausted its execution attempt budget`);
+}
+
+function delay(timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, timeoutMs));
 }
 
 function timeoutResultMessage(
