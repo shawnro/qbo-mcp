@@ -16,7 +16,7 @@ import {
   canonicalizeAttachableEntityType,
   validateQboEntityId,
 } from "../attachable-fields.js";
-import { safeAttachableMetadata } from "./attachment-content.js";
+import { safeAttachableMetadata } from "../attachable-fields.js";
 
 function validateMetadata(note?: string, category?: string): void {
   if (note !== undefined && note.length > 2000) {

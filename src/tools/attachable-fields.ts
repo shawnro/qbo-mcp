@@ -1,3 +1,5 @@
+import type { QBAttachable } from "../types/index.js";
+
 export const ATTACHABLE_CATEGORIES = [
   "Contact Photo",
   "Document",
@@ -7,6 +9,46 @@ export const ATTACHABLE_CATEGORIES = [
   "Sound",
   "Other",
 ] as const;
+
+export interface SafeAttachableMetadata {
+  id: string;
+  syncToken: string;
+  fileName?: string;
+  contentType?: string;
+  size?: number;
+  note?: string;
+  category?: string;
+  linkedEntities: Array<{
+    type?: string;
+    id: string;
+    name?: string;
+    includeOnSend?: boolean;
+  }>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export function safeAttachableMetadata(attachable: QBAttachable): SafeAttachableMetadata {
+  return {
+    id: attachable.Id,
+    syncToken: attachable.SyncToken,
+    fileName: attachable.FileName,
+    contentType: attachable.ContentType,
+    size: attachable.Size,
+    note: attachable.Note,
+    category: attachable.Category,
+    linkedEntities: (attachable.AttachableRef ?? [])
+      .filter((ref) => ref.EntityRef?.value)
+      .map((ref) => ({
+        type: ref.EntityRef?.type,
+        id: ref.EntityRef!.value,
+        name: ref.EntityRef?.name,
+        includeOnSend: ref.IncludeOnSend,
+      })),
+    createdAt: attachable.MetaData?.CreateTime,
+    updatedAt: attachable.MetaData?.LastUpdatedTime,
+  };
+}
 
 export const ATTACHABLE_ENTITY_TYPES = [
   "Bill",

@@ -14,6 +14,7 @@ import {
 } from "../../utils/index.js";
 import {
   canonicalizeAttachableEntityType,
+  safeAttachableMetadata,
   validateQboEntityId,
 } from "../attachable-fields.js";
 
@@ -27,46 +28,6 @@ const MAX_HTTP_BINARY_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/gif"]);
 const TEXT_TYPES = new Set(["text/plain", "text/csv", "text/xml", "application/xml"]);
 const PDF_TYPE = "application/pdf";
-
-export interface SafeAttachableMetadata {
-  id: string;
-  syncToken: string;
-  fileName?: string;
-  contentType?: string;
-  size?: number;
-  note?: string;
-  category?: string;
-  linkedEntities: Array<{
-    type?: string;
-    id: string;
-    name?: string;
-    includeOnSend?: boolean;
-  }>;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export function safeAttachableMetadata(attachable: QBAttachable): SafeAttachableMetadata {
-  return {
-    id: attachable.Id,
-    syncToken: attachable.SyncToken,
-    fileName: attachable.FileName,
-    contentType: attachable.ContentType,
-    size: attachable.Size,
-    note: attachable.Note,
-    category: attachable.Category,
-    linkedEntities: (attachable.AttachableRef ?? [])
-      .filter((ref) => ref.EntityRef?.value)
-      .map((ref) => ({
-        type: ref.EntityRef?.type,
-        id: ref.EntityRef!.value,
-        name: ref.EntityRef?.name,
-        includeOnSend: ref.IncludeOnSend,
-      })),
-    createdAt: attachable.MetaData?.CreateTime,
-    updatedAt: attachable.MetaData?.LastUpdatedTime,
-  };
-}
 
 async function mapWithConcurrency<T, R>(
   values: T[],
