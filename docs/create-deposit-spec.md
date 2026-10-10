@@ -243,8 +243,3 @@ The Entity `type` defaults to `"VENDOR"` for vendor cache matches. If customer e
 
 - Existing `get_deposit` and `edit_deposit` should be unaffected (no changes to those functions)
 - Account/department/vendor cache behavior unchanged (read-only usage)
-
-## Backlog Update
-
-After implementation, update `docs/qbo-mcp-backlog.md`:
-- Move `create_deposit` from Backlog to Completed under "Create Transaction Tools"
