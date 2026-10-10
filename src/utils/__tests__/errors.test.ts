@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatQBOError } from "../errors.js";
+import { formatQBOError, isTransientReadError } from "../errors.js";
 
 describe("formatQBOError", () => {
   it("formats a direct QBO Fault with actionable fields", () => {
@@ -112,5 +112,26 @@ describe("formatQBOError", () => {
 
     expect(result.length).toBeLessThanOrEqual(2_000);
     expect(result).toContain("…");
+  });
+});
+
+describe("isTransientReadError", () => {
+  it.each([408, 429, 502, 503, 504])("accepts transient HTTP %i", (status) => {
+    expect(isTransientReadError({ response: { status } })).toBe(true);
+  });
+
+  it.each([400, 401, 403, 404, 500])("rejects HTTP %i", (status) => {
+    expect(isTransientReadError({ response: { status } })).toBe(false);
+  });
+
+  it.each(["ECONNABORTED", "ECONNRESET", "EPIPE", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"])(
+    "accepts transient transport code %s",
+    (code) => {
+      expect(isTransientReadError({ code })).toBe(true);
+    }
+  );
+
+  it("does not classify an error from message text alone", () => {
+    expect(isTransientReadError(new Error("socket hang up"))).toBe(false);
   });
 });

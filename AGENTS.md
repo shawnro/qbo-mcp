@@ -165,7 +165,7 @@ npm pack --dry-run
 
 Both builds must pass before committing. Run focused tests first, then broaden validation according to risk. Use the package dry run for packaging or release-facing changes. Check editor diagnostics for touched files. Restart any long-running MCP process after rebuilding before integration validation.
 
-All node-quickbooks callbacks and local operation queue waits use `QBO_REQUEST_TIMEOUT_MS`, defaulting to 60 seconds. An expired queued request is skipped. A callback deadline does not cancel an upstream request. Reads and previews may be retried after timeout; committed mutations return `indeterminate_result` and must never be replayed automatically.
+All node-quickbooks callbacks and local operation queue waits use `QBO_REQUEST_TIMEOUT_MS`, defaulting to 60 seconds. An expired queued request is skipped. A callback deadline does not cancel an upstream request. Reads receive at most one automatic retry for narrowly classified transient failures; previews are not transport-retried. Committed mutations return `indeterminate_result` for ambiguous outcomes and must never be replayed automatically.
 
 ## QuickBooks API Notes
 
