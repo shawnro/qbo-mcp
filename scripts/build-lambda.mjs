@@ -12,6 +12,7 @@ await build({
     "@azure/*",
     "@napi-rs/canvas",
     "pdfjs-dist/*",
+    "proper-lockfile",
   ],
   banner: {
     js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',

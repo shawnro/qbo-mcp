@@ -103,6 +103,14 @@ The shared `src/http/` application owns remote routing, auth, OAuth, CORS, canon
 
 Local stdio keeps profile switching, local OAuth setup, and local file uploads. Hosted HTTP is one QBO company per endpoint and must enforce unavailable capabilities in both `tools/list` and `tools/call`.
 
+### OAuth Refresh Coordination
+
+Local stdio uses `proper-lockfile` under `~/.qbo-mcp/refresh-locks` to coordinate refreshes across processes running as the same OS user on one machine. Lock scopes identify the credential store, not the profile display name. After acquiring the lock, refresh re-reads credentials and compares their fingerprint before contacting Intuit.
+
+OAuth token requests must never be automatically replayed. A durable non-secret attempt journal is written before refresh and cleared only after the rotated credential snapshot is persisted. An unresolved or malformed journal fails closed and requires deliberate reauthorization; `qbo_authenticate` uses the same lock and clears the journal only after replacement credentials are saved.
+
+Hosted HTTP remains process-local and must enforce `MCP_SINGLE_REPLICA=true`. A future Azure implementation should use a renewable Blob lease plus a durable shared attempt record and stale-holder write protection; a Blob lease alone is insufficient. AWS can implement the same interfaces with a conditional DynamoDB lease. See `docs/oauth-refresh-coordination.md` for invariants, recovery behavior, and the distributed readiness gate.
+
 ## Common Files
 
 | Task | File |
@@ -110,6 +118,7 @@ Local stdio keeps profile switching, local OAuth setup, and local file uploads. 
 | Change query behavior | `src/query/pagination.ts` |
 | Money utilities | `src/utils/money.ts` |
 | API client | `src/client/quickbooks.ts` |
+| OAuth refresh coordination | `src/runtime/credential-refresh.ts`, `src/runtime/file-refresh-coordinator.ts` |
 | Output mode (stdio/http) | `src/utils/output.ts` |
 
 ## Critical Limitations

@@ -22,6 +22,11 @@ export class AzureCredentialProvider implements CredentialProvider {
     this.secretName = secretName || process.env.QBO_SECRET_NAME || "qbo-credentials";
   }
 
+  getRefreshLockScope(): string {
+    const vaultUrl = this.vaultUrl?.replace(/\/+$/, "").toLowerCase() ?? "unconfigured";
+    return `azure:${vaultUrl}:${this.secretName.toLowerCase()}`;
+  }
+
   /**
    * Lazily initialize the SecretClient on first use.
    * Throws if AZURE_KEY_VAULT_URL is not set or malformed.

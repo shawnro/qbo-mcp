@@ -6,7 +6,13 @@ export class InProcessRefreshCoordinator implements RefreshCoordinator {
   private active: Promise<unknown> | null = null;
 
   async run<T>(operation: () => Promise<T>): Promise<T> {
-    while (this.active) await this.active;
+    while (this.active) {
+      try {
+        await this.active;
+      } catch {
+        // The failed owner reports its own error; the next waiter still gets a turn.
+      }
+    }
 
     const active = operation();
     this.active = active;

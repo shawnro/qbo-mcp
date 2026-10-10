@@ -1,8 +1,9 @@
 // Local file-based credential provider
 
-import { promises as fs } from "fs";
+import { promises as fs, realpathSync } from "fs";
+import { randomUUID } from "crypto";
 import { homedir } from "os";
-import { join, dirname } from "path";
+import { join, dirname, resolve, basename } from "path";
 import type { CredentialProvider, QBCredentials } from "./types.js";
 
 // Default credential file location
@@ -24,6 +25,21 @@ export class LocalCredentialProvider implements CredentialProvider {
 
   constructor() {
     this.credentialPath = getCredentialPath();
+  }
+
+  getRefreshLockScope(): string {
+    let canonicalPath = resolve(this.credentialPath);
+    try {
+      canonicalPath = realpathSync.native(canonicalPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      try {
+        canonicalPath = join(realpathSync.native(dirname(canonicalPath)), basename(canonicalPath));
+      } catch (parentError) {
+        if ((parentError as NodeJS.ErrnoException).code !== "ENOENT") throw parentError;
+      }
+    }
+    return `local:${process.platform === "win32" ? canonicalPath.toLowerCase() : canonicalPath}`;
   }
 
   async getCredentials(): Promise<QBCredentials> {
@@ -54,16 +70,23 @@ export class LocalCredentialProvider implements CredentialProvider {
   }
 
   async saveCredentials(credentials: QBCredentials): Promise<void> {
-    // Ensure directory exists
     const dir = dirname(this.credentialPath);
     await fs.mkdir(dir, { recursive: true });
+    const temporaryPath = join(dir, `.${basename(this.credentialPath)}.${randomUUID()}.tmp`);
+    let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
 
-    // Write credentials file
-    await fs.writeFile(
-      this.credentialPath,
-      JSON.stringify(credentials, null, 2),
-      { mode: 0o600 } // Readable only by owner
-    );
+    try {
+      handle = await fs.open(temporaryPath, "wx", 0o600);
+      await handle.writeFile(JSON.stringify(credentials, null, 2), "utf8");
+      await handle.sync();
+      await handle.close();
+      handle = undefined;
+      await fs.rename(temporaryPath, this.credentialPath);
+    } catch (error) {
+      await handle?.close().catch(() => undefined);
+      await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 
   async getCompanyId(): Promise<string> {

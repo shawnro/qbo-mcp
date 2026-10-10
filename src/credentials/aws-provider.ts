@@ -22,17 +22,23 @@ export class AWSCredentialProvider implements CredentialProvider {
   private secretsClient: SecretsManagerClient;
   private ssmClient: SSMClient;
   private cachedCompanyId: string | null = null;
+  private readonly region: string;
   private readonly secretName: string;
   private readonly companyIdParameter: string;
 
   constructor(options: AWSCredentialProviderOptions = {}) {
     const region = options.region ?? process.env.AWS_REGION ?? "us-east-2";
+    this.region = region;
     this.secretName = options.secretName ?? process.env.QBO_SECRET_NAME ?? "prod/qbo";
     this.companyIdParameter = options.companyIdParameter
       ?? process.env.QBO_COMPANY_ID_PARAM
       ?? "/prod/qbo/company_id";
     this.secretsClient = new SecretsManagerClient({ region });
     this.ssmClient = new SSMClient({ region });
+  }
+
+  getRefreshLockScope(): string {
+    return `aws:${this.region.toLowerCase()}:${this.secretName}`;
   }
 
   async getCredentials(): Promise<QBCredentials> {

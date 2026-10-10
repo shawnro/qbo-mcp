@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+const { mockRunWithRefreshLock } = vi.hoisted(() => ({
+  mockRunWithRefreshLock: vi.fn(async (operation: () => Promise<unknown>) => operation()),
+}));
+const { mockCompleteRefreshAttempt } = vi.hoisted(() => ({
+  mockCompleteRefreshAttempt: vi.fn(),
+}));
+
 // Mock credentials modules
 vi.mock("../../../credentials/index.js", () => ({
   isLocalMode: vi.fn(),
@@ -21,6 +28,11 @@ vi.mock("../../../credentials/oauth-client.js", () => ({
   generateAuthorizationUrl: vi.fn(),
   exchangeCodeForTokens: vi.fn(),
   getOAuthInstructions: vi.fn(),
+}));
+
+vi.mock("../../../runtime/file-refresh-coordinator.js", () => ({
+  createFileRefreshCoordinator: vi.fn(() => ({ run: mockRunWithRefreshLock })),
+  createFileRefreshAttemptJournal: vi.fn(() => ({ complete: mockCompleteRefreshAttempt })),
 }));
 
 import { isLocalMode, getCredentialMode } from "../../../credentials/index.js";
@@ -120,6 +132,8 @@ describe("handleAuthenticate", () => {
     expect(result.content[0].text).toContain("Authentication Successful");
     expect(result.content[0].text).toContain("9876");
     expect(mockSaveCredentials).toHaveBeenCalledWith(fakeCreds);
+    expect(mockRunWithRefreshLock).toHaveBeenCalledOnce();
+    expect(mockCompleteRefreshAttempt).toHaveBeenCalledOnce();
     expect(mockExchangeCode).toHaveBeenCalledWith("id123", "secret456", "authcode", "9876");
   });
 

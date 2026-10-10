@@ -16,6 +16,7 @@ function credentials(accessToken: string, refreshToken = `refresh-${accessToken}
 function provider(initial: QBCredentials): CredentialProvider & { current: QBCredentials } {
   return {
     current: initial,
+    getRefreshLockScope() { return "test:company"; },
     async getCredentials() { return this.current; },
     async saveCredentials(value) { this.current = value; },
     async getCompanyId() { return "123"; },
@@ -129,5 +130,32 @@ describe("DefaultQboCompanyRuntime refresh isolation", () => {
     )).rejects.toThrow("could not be persisted");
     expect(refresh).toHaveBeenCalledOnce();
     expect(stored.saveCredentials).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets a waiter retry after the active refresh fails", async () => {
+    const stored = provider(credentials("old"));
+    let releaseFailure!: () => void;
+    const failureGate = new Promise<void>((resolve) => { releaseFailure = resolve; });
+    const refresh = vi.fn()
+      .mockImplementationOnce(async () => {
+        await failureGate;
+        throw new Error("temporary refresh failure");
+      })
+      .mockResolvedValueOnce(credentials("new"));
+    const runtime = new DefaultQboCompanyRuntime({
+      companyKey: companyKey("company-a"), companyId: "123", provider: stored,
+      sandbox: true, refresh,
+    });
+    const failed = (await runtime.createClientAttempt()).credentialFingerprint;
+
+    const first = runtime.refreshAfterAuthError(failed);
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    const waiting = runtime.refreshAfterAuthError(failed);
+    releaseFailure();
+
+    await expect(first).rejects.toThrow("temporary refresh failure");
+    await expect(waiting).resolves.toBeUndefined();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(stored.current).toEqual(credentials("new"));
   });
 });

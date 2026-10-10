@@ -9,6 +9,7 @@ import { clearHostedRuntimeForTests, getHostedCompanyRuntime } from "./factory.j
 
 function provider(configured: boolean) {
   return {
+    getRefreshLockScope: vi.fn().mockReturnValue("test:hosted"),
     isConfigured: vi.fn().mockResolvedValue(configured),
     getCompanyId: vi.fn().mockResolvedValue("123"),
     getCredentials: vi.fn(),
