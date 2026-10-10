@@ -3,6 +3,10 @@ import { createCredentialProvider } from "../credentials/index.js";
 import { isAuthError, promisify } from "../client/index.js";
 import { DefaultQboCompanyRuntime } from "./company-runtime.js";
 import { companyKey } from "./types.js";
+import {
+  createFileRefreshAttemptJournal,
+  createFileRefreshCoordinator,
+} from "./file-refresh-coordinator.js";
 
 export async function validateLocalProfile(
   name: string,
@@ -18,6 +22,8 @@ export async function validateLocalProfile(
     companyId,
     provider,
     sandbox: process.env.QBO_SANDBOX === "true",
+    refreshCoordinator: createFileRefreshCoordinator(provider),
+    refreshAttemptJournal: createFileRefreshAttemptJournal(provider),
   });
 
   const connect = async () => {

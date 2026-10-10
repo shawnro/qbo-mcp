@@ -7,6 +7,10 @@ import {
   exchangeCodeForTokens,
   getOAuthInstructions,
 } from "../../credentials/oauth-client.js";
+import {
+  createFileRefreshAttemptJournal,
+  createFileRefreshCoordinator,
+} from "../../runtime/file-refresh-coordinator.js";
 
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
 
@@ -97,8 +101,12 @@ export async function handleAuthenticate(args: AuthenticateArgs): Promise<ToolRe
         args.realm_id
       );
 
-      // Save credentials to local file
-      await localProvider.saveCredentials(result.credentials);
+      const coordinator = createFileRefreshCoordinator(localProvider);
+      const attemptJournal = createFileRefreshAttemptJournal(localProvider);
+      await coordinator.run(async () => {
+        await localProvider.saveCredentials(result.credentials);
+        await attemptJournal.complete();
+      });
 
       return {
         content: [{

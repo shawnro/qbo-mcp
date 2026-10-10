@@ -3,6 +3,9 @@
 import OAuthClient from "intuit-oauth";
 import type { QBCredentials } from "./types.js";
 
+// Token exchanges rotate one-time credentials and must not be replayed after an ambiguous response.
+OAuthClient.retryConfig.maxRetries = 0;
+
 // Intuit's OAuth Playground redirect URL - works for both sandbox and production
 const PLAYGROUND_REDIRECT_URL = "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl";
 

@@ -18,6 +18,12 @@ export interface QBCredentials {
  */
 export interface CredentialProvider {
   /**
+   * Stable, non-secret identity of the credential storage location.
+   * Providers that address the same OAuth grant must return the same scope.
+   */
+  getRefreshLockScope(): string;
+
+  /**
    * Get current OAuth credentials
    */
   getCredentials(): Promise<QBCredentials>;

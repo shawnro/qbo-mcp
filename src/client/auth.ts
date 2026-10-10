@@ -3,9 +3,16 @@
 import QuickBooks from "node-quickbooks";
 import { getCredentialProvider, getCredentialMode, isLocalMode, resolveCompanyId } from "../credentials/index.js";
 import type { QBCredentials, CredentialProvider } from "../credentials/index.js";
-import { refreshAccessToken } from "../credentials/oauth-client.js";
 import { clearLookupCache } from "./cache.js";
 import { extractHttpStatus, extractQBErrorInfo, unwrapQBError } from "../types/index.js";
+import {
+  createFileRefreshAttemptJournal,
+  createFileRefreshCoordinator,
+} from "../runtime/file-refresh-coordinator.js";
+import {
+  credentialFingerprint,
+  refreshCredentialsAfterAuthError,
+} from "../runtime/credential-refresh.js";
 
 // Sandbox mode for development/testing (read lazily so dotenv has time to load)
 const isSandbox = () => process.env.QBO_SANDBOX === "true";
@@ -106,9 +113,12 @@ export async function refreshTokens(): Promise<void> {
     credentials = await provider.getCredentials();
   }
 
-  // Use intuit-oauth library for refresh (works for all credential modes)
-  credentials = await refreshAccessToken(credentials);
-  await provider.saveCredentials(credentials);
+  credentials = await refreshCredentialsAfterAuthError({
+    provider,
+    coordinator: createFileRefreshCoordinator(provider),
+    attemptJournal: createFileRefreshAttemptJournal(provider),
+    failedCredentialFingerprint: credentialFingerprint(credentials),
+  });
 
   // Clear cached client so getClient() rebuilds with new tokens
   qbo = null;

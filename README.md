@@ -35,7 +35,7 @@ Instead of separate search tools for each entity type, a single SQL-like `query`
 
 ### Production-ready credential management
 
-Store credentials locally for personal use, or in AWS Secrets Manager for shared environments. OAuth tokens refresh automatically and persist across sessions.
+Store credentials locally for personal use, or in AWS Secrets Manager or Azure Key Vault for shared environments. OAuth tokens refresh automatically and persist across sessions.
 
 ### At a glance
 
@@ -46,7 +46,7 @@ Store credentials locally for personal use, or in AWS Secrets Manager for shared
 | **Financial reports** | None | P&L, Balance Sheet, Trial Balance |
 | **Write safety** | Executes immediately | Draft preview by default |
 | **Query approach** | Entity-specific search tools | SQL-like queries across all entities |
-| **Credentials** | Local `.env` file | Local file or AWS Secrets Manager |
+| **Credentials** | Local `.env` file | Local file, AWS Secrets Manager, or Azure Key Vault |
 | **Distribution** | Clone from GitHub | `npx qbo-mcp` |
 
 ## Prerequisites
@@ -446,7 +446,7 @@ Authentication is fail-closed. Configure `MCP_AUTH_JWKS_URI`, `MCP_AUTH_AUDIENCE
 
 The hosted transport uses one configured QuickBooks company per endpoint. Local stdio retains named profiles, `qbo_authenticate`, profile switching, and local file uploads. Hosted clients do not see or invoke those process-local tools. `create_attachable` remains available remotely for notes and entity links, but not for `file_path` uploads because a hosted process cannot read files from a customer's computer. Multi-company customers can register one hosted endpoint per company; secure in-process hosted multi-company selection requires a later principal-to-company authorization and state-isolation layer.
 
-Hosted deployments must currently run as one process/replica and set `MCP_SINGLE_REPLICA=true`. Refresh coordination is process-local, so Lambda reserved concurrency and container replica limits must both be one. Do not scale a hosted endpoint beyond one replica until distributed refresh locking is implemented and validated; that work is planned with the Azure deployment adapters.
+Hosted deployments must currently run as one process/replica and set `MCP_SINGLE_REPLICA=true`. Refresh coordination is process-local, so Lambda reserved concurrency and container replica limits must both be one. Do not scale a hosted endpoint beyond one replica until a distributed coordinator and durable shared attempt journal are implemented and validated. The planned Azure backend uses a Blob lease; AWS can use a conditional DynamoDB lease. See [OAuth Refresh Coordination](docs/oauth-refresh-coordination.md) for the required protocol and safety gates.
 
 Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability policy live in a provider-neutral Web `Request` to `Response` application. AWS Lambda is an API Gateway adapter over that application; Azure Functions and Node/container adapters can use the same core without duplicating accounting or security policy.
 
@@ -601,7 +601,13 @@ Line edits use QBO full updates. The handlers preserve required header reference
 
 ## Token Refresh
 
-The server automatically refreshes OAuth tokens on each request and persists them back to your credential store (local file or AWS Secrets Manager).
+The server automatically refreshes OAuth tokens and persists them back to the configured credential store (local file, AWS Secrets Manager, or Azure Key Vault).
+
+Local stdio processes running as the same OS user on one machine coordinate refreshes through a credential-store-scoped lock under `~/.qbo-mcp/refresh-locks`. After acquiring the lock, a process re-reads the stored credentials and skips refresh when another process has already advanced the token generation. OAuth token requests are never automatically replayed.
+
+Before contacting Intuit, local mode writes a non-secret refresh-attempt marker containing only a credential fingerprint. The marker is cleared after the rotated credentials are persisted. If a process exits or receives an ambiguous response before persistence can be confirmed, later refreshes fail closed and require deliberate reauthorization instead of risking another rotation from stale credentials. Hosted multi-replica deployments still require a distributed refresh coordinator.
+
+See [OAuth Refresh Coordination](docs/oauth-refresh-coordination.md) for lock timing, provider scopes, crash recovery, validation coverage, and the future Azure Blob lease and AWS DynamoDB designs.
 
 ---
 
@@ -630,6 +636,8 @@ Authorization codes are only valid for a few minutes. Start the OAuth flow again
 - Check that your refresh token hasn't expired (~100 days)
 - Verify your client credentials are correct
 - Try re-authenticating with `qbo_authenticate`
+
+If the error says a previous refresh may have rotated the token or reports `INDETERMINATE_CREDENTIAL_REFRESH`, do not delete the attempt marker or retry the old token. In local credential mode, run `qbo_authenticate`. For AWS Secrets Manager or Azure Key Vault mode, use your administrative reauthorization process to replace the stored OAuth credentials; the next request will recognize the new generation and clear the marker.
 
 ### AWS credential errors
 

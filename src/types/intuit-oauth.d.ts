@@ -60,6 +60,13 @@ declare module "intuit-oauth" {
   }
 
   class OAuthClient {
+    static retryConfig: {
+      maxRetries: number;
+      retryDelay: number;
+      retryableStatusCodes: number[];
+      retryableErrors: string[];
+    };
+
     static scopes: {
       Accounting: string;
       Payment: string;
