@@ -43,7 +43,7 @@
     "@aws-sdk/client-ssm": "^3.1108.0",
     "@azure/identity": "^4.6.0",
     "@azure/keyvault-secrets": "^4.9.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@napi-rs/canvas": "^0.1.100",
     "dotenv": "^17.2.3",
     "intuit-oauth": "^4.2.5",
@@ -59,7 +59,7 @@
     "@types/tmp": "^0.2.6",
     "esbuild": "^0.28.2",
     "typescript": "^5.3.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "node-quickbooks": {
