@@ -13,6 +13,7 @@ import {
 } from "../../query/index.js";
 import { isQBError, extractQBErrorInfo } from "../../types/index.js";
 import type { QboRequestContext } from "../../runtime/types.js";
+import { projectQueryEntities } from "../query-output.js";
 
 export async function handleQuery(
   client: QuickBooks,
@@ -79,6 +80,8 @@ export async function handleQuery(
       QboLink: record.Id ? getQboUrl(entity, record.Id) : null
     }));
   }
+
+  entities = projectQueryEntities(entity, entities) as typeof entities;
 
   // Build result object for file output
   const result = {

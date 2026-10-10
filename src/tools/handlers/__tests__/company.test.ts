@@ -28,20 +28,29 @@ describe("handleGetCompanyInfo", () => {
     vi.clearAllMocks();
   });
 
-  it("returns company info as JSON", async () => {
+  it("returns allowlisted company info without sensitive upstream fields", async () => {
     const companyData = {
+      Id: "12345",
       CompanyName: "Test Corp",
       LegalName: "Test Corporation LLC",
       Country: "US",
+      FiscalYearStartMonth: "January",
       Email: { Address: "test@corp.com" },
+      EmployerId: "12-3456789",
+      CompanyAddr: { Line1: "123 Main St" },
+      NameValue: [{ Name: "SubscriptionStatus", Value: "PAID" }],
     };
     mockSuccess(client.getCompanyInfo, companyData);
 
     const result = await handleGetCompanyInfo(client as never);
 
-    expect(result.content[0].text).toContain("Test Corp");
-    expect(result.content[0].text).toContain("Test Corporation LLC");
-    expect(JSON.parse(result.content[0].text)).toEqual(companyData);
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      Id: "12345",
+      CompanyName: "Test Corp",
+      LegalName: "Test Corporation LLC",
+      Country: "US",
+      FiscalYearStartMonth: "January",
+    });
   });
 
   it("propagates API errors", async () => {

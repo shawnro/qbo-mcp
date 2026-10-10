@@ -84,6 +84,8 @@ Follow the closest existing tool. Use `outputReport()` for returned data. Encode
 
 For large outputs, compute summaries from all data, then cap HTTP detail with `isHttpMode()` from `src/utils/output.ts`. Include original and returned counts plus continuation guidance. Do not use the generic size backstop as a substitute for a useful tool-specific projection.
 
+Generic query results must pass through the shared privacy projection before output. Preserve accounting workflow fields, but remove tax/employer identifiers, payment-bank details, signed attachment URLs, and opaque extension metadata. CompanyInfo and Attachable queries must reuse their dedicated allowlisted projections.
+
 ### Hosted HTTP Boundary
 
 The shared `src/http/` application owns remote routing, authentication, OAuth, CORS, canonical URLs, MCP lifecycle, and hosted capabilities. Host adapters only translate native request and response shapes.

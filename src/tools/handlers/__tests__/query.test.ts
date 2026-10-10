@@ -126,6 +126,100 @@ describe("handleQuery", () => {
     );
   });
 
+  it("redacts sensitive fields recursively while preserving accounting data", async () => {
+    mockPaginatedQuery.mockResolvedValue({
+      entities: [{
+        Id: "1",
+        DisplayName: "Acme",
+        taxidentifier: "sensitive-tax-id",
+        VendorPaymentBankDetail: { BankAccountNumber: "sensitive-bank-account" },
+        Nested: { PrimaryTaxIdentifier: "sensitive-primary-tax-id", Balance: 25 },
+        Lines: [{ Amount: 25, SSN: "sensitive-ssn" }],
+      }],
+      entityKey: "Vendor",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: false,
+      returnedCount: 1,
+      requestedLimit: 1000,
+    } as never);
+
+    const result = await handleQuery(client as never, { query: "SELECT * FROM Vendor" });
+    const report = (result as unknown as { _data: { QueryResponse: { Vendor: unknown[] } } })._data;
+
+    expect(report.QueryResponse.Vendor).toEqual([{
+      Id: "1",
+      DisplayName: "Acme",
+      Nested: { Balance: 25 },
+      Lines: [{ Amount: 25 }],
+    }]);
+  });
+
+  it("projects Attachable query results without signed URLs", async () => {
+    mockPaginatedQuery.mockResolvedValue({
+      entities: [{
+        Id: "200",
+        SyncToken: "1",
+        FileName: "receipt.pdf",
+        TempDownloadUri: "https://signed.example/secret",
+        FileAccessUri: "https://signed.example/file",
+        AttachableRef: [{ EntityRef: { type: "Bill", value: "42", name: "Bill 42" } }],
+      }],
+      entityKey: "Attachable",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: false,
+      returnedCount: 1,
+      requestedLimit: 1000,
+    } as never);
+
+    const result = await handleQuery(client as never, { query: "SELECT * FROM Attachable" });
+    const report = (result as unknown as { _data: { QueryResponse: { Attachable: unknown[] } } })._data;
+
+    expect(report.QueryResponse.Attachable).toEqual([{
+      id: "200",
+      syncToken: "1",
+      fileName: "receipt.pdf",
+      linkedEntities: [{ type: "Bill", id: "42", name: "Bill 42" }],
+    }]);
+    expect(JSON.stringify(report)).not.toContain("signed.example");
+  });
+
+  it("projects CompanyInfo query results without employer or preference metadata", async () => {
+    (client as unknown as Record<string, unknown>).findCompanyInfos = vi.fn();
+    mockPaginatedQuery.mockResolvedValue({
+      entities: [{
+        Id: "1",
+        CompanyName: "Test Corp",
+        LegalName: "Test Corporation LLC",
+        Country: "US",
+        FiscalYearStartMonth: "January",
+        EmployerId: "12-3456789",
+        NameValue: [{ Name: "SubscriptionStatus", Value: "PAID" }],
+      }],
+      entityKey: "CompanyInfo",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: false,
+      returnedCount: 1,
+      requestedLimit: 1000,
+    } as never);
+
+    const result = await handleQuery(client as never, { query: "SELECT * FROM Company" });
+    const report = (result as unknown as { _data: { QueryResponse: { CompanyInfo: unknown[] } } })._data;
+
+    expect(report.QueryResponse.CompanyInfo).toEqual([{
+      Id: "1",
+      CompanyName: "Test Corp",
+      LegalName: "Test Corporation LLC",
+      Country: "US",
+      FiscalYearStartMonth: "January",
+    }]);
+  });
+
   // --- Empty response ---
 
   it("handles empty result set", async () => {
