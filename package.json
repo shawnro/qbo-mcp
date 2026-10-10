@@ -7,6 +7,9 @@
   "author": "shawnro",
   "homepage": "https://github.com/shawnro/qbo-mcp",
   "bugs": "https://github.com/shawnro/qbo-mcp/issues",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/shawnro/qbo-mcp.git"
@@ -51,7 +54,7 @@
     "tmp": "^0.2.7"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^24.0.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/tmp": "^0.2.6",
     "esbuild": "^0.28.2",
