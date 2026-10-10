@@ -153,6 +153,8 @@ Account-based lines on bills, expenses, and vendor credits support `customer_nam
 
 ## Build and Validation
 
+Use Node.js 24.x. The package, CI, and Lambda bundle target this LTS major.
+
 ```bash
 npm test
 npm run build

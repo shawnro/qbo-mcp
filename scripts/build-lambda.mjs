@@ -4,7 +4,7 @@ await build({
   entryPoints: ["src/lambda.ts"],
   bundle: true,
   platform: "node",
-  target: "node22",
+  target: "node24",
   outfile: "dist-lambda/handler.mjs",
   format: "esm",
   external: [
