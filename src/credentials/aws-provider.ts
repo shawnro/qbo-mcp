@@ -89,19 +89,3 @@ export class AWSCredentialProvider implements CredentialProvider {
     }
   }
 }
-
-// Legacy exports for backward compatibility with src/aws.ts re-exports
-export async function getSecret(): Promise<QBCredentials> {
-  const provider = new AWSCredentialProvider();
-  return provider.getCredentials();
-}
-
-export async function putSecret(credentials: QBCredentials): Promise<void> {
-  const provider = new AWSCredentialProvider();
-  return provider.saveCredentials(credentials);
-}
-
-export async function getCompanyId(): Promise<string> {
-  const provider = new AWSCredentialProvider();
-  return provider.getCompanyId();
-}
