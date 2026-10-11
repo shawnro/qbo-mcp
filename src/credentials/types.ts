@@ -17,6 +17,58 @@ export interface QBCredentials {
   company_id?: string; // Stored in credentials for local mode
 }
 
+const REQUIRED_CREDENTIAL_FIELDS = [
+  "client_id",
+  "client_secret",
+  "redirect_url",
+  "access_token",
+  "refresh_token",
+] as const;
+
+export function parseCredentialPayload(
+  value: unknown,
+  source = "QuickBooks credential payload"
+): QBCredentials {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${source} must be a JSON object`);
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const field of REQUIRED_CREDENTIAL_FIELDS) {
+    if (typeof record[field] !== "string" || !record[field].trim()) {
+      throw new Error(`${source} field "${field}" must be a non-empty string`);
+    }
+  }
+  if (
+    record.company_id !== undefined
+    && (typeof record.company_id !== "string" || !record.company_id.trim())
+  ) {
+    throw new Error(`${source} field "company_id" must be a non-empty string when provided`);
+  }
+
+  return {
+    client_id: record.client_id as string,
+    client_secret: record.client_secret as string,
+    redirect_url: record.redirect_url as string,
+    access_token: record.access_token as string,
+    refresh_token: record.refresh_token as string,
+    ...(record.company_id !== undefined && { company_id: record.company_id as string }),
+  };
+}
+
+export function parseCredentialJson(
+  content: string,
+  source = "QuickBooks credential payload"
+): QBCredentials {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error(`${source} must contain valid JSON`);
+  }
+  return parseCredentialPayload(parsed, source);
+}
+
 /**
  * Abstract credential provider interface
  * Implemented by AWS and Local providers

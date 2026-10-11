@@ -6,12 +6,15 @@ import {
   PutSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+import { parseCredentialJson, parseCredentialPayload } from "./types.js";
 import type { CredentialProvider, QBCredentials } from "./types.js";
 
 export interface AWSCredentialProviderOptions {
   region?: string;
   secretName?: string;
   companyIdParameter?: string;
+  secretsClient?: SecretsManagerClient;
+  ssmClient?: SSMClient;
 }
 
 /**
@@ -33,8 +36,8 @@ export class AWSCredentialProvider implements CredentialProvider {
     this.companyIdParameter = options.companyIdParameter
       ?? process.env.QBO_COMPANY_ID_PARAM
       ?? "/prod/qbo/company_id";
-    this.secretsClient = new SecretsManagerClient({ region });
-    this.ssmClient = new SSMClient({ region });
+    this.secretsClient = options.secretsClient ?? new SecretsManagerClient({ region });
+    this.ssmClient = options.ssmClient ?? new SSMClient({ region });
   }
 
   getRefreshLockScope(): string {
@@ -49,13 +52,17 @@ export class AWSCredentialProvider implements CredentialProvider {
       throw new Error("Secret value is empty");
     }
 
-    return JSON.parse(response.SecretString) as QBCredentials;
+    return parseCredentialJson(
+      response.SecretString,
+      `AWS Secrets Manager secret "${this.secretName}"`
+    );
   }
 
   async saveCredentials(credentials: QBCredentials): Promise<void> {
+    const validated = parseCredentialPayload(credentials, "QuickBooks credentials to save");
     const command = new PutSecretValueCommand({
       SecretId: this.secretName,
-      SecretString: JSON.stringify(credentials),
+      SecretString: JSON.stringify(validated),
     });
     await this.secretsClient.send(command);
   }
@@ -84,8 +91,15 @@ export class AWSCredentialProvider implements CredentialProvider {
       await this.getCredentials();
       await this.getCompanyId();
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if (isAwsMissingResourceError(error)) return false;
+      throw error;
     }
   }
+}
+
+function isAwsMissingResourceError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error ? (error as { name?: unknown }).name : undefined;
+  return name === "ResourceNotFoundException" || name === "ParameterNotFound";
 }
