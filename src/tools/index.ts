@@ -1,6 +1,7 @@
 // Tool registry and dispatcher with auth retry
 
 import QuickBooks from "node-quickbooks";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
 import { asMCPToolResult } from "../types/index.js";
 import type { InternalToolResult, MCPToolResult } from "../types/index.js";
 import type { QboRequestContext } from "../runtime/types.js";
@@ -13,6 +14,7 @@ import {
 } from "../utils/index.js";
 import { isToolDisabled } from "./crud-filter.js";
 import { getToolEffect } from "./effects.js";
+import { toolDefinitions } from "./definitions.js";
 import {
   LocalOperationQueueTimeoutError,
   runLocalOperation,
@@ -70,7 +72,7 @@ import {
   handleSwitchProfile,
 } from "./handlers/index.js";
 
-export { toolDefinitions } from "./definitions.js";
+export { toolDefinitions };
 
 type ToolHandler = (
   client: QuickBooks,
@@ -81,6 +83,13 @@ type ToolHandler = (
 const READ_RETRY_DELAY_MS = 250;
 // One transient retry plus the existing one-time auth refresh may share this budget.
 const MAX_READ_ATTEMPTS = 3;
+const MAX_SCHEMA_ERROR_LENGTH = 2_000;
+
+const schemaValidator = new AjvJsonSchemaValidator();
+const inputValidators = new Map(toolDefinitions.map((definition) => [
+  definition.name,
+  schemaValidator.getValidator(definition.inputSchema as never),
+]));
 
 // Tool handler registry
 const toolHandlers = new Map<string, ToolHandler>();
@@ -168,6 +177,25 @@ async function executeToolAttempt(
   if (isToolDisabled(name)) {
     return {
       content: [{ type: "text", text: `Tool "${name}" is disabled by server configuration.` }],
+      isError: true,
+    };
+  }
+
+  const validator = inputValidators.get(name);
+  if (!validator) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  const validation = validator(args);
+  if (!validation.valid) {
+    const detail = validation.errorMessage ?? "input does not match the tool schema";
+    const boundedDetail = detail.length > MAX_SCHEMA_ERROR_LENGTH
+      ? `${detail.slice(0, MAX_SCHEMA_ERROR_LENGTH)}...`
+      : detail;
+    return {
+      content: [{
+        type: "text",
+        text: `Invalid arguments for "${name}": ${boundedDetail}`,
+      }],
       isError: true,
     };
   }

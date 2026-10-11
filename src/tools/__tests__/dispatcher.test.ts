@@ -72,6 +72,7 @@ import { QboOperationTimeoutError } from "../../client/promisify.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 import {
   handleCreateAttachable,
+  handleCreateBill,
   handleCreateVendor,
   handleGetCompanyInfo,
   handleGetTrialBalance,
@@ -80,6 +81,7 @@ import {
 } from "../handlers/index.js";
 
 const mockHandleCreateAttachable = vi.mocked(handleCreateAttachable);
+const mockHandleCreateBill = vi.mocked(handleCreateBill);
 const mockHandleCreateVendor = vi.mocked(handleCreateVendor);
 const mockHandleGetCompanyInfo = vi.mocked(handleGetCompanyInfo);
 const mockHandleGetTrialBalance = vi.mocked(handleGetTrialBalance);
@@ -122,6 +124,46 @@ describe("executeTool", () => {
 
     expect(result.content[0].text).toBe("Vendor Info");
     expect(mockHandleGetVendor).toHaveBeenCalledWith(fakeClient, { id: "42" }, undefined);
+  });
+
+  it("rejects arguments that violate a cross-field schema before client creation", async () => {
+    const result = await executeTool("create_bill", {
+      txn_date: "2026-10-10",
+      lines: [{ account_name: "Office Expenses", amount: 10 }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Invalid arguments for "create_bill"');
+    expect(mockGetClient).not.toHaveBeenCalled();
+    expect(mockHandleCreateBill).not.toHaveBeenCalled();
+  });
+
+  it("dispatches arguments that satisfy the advertised schema", async () => {
+    mockHandleCreateBill.mockResolvedValue({
+      content: [{ type: "text", text: "Bill draft" }],
+    });
+    const args = {
+      vendor_name: "Acme",
+      txn_date: "2026-10-10",
+      lines: [{ account_name: "Office Expenses", amount: 10 }],
+    };
+
+    const result = await executeTool("create_bill", args);
+
+    expect(result.content[0].text).toBe("Bill draft");
+    expect(mockHandleCreateBill).toHaveBeenCalledWith(fakeClient, args, undefined);
+  });
+
+  it("validates profile tool arguments before its no-client special case", async () => {
+    const { handleSwitchProfile } = await import("../handlers/index.js");
+    const mockSwitchProfile = vi.mocked(handleSwitchProfile);
+
+    const result = await executeTool("switch_qbo_profile", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Invalid arguments for "switch_qbo_profile"');
+    expect(mockSwitchProfile).not.toHaveBeenCalled();
+    expect(mockGetClient).not.toHaveBeenCalled();
   });
 
   it("forwards request context through report and Vendor mutation registrations", async () => {
