@@ -18,6 +18,8 @@ export interface AccountRef {
   value: string;
   name: string;
   acctNum?: string;
+  accountType?: string;
+  currentBalance?: number;
 }
 
 export interface EntityRef {
@@ -47,7 +49,13 @@ export class ResolutionNotFoundError extends Error {
  */
 export function resolveAccountRef(cache: AccountCache, nameOrId: string): AccountRef {
   const byId = cache.byId.get(nameOrId);
-  if (byId) return { value: byId.Id, name: byId.FullyQualifiedName || byId.Name, acctNum: byId.AcctNum };
+  if (byId) return {
+    value: byId.Id,
+    name: byId.FullyQualifiedName || byId.Name,
+    acctNum: byId.AcctNum,
+    accountType: byId.AccountType,
+    currentBalance: byId.CurrentBalance,
+  };
 
   const lower = nameOrId.toLowerCase();
 
@@ -63,6 +71,8 @@ export function resolveAccountRef(cache: AccountCache, nameOrId: string): Accoun
     value: match.Id,
     name: match.FullyQualifiedName || match.Name,
     acctNum: match.AcctNum,
+    accountType: match.AccountType,
+    currentBalance: match.CurrentBalance,
   };
 }
 

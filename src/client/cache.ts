@@ -153,32 +153,6 @@ export async function getClassCache(
   return cache.class;
 }
 
-// Resolve account by name, AcctNum, or ID using cache
-export async function resolveAccount(
-  client: QuickBooks,
-  account: string,
-  cache: QboLookupCache = defaultLookupCache
-): Promise<CachedAccount> {
-  const findAccount = (cache: AccountCache): CachedAccount | undefined => {
-    const lower = account.toLowerCase();
-    return cache.byId.get(account)
-      || cache.byAcctNum.get(lower)
-      || resolveUniqueName("Account", account, cache.items.map(item => ({
-        value: item,
-        names: [item.FullyQualifiedName, item.Name],
-        label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id}${item.AcctNum ? `, AcctNum: ${item.AcctNum}` : ""})`,
-      })));
-  };
-
-  let match = findAccount(await getAccountCache(client, {}, cache));
-  if (match) return match;
-
-  match = findAccount(await getAccountCache(client, { forceRefresh: true }, cache));
-  if (match) return match;
-
-  throw new Error(`Account not found: "${account}". Try using account name, number (AcctNum), or ID.`);
-}
-
 export async function getVendorCache(
   client: QuickBooks,
   options: LookupCacheOptions = {},
@@ -204,31 +178,6 @@ export async function getVendorCache(
     cache.vendor = refreshed;
   }
   return refreshed;
-}
-
-// Resolve vendor by name or ID using cache
-// Returns { value, name } ref object for QuickBooks API
-export async function resolveVendor(
-  client: QuickBooks,
-  nameOrId: string,
-  cache: QboLookupCache = defaultLookupCache
-): Promise<{ value: string; name: string }> {
-  const findVendor = (cache: VendorCache): CachedVendor | undefined => {
-    return cache.byId.get(nameOrId)
-      || resolveUniqueName("Vendor", nameOrId, cache.items.map(item => ({
-        value: item,
-        names: [item.DisplayName],
-        label: `${item.DisplayName} (ID: ${item.Id})`,
-      })));
-  };
-
-  let match = findVendor(await getVendorCache(client, {}, cache));
-  if (match) return { value: match.Id, name: match.DisplayName };
-
-  match = findVendor(await getVendorCache(client, { forceRefresh: true }, cache));
-  if (match) return { value: match.Id, name: match.DisplayName };
-
-  throw new Error(`Vendor not found: "${nameOrId}". Try using vendor display name or ID.`);
 }
 
 // Resolve item by name or ID using lazy per-entry cache
@@ -290,31 +239,6 @@ export async function resolveItem(
   cache.itemByName.set(item.Name.toLowerCase(), entry);
 
   return { value: item.Id, name: item.Name };
-}
-
-// Helper to resolve department name to ID using cache
-// Accepts: internal ID (e.g., "5"), name (e.g., "20400"), or partial match
-export async function resolveDepartmentId(
-  client: QuickBooks,
-  department: string,
-  cache: QboLookupCache = defaultLookupCache
-): Promise<string> {
-  const findDepartment = (cache: DepartmentCache): CachedDepartment | undefined => {
-    return cache.byId.get(department)
-      || resolveUniqueName("Department", department, cache.items.map(item => ({
-        value: item,
-        names: [item.FullyQualifiedName, item.Name],
-        label: `${item.FullyQualifiedName || item.Name} (ID: ${item.Id})`,
-      })));
-  };
-
-  let match = findDepartment(await getDepartmentCache(client, {}, cache));
-  if (match) return match.Id;
-
-  match = findDepartment(await getDepartmentCache(client, { forceRefresh: true }, cache));
-  if (match) return match.Id;
-
-  throw new Error(`Department not found: "${department}". Try using the exact department name or ID.`);
 }
 
 function cacheCustomer(cache: QboLookupCache, customer: {

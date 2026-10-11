@@ -9,13 +9,18 @@ import {
 
 vi.mock("../../../client/index.js", () => ({
     promisify: mockPromisify,
-    resolveDepartmentId: vi.fn(),
     getClient: vi.fn(),
     clearCredentialsCache: vi.fn(),
     refreshTokens: vi.fn(),
     isAuthError: vi.fn(),
     clearLookupCache: vi.fn(),
     getCompanyIdValue: vi.fn(),
+}));
+const { mockResolveDepartment } = vi.hoisted(() => ({
+  mockResolveDepartment: vi.fn(),
+}));
+vi.mock("../../resolve.js", () => ({
+  createResolutionCoordinator: vi.fn(() => ({ department: mockResolveDepartment })),
 }));
 
 vi.mock("../../../utils/index.js", async () => {
@@ -41,10 +46,8 @@ vi.mock("../../../reports/index.js", async () => {
 });
 
 import { handleGetProfitLoss, handleGetBalanceSheet, handleGetTrialBalance } from "../reports.js";
-import { resolveDepartmentId } from "../../../client/index.js";
 import { outputReport } from "../../../utils/index.js";
 
-const mockResolveDepartmentId = vi.mocked(resolveDepartmentId);
 const mockOutputReport = vi.mocked(outputReport);
 
 describe("handleGetProfitLoss", () => {
@@ -56,7 +59,7 @@ describe("handleGetProfitLoss", () => {
     client = createMockClient();
     resetMockClient(client);
     vi.clearAllMocks();
-    mockResolveDepartmentId.mockResolvedValue("20");
+    mockResolveDepartment.mockResolvedValue({ value: "20", name: "Santa Rosa" });
     mockSuccess(client.reportProfitAndLoss, mockReportResult);
   });
 
@@ -86,7 +89,7 @@ describe("handleGetProfitLoss", () => {
       department: "Santa Rosa",
     });
 
-    expect(mockResolveDepartmentId).toHaveBeenCalledWith(expect.anything(), "Santa Rosa", undefined);
+    expect(mockResolveDepartment).toHaveBeenCalledWith("Santa Rosa");
     const options = client.reportProfitAndLoss.mock.calls[0][0];
     expect(options.department).toBe("20");
   });
@@ -163,7 +166,7 @@ describe("handleGetBalanceSheet", () => {
     client = createMockClient();
     resetMockClient(client);
     vi.clearAllMocks();
-    mockResolveDepartmentId.mockResolvedValue("20");
+    mockResolveDepartment.mockResolvedValue({ value: "20", name: "Main Office" });
     mockSuccess(client.reportBalanceSheet, mockReportResult);
   });
 
@@ -185,7 +188,7 @@ describe("handleGetBalanceSheet", () => {
       accounting_method: "Accrual",
     });
 
-    expect(mockResolveDepartmentId).toHaveBeenCalledWith(expect.anything(), "Main Office", undefined);
+    expect(mockResolveDepartment).toHaveBeenCalledWith("Main Office");
     const options = client.reportBalanceSheet.mock.calls[0][0];
     expect(options.summarize_column_by).toBe("Total");
     expect(options.accounting_method).toBe("Accrual");

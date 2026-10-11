@@ -19,7 +19,6 @@ vi.mock("../../../client/index.js", () => ({
     getClassCache: vi.fn(),
     getDepartmentCache: vi.fn(),
     getVendorCache: vi.fn(),
-    resolveVendor: vi.fn(),
     resolveCustomer: vi.fn(),
     resolveCustomerById: vi.fn(),
     getClient: vi.fn(),

@@ -6,12 +6,19 @@ import {
   mockSuccess,
   resetMockClient,
 } from "../../../__mocks__/mock-client.js";
-import { createMockDepartmentCache } from "../../../__mocks__/mock-cache.js";
 
 vi.mock("../../../client/index.js", () => ({
   promisify: mockPromisify,
-  resolveAccount: vi.fn(),
-  getDepartmentCache: vi.fn(),
+}));
+const { mockResolveAccount, mockResolveDepartment } = vi.hoisted(() => ({
+  mockResolveAccount: vi.fn(),
+  mockResolveDepartment: vi.fn(),
+}));
+vi.mock("../../resolve.js", () => ({
+  createResolutionCoordinator: vi.fn(() => ({
+    account: mockResolveAccount,
+    department: mockResolveDepartment,
+  })),
 }));
 vi.mock("../../../utils/index.js", async () => {
   const actual = await vi.importActual<typeof import("../../../utils/index.js")>(
@@ -26,21 +33,17 @@ vi.mock("../../../utils/index.js", async () => {
   };
 });
 
-import { resolveAccount, getDepartmentCache } from "../../../client/index.js";
 import { outputReport, setOutputMode } from "../../../utils/index.js";
 import { handleQueryAccountTransactions } from "../account-transactions.js";
 
-const mockResolveAccount = vi.mocked(resolveAccount);
-const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockOutputReport = vi.mocked(outputReport);
 
 const RESOLVED_ACCOUNT = {
-  Id: "35",
-  Name: "Checking",
-  FullyQualifiedName: "Checking",
-  AcctNum: "1000",
-  AccountType: "Bank",
-  CurrentBalance: 1201,
+  value: "35",
+  name: "Checking",
+  acctNum: "1000",
+  accountType: "Bank",
+  currentBalance: 1201,
 };
 
 const COLUMNS = [
@@ -109,8 +112,11 @@ describe("handleQueryAccountTransactions", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     setOutputMode("stdio");
-    mockResolveAccount.mockResolvedValue(RESOLVED_ACCOUNT as never);
-    mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
+    mockResolveAccount.mockResolvedValue(RESOLVED_ACCOUNT);
+    mockResolveDepartment.mockImplementation(async (input: string) => {
+      if (input === "Missing") throw new Error('Department not found: "Missing"');
+      return { value: "20", name: "Santa Rosa" };
+    });
     mockSuccess(client.reportGeneralLedgerDetail, glReport([]));
   });
 
@@ -123,7 +129,7 @@ describe("handleQueryAccountTransactions", () => {
       accounting_method: "Cash",
     });
 
-    expect(mockResolveAccount).toHaveBeenCalledWith(client, "Checking", undefined);
+    expect(mockResolveAccount).toHaveBeenCalledWith("Checking");
     expect(client.reportGeneralLedgerDetail).toHaveBeenCalledOnce();
     expect(client.reportGeneralLedgerDetail.mock.calls[0][0]).toEqual({
       account: "35",
