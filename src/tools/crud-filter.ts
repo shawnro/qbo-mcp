@@ -3,6 +3,9 @@
 // QBO_DISABLE_UPDATE=true  → hides all edit_* and deactivate_* tools
 // QBO_DISABLE_DELETE=true  → hides delete_entity tool
 
+import { parseBooleanSetting } from "../config.js";
+import type { BooleanSetting } from "../config.js";
+
 type CrudCategory = "create" | "update" | "delete" | "read";
 
 const PREFIX_MAP: Array<[string, CrudCategory]> = [
@@ -12,7 +15,7 @@ const PREFIX_MAP: Array<[string, CrudCategory]> = [
   ["delete_", "delete"],
 ];
 
-const ENV_MAP: Record<Exclude<CrudCategory, "read">, string> = {
+const ENV_MAP: Record<Exclude<CrudCategory, "read">, BooleanSetting> = {
   create: "QBO_DISABLE_CREATE",
   update: "QBO_DISABLE_UPDATE",
   delete: "QBO_DISABLE_DELETE",
@@ -28,7 +31,7 @@ export function getCrudCategory(toolName: string): CrudCategory {
 export function isToolDisabled(toolName: string): boolean {
   const category = getCrudCategory(toolName);
   if (category === "read") return false;
-  return process.env[ENV_MAP[category]] === "true";
+  return parseBooleanSetting(ENV_MAP[category]);
 }
 
 export function filterTools<T extends { name: string }>(definitions: T[]): T[] {

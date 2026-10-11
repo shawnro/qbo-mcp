@@ -1,6 +1,7 @@
 import type { QBProfile } from "../credentials/profiles.js";
 import { createCredentialProvider } from "../credentials/index.js";
 import { isAuthError, promisify } from "../client/index.js";
+import { parseBooleanSetting } from "../config.js";
 import { DefaultQboCompanyRuntime } from "./company-runtime.js";
 import { companyKey } from "./types.js";
 import {
@@ -21,7 +22,7 @@ export async function validateLocalProfile(
     companyKey: companyKey(`local:${name}:${companyId}`),
     companyId,
     provider,
-    sandbox: process.env.QBO_SANDBOX === "true",
+    sandbox: parseBooleanSetting("QBO_SANDBOX"),
     refreshCoordinator: createFileRefreshCoordinator(provider),
     refreshAttemptJournal: createFileRefreshAttemptJournal(provider),
   });

@@ -5,9 +5,9 @@ import { config } from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { server } from "./server.js";
 import { setOutputMode } from "./utils/output.js";
 import { loadProfiles } from "./credentials/index.js";
+import { parseBooleanSetting, validateRuntimeEnvironment } from "./config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,7 +15,9 @@ const __dirname = dirname(__filename);
 // Look for .env in the package root (one level up from dist/)
 config({ path: join(__dirname, "..", ".env"), quiet: true });
 
-if (process.env.QBO_INLINE_OUTPUT === "true") {
+validateRuntimeEnvironment();
+
+if (parseBooleanSetting("QBO_INLINE_OUTPUT")) {
   setOutputMode("http");
 }
 
@@ -27,6 +29,8 @@ if (hasProfileConfig) {
 
 // Start the server
 async function main() {
+  const { createMcpServer } = await import("./server.js");
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("QuickBooks MCP server running on stdio");

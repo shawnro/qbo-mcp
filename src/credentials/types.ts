@@ -1,5 +1,10 @@
 // Credential provider types for QuickBooks OAuth management
 
+import { parseCredentialMode } from "../config.js";
+import type { CredentialMode } from "../config.js";
+
+export type { CredentialMode } from "../config.js";
+
 /**
  * QuickBooks OAuth credentials structure
  */
@@ -45,23 +50,11 @@ export interface CredentialProvider {
 }
 
 /**
- * Credential mode - determines which provider to use
- */
-export type CredentialMode = "local" | "aws" | "azure";
-
-/**
  * Get credential mode from environment
  * Defaults to "local" if not specified
  */
 export function getCredentialMode(
   env: Record<string, string | undefined> = process.env
 ): CredentialMode {
-  const mode = env.QBO_CREDENTIAL_MODE?.toLowerCase();
-  if (mode === "aws") {
-    return "aws";
-  }
-  if (mode === "azure") {
-    return "azure";
-  }
-  return "local";
+  return parseCredentialMode(env);
 }

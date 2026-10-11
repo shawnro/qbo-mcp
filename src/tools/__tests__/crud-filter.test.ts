@@ -79,14 +79,17 @@ describe("isToolDisabled", () => {
     expect(isToolDisabled("delete_entity")).toBe(false);
   });
 
-  it("does not disable when env var is not 'true'", () => {
+  it("accepts explicit false and rejects invalid safety settings", () => {
     process.env.QBO_DISABLE_CREATE = "false";
-    process.env.QBO_DISABLE_UPDATE = "1";
-    process.env.QBO_DISABLE_DELETE = "yes";
-
     expect(isToolDisabled("create_bill")).toBe(false);
-    expect(isToolDisabled("edit_bill")).toBe(false);
-    expect(isToolDisabled("delete_entity")).toBe(false);
+
+    process.env.QBO_DISABLE_UPDATE = "1";
+    expect(() => isToolDisabled("edit_bill"))
+      .toThrow("QBO_DISABLE_UPDATE must be true or false");
+
+    process.env.QBO_DISABLE_DELETE = "yes";
+    expect(() => isToolDisabled("delete_entity"))
+      .toThrow("QBO_DISABLE_DELETE must be true or false");
   });
 });
 

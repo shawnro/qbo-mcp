@@ -72,6 +72,23 @@ describe("parseRemoteHttpConfig", () => {
     });
   });
 
+  it("promotes invalid accounting settings to invalid hosted configuration", () => {
+    expect(parseRemoteHttpConfig({
+      ...authenticatedEnvironment,
+      QBO_CREDENTIAL_MODE: "awz",
+    })).toEqual({
+      mode: "invalid",
+      reason: "QBO_CREDENTIAL_MODE must be local, aws, or azure",
+    });
+    expect(parseRemoteHttpConfig({
+      ...authenticatedEnvironment,
+      QBO_DISABLE_DELETE: "yes",
+    })).toEqual({
+      mode: "invalid",
+      reason: "QBO_DISABLE_DELETE must be true or false",
+    });
+  });
+
   it("promotes invalid authentication to invalid hosted configuration", () => {
     expect(parseRemoteHttpConfig({
       MCP_PUBLIC_BASE_URL: "https://mcp.example.com",
