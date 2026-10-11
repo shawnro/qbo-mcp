@@ -36,22 +36,46 @@ describe("resolveAccountRef", () => {
 
   it("resolves by exact name (case-insensitive)", () => {
     const ref = resolveAccountRef(cache, "cash");
-    expect(ref).toEqual({ value: "1", name: "Cash", acctNum: "1000" });
+    expect(ref).toEqual({
+      value: "1",
+      name: "Cash",
+      acctNum: "1000",
+      accountType: "Bank",
+      currentBalance: 50000,
+    });
   });
 
   it("resolves by ID", () => {
     const ref = resolveAccountRef(cache, "3");
-    expect(ref).toEqual({ value: "3", name: "Rent Expense", acctNum: "6100" });
+    expect(ref).toEqual({
+      value: "3",
+      name: "Rent Expense",
+      acctNum: "6100",
+      accountType: "Expense",
+      currentBalance: 3000,
+    });
   });
 
   it("resolves by account number", () => {
     const ref = resolveAccountRef(cache, "4100");
-    expect(ref).toEqual({ value: "2", name: "Tips", acctNum: "4100" });
+    expect(ref).toEqual({
+      value: "2",
+      name: "Tips",
+      acctNum: "4100",
+      accountType: "Income",
+      currentBalance: 1200,
+    });
   });
 
   it("resolves by partial FullyQualifiedName", () => {
     const ref = resolveAccountRef(cache, "office sup");
-    expect(ref).toEqual({ value: "5", name: "Office Supplies", acctNum: "6200" });
+    expect(ref).toEqual({
+      value: "5",
+      name: "Office Supplies",
+      acctNum: "6200",
+      accountType: "Expense",
+      currentBalance: 800,
+    });
   });
 
   it("rejects an ambiguous partial name with bounded candidates", () => {
@@ -99,6 +123,8 @@ describe("resolveAccountRef", () => {
       value: "6",
       name: "Property A:Supplies",
       acctNum: "6210",
+      accountType: "Expense",
+      currentBalance: 0,
     });
   });
 

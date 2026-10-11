@@ -4,6 +4,7 @@ import QuickBooks from "node-quickbooks";
 import { clearClassCache, promisify } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
 import type { QboRequestContext } from "../../runtime/types.js";
+import { createResolutionCoordinator } from "../resolve.js";
 
 interface QBClass {
   Id: string;
@@ -14,39 +15,6 @@ interface QBClass {
   SubClass?: boolean;
   ParentRef?: { value: string; name?: string };
   MetaData?: { CreateTime?: string; LastUpdatedTime?: string };
-}
-
-async function resolveParentClass(
-  client: QuickBooks,
-  parentNameOrId: string
-): Promise<{ value: string; name?: string }> {
-  // Try as ID first (numeric string)
-  if (/^\d+$/.test(parentNameOrId)) {
-    try {
-      const cls = await promisify<unknown>((cb) =>
-        client.getClass(parentNameOrId, cb)
-      ) as QBClass;
-      return { value: cls.Id, name: cls.Name };
-    } catch {
-      // Fall through to name lookup
-    }
-  }
-
-  // Look up by name
-  const result = await promisify<unknown>((cb) =>
-    client.findClasses({ fetchAll: true }, cb)
-  ) as { QueryResponse: { Class?: QBClass[] } };
-  const classes = result.QueryResponse?.Class || [];
-  const match = classes.find(
-    (c) => c.Name.toLowerCase() === parentNameOrId.toLowerCase()
-  );
-  if (!match) {
-    const available = classes.map((c) => c.Name).join(", ");
-    throw new Error(
-      `Parent class not found: "${parentNameOrId}". Available: ${available}`
-    );
-  }
-  return { value: match.Id, name: match.Name };
 }
 
 export async function handleCreateClass(
@@ -69,7 +37,11 @@ export async function handleCreateClass(
   let parentLabel: string | undefined;
   const parentRef = parent_id || parent_name;
   if (parentRef) {
-    const parent = await resolveParentClass(client, parentRef);
+    const parent = await createResolutionCoordinator(
+      client,
+      {},
+      context?.runtime.lookupCache
+    ).class(parentRef);
     classObj.ParentRef = parent;
     parentLabel = parent.name || parent.value;
   }
@@ -191,7 +163,11 @@ export async function handleEditClass(
       // Clear parent - make top-level
       updated.ParentRef = null;
     } else {
-      const parent = await resolveParentClass(client, parentRef);
+      const parent = await createResolutionCoordinator(
+        client,
+        {},
+        context?.runtime.lookupCache
+      ).class(parentRef);
       updated.ParentRef = parent;
     }
   }

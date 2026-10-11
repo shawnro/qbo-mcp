@@ -17,11 +17,8 @@ export {
   getAccountCache,
   getClassCache,
   getVendorCache,
-  resolveAccount,
-  resolveVendor,
   resolveItem,
   resolveCustomer,
   resolveCustomerById,
-  resolveDepartmentId,
 } from './cache.js';
 export type { QboLookupCache } from './cache.js';

@@ -1,11 +1,7 @@
 // General Ledger period summary with account-type-aware debit/credit semantics
 
 import QuickBooks from "node-quickbooks";
-import {
-  getDepartmentCache,
-  promisify,
-  resolveAccount,
-} from "../../client/index.js";
+import { promisify } from "../../client/index.js";
 import {
   normalizeAccountingMethod,
   normalizeGeneralLedgerReport,
@@ -31,23 +27,22 @@ export async function handleAccountPeriodSummary(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const lookupCache = context?.runtime.lookupCache;
   const { account, start_date, end_date, department, accounting_method } = args;
-  const resolvedAccount = await resolveAccount(client, account, lookupCache);
-  const accountType = validateLedgerAccountType(resolvedAccount.AccountType);
+  const resolver = createResolutionCoordinator(client, {}, lookupCache);
+  const resolvedAccount = await resolver.account(account);
+  const accountType = validateLedgerAccountType(resolvedAccount.accountType);
   const { startDate, endDate } = resolveReportDateRange(start_date, end_date);
   const accountingMethod = normalizeAccountingMethod(accounting_method);
 
   let resolvedDepartmentId: string | undefined;
   let resolvedDepartmentName: string | undefined;
   if (department) {
-    const departmentCache = await getDepartmentCache(client, {}, lookupCache);
-    const resolver = createResolutionCoordinator(client, { department: departmentCache }, lookupCache);
     const ref = await resolver.department(department);
     resolvedDepartmentId = ref.value;
     resolvedDepartmentName = ref.name;
   }
 
   const options: Record<string, string> = {
-    account: resolvedAccount.Id,
+    account: resolvedAccount.value,
     start_date: startDate,
     end_date: endDate,
     accounting_method: accountingMethod,
@@ -75,9 +70,9 @@ export async function handleAccountPeriodSummary(
       maximumFractionDigits: 2,
     })}`;
   };
-  const accountLabel = resolvedAccount.AcctNum
-    ? `${resolvedAccount.AcctNum} ${resolvedAccount.FullyQualifiedName || resolvedAccount.Name}`
-    : resolvedAccount.FullyQualifiedName || resolvedAccount.Name;
+  const accountLabel = resolvedAccount.acctNum
+    ? `${resolvedAccount.acctNum} ${resolvedAccount.name}`
+    : resolvedAccount.name;
 
   const summaryLines = [
     "Account Period Summary",
@@ -100,9 +95,9 @@ export async function handleAccountPeriodSummary(
 
   const reportData = {
     account: {
-      id: resolvedAccount.Id,
-      acctNum: resolvedAccount.AcctNum,
-      name: resolvedAccount.FullyQualifiedName || resolvedAccount.Name,
+      id: resolvedAccount.value,
+      acctNum: resolvedAccount.acctNum,
+      name: resolvedAccount.name,
       type: accountType,
     },
     dateRange: { start: startDate, end: endDate },

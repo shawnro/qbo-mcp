@@ -1,11 +1,12 @@
 // Handlers for report tools (profit_loss, balance_sheet, trial_balance)
 
 import QuickBooks from "node-quickbooks";
-import { promisify, resolveDepartmentId } from "../../client/index.js";
+import { promisify } from "../../client/index.js";
 import { isHttpMode, outputReport } from "../../utils/index.js";
 import { extractReportSummary, projectReportForHttp } from "../../reports/index.js";
 import { QBReport } from "../../types/index.js";
 import type { QboRequestContext } from "../../runtime/types.js";
+import { createResolutionCoordinator } from "../resolve.js";
 
 function outputFinancialReport(
   reportType: string,
@@ -42,7 +43,11 @@ export async function handleGetProfitLoss(
   if (end_date) options.end_date = end_date;
   if (summarize_by) options.summarize_column_by = summarize_by;
   if (department) {
-    options.department = await resolveDepartmentId(client, department, context?.runtime.lookupCache);
+    options.department = (await createResolutionCoordinator(
+      client,
+      {},
+      context?.runtime.lookupCache
+    ).department(department)).value;
   }
   if (accounting_method) options.accounting_method = accounting_method;
 
@@ -75,7 +80,11 @@ export async function handleGetBalanceSheet(
   }
   if (summarize_by) options.summarize_column_by = summarize_by;
   if (department) {
-    options.department = await resolveDepartmentId(client, department, context?.runtime.lookupCache);
+    options.department = (await createResolutionCoordinator(
+      client,
+      {},
+      context?.runtime.lookupCache
+    ).department(department)).value;
   }
   if (accounting_method) options.accounting_method = accounting_method;
 

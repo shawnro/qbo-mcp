@@ -6,12 +6,19 @@ import {
   mockSuccess,
   resetMockClient,
 } from "../../../__mocks__/mock-client.js";
-import { createMockDepartmentCache } from "../../../__mocks__/mock-cache.js";
 
 vi.mock("../../../client/index.js", () => ({
   promisify: mockPromisify,
-  resolveAccount: vi.fn(),
-  getDepartmentCache: vi.fn(),
+}));
+const { mockResolveAccount, mockResolveDepartment } = vi.hoisted(() => ({
+  mockResolveAccount: vi.fn(),
+  mockResolveDepartment: vi.fn(),
+}));
+vi.mock("../../resolve.js", () => ({
+  createResolutionCoordinator: vi.fn(() => ({
+    account: mockResolveAccount,
+    department: mockResolveDepartment,
+  })),
 }));
 vi.mock("../../../utils/index.js", async () => {
   const actual = await vi.importActual<typeof import("../../../utils/index.js")>(
@@ -26,12 +33,9 @@ vi.mock("../../../utils/index.js", async () => {
   };
 });
 
-import { resolveAccount, getDepartmentCache } from "../../../client/index.js";
 import { outputReport } from "../../../utils/index.js";
 import { handleAccountPeriodSummary } from "../account-period-summary.js";
 
-const mockResolveAccount = vi.mocked(resolveAccount);
-const mockGetDepartmentCache = vi.mocked(getDepartmentCache);
 const mockOutputReport = vi.mocked(outputReport);
 
 const COLUMNS = [
@@ -93,14 +97,13 @@ describe("handleAccountPeriodSummary", () => {
     resetMockClient(client);
     vi.clearAllMocks();
     mockResolveAccount.mockResolvedValue({
-      Id: "35",
-      Name: "Checking",
-      FullyQualifiedName: "Checking",
-      AcctNum: "1000",
-      AccountType: "Bank",
-      CurrentBalance: 1201,
-    } as never);
-    mockGetDepartmentCache.mockResolvedValue(createMockDepartmentCache() as never);
+      value: "35",
+      name: "Checking",
+      acctNum: "1000",
+      accountType: "Bank",
+      currentBalance: 1201,
+    });
+    mockResolveDepartment.mockResolvedValue({ value: "20", name: "Santa Rosa" });
     mockSuccess(client.reportGeneralLedgerDetail, report([]));
   });
 
@@ -127,11 +130,11 @@ describe("handleAccountPeriodSummary", () => {
 
   it("calculates correct Accounts Payable debit and credit totals", async () => {
     mockResolveAccount.mockResolvedValue({
-      Id: "33",
-      Name: "Accounts Payable (A/P)",
-      AccountType: "Accounts Payable",
-      CurrentBalance: 300,
-    } as never);
+      value: "33",
+      name: "Accounts Payable (A/P)",
+      accountType: "Accounts Payable",
+      currentBalance: 300,
+    });
     mockSuccess(client.reportGeneralLedgerDetail, report([
       { amount: 300, balance: 400 },
       { amount: -100, balance: 300 },

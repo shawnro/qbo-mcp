@@ -25,6 +25,11 @@ vi.mock("../../../utils/index.js", async () => {
   return { ...actual };
 });
 
+const mockResolveClass = vi.fn();
+vi.mock("../../resolve.js", () => ({
+  createResolutionCoordinator: vi.fn(() => ({ class: mockResolveClass })),
+}));
+
 import { handleCreateClass, handleGetClass, handleEditClass } from "../class.js";
 import { clearClassCache } from "../../../client/index.js";
 
@@ -37,6 +42,10 @@ describe("handleCreateClass", () => {
     client = createMockClient();
     resetMockClient(client);
     vi.clearAllMocks();
+    mockResolveClass.mockImplementation(async (input: string) => ({
+      value: input === "Operations" ? "10" : input,
+      name: "Operations",
+    }));
   });
 
   it("returns preview in draft mode", async () => {
@@ -64,9 +73,6 @@ describe("handleCreateClass", () => {
   });
 
   it("resolves parent by name for sub-class", async () => {
-    mockSuccess(client.findClasses, {
-      QueryResponse: { Class: [{ Id: "10", Name: "Operations" }] },
-    });
     mockSuccess(client.createClass, {
       Id: "101",
       Name: "West Coast",
@@ -80,13 +86,13 @@ describe("handleCreateClass", () => {
     });
 
     const payload = client.createClass.mock.calls[0][0];
+    expect(mockResolveClass).toHaveBeenCalledWith("Operations");
     expect(payload.ParentRef).toEqual({ value: "10", name: "Operations" });
     expect(payload.SubClass).toBeUndefined();
     expect(result.content[0].text).toContain("West Coast");
   });
 
   it("resolves parent by ID", async () => {
-    mockSuccess(client.getClass, { Id: "10", Name: "Operations" });
     mockSuccess(client.createClass, { Id: "102", Name: "East Coast" });
 
     await handleCreateClass(client as never, {
@@ -96,13 +102,12 @@ describe("handleCreateClass", () => {
     });
 
     const payload = client.createClass.mock.calls[0][0];
+    expect(mockResolveClass).toHaveBeenCalledWith("10");
     expect(payload.ParentRef).toEqual({ value: "10", name: "Operations" });
   });
 
   it("throws when parent class not found", async () => {
-    mockSuccess(client.findClasses, {
-      QueryResponse: { Class: [{ Id: "1", Name: "Retail" }] },
-    });
+    mockResolveClass.mockRejectedValue(new Error('Class not found: "NonExistent"'));
 
     await expect(
       handleCreateClass(client as never, {
@@ -110,14 +115,10 @@ describe("handleCreateClass", () => {
         parent_name: "NonExistent",
         draft: false,
       })
-    ).rejects.toThrow("Parent class not found");
+    ).rejects.toThrow('Class not found: "NonExistent"');
   });
 
   it("shows parent in draft preview", async () => {
-    mockSuccess(client.findClasses, {
-      QueryResponse: { Class: [{ Id: "10", Name: "Operations" }] },
-    });
-
     const result = await handleCreateClass(client as never, {
       name: "West Coast",
       parent_name: "Operations",

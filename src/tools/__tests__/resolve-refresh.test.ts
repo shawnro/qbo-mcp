@@ -120,7 +120,7 @@ describe("createResolutionCoordinator", () => {
       account: createMockAccountCache() as never,
     });
 
-    await expect(resolver.account("New Account")).resolves.toEqual({
+    await expect(resolver.account("New Account")).resolves.toMatchObject({
       value: "200",
       name: "New Account",
       acctNum: "7000",
