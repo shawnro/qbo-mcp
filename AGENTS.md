@@ -73,7 +73,7 @@ A new tool normally requires updates to:
 4. `src/tools/index.ts`
 5. The Available Tools table in `README.md`
 
-Follow the closest existing tool. Use `outputReport()` for returned data. Encode structural contracts in JSON Schema, including non-empty identities, mutually exclusive and paired fields, and create-versus-edit requirements. Add MCP SDK `AjvJsonSchemaValidator` fixtures for cross-field schema rules. Keep QBO-state-dependent and arithmetic validation authoritative in handlers.
+Follow the closest existing tool. Use `outputReport()` for returned data. Encode structural contracts in JSON Schema, including non-empty identities, mutually exclusive and paired fields, and create-versus-edit requirements. `executeTool()` validates every invocation against that schema before credential access or handler dispatch. Add MCP SDK `AjvJsonSchemaValidator` fixtures for cross-field schema rules, and retain defensive handler checks for direct callers. Keep QBO-state-dependent and arithmetic validation authoritative in handlers.
 
 ### Output Budgets
 
