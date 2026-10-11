@@ -438,6 +438,8 @@ QBO_INLINE_OUTPUT=true
 | `MCP_RESOURCE_NAME` | `QuickBooks MCP Server` | Display name in protected-resource metadata |
 | `MCP_AUTH_DISABLED` | `false` | Explicitly allow anonymous hosted MCP access; cannot be combined with auth/OAuth settings |
 
+Runtime boolean settings accept `true` or `false` (case-insensitive). Invalid or blank values, and unsupported `QBO_CREDENTIAL_MODE` values, fail configuration instead of silently selecting a less restrictive or different accounting mode.
+
 ### Hosted HTTP Security and Capabilities
 
 Hosted HTTP deployments require `MCP_PUBLIC_BASE_URL`. Use the externally reachable base URL and include the stage path for a raw API Gateway endpoint, for example `https://abc123.execute-api.us-east-2.amazonaws.com/prod`. OAuth and protected-resource URLs are built only from this trusted value, never from an incoming `Host` header.

@@ -32,7 +32,7 @@
         },
         {
           "name": "QBO_CREDENTIAL_MODE",
-          "description": "Credential storage mode: 'local' (default) or 'aws'",
+          "description": "Credential storage mode: 'local' (default), 'aws', or 'azure'",
           "isRequired": false,
           "format": "string",
           "isSecret": false

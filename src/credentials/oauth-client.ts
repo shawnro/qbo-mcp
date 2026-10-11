@@ -1,6 +1,7 @@
 // OAuth client wrapper for QuickBooks authentication
 
 import OAuthClient from "intuit-oauth";
+import { parseBooleanSetting } from "../config.js";
 import type { QBCredentials } from "./types.js";
 
 // Token exchanges rotate one-time credentials and must not be replayed after an ambiguous response.
@@ -16,7 +17,7 @@ const REQUIRED_SCOPES = [OAuthClient.scopes.Accounting];
  * Get the environment setting (sandbox or production)
  */
 function getEnvironment(): "sandbox" | "production" {
-  return process.env.QBO_SANDBOX === "true" ? "sandbox" : "production";
+  return parseBooleanSetting("QBO_SANDBOX") ? "sandbox" : "production";
 }
 
 /**

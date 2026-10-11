@@ -1,5 +1,6 @@
 import { parseAuthConfig } from "../auth/token-validator.js";
 import type { AuthConfigState } from "../auth/token-validator.js";
+import { validateRuntimeEnvironment } from "../config.js";
 
 type Environment = Record<string, string | undefined>;
 
@@ -78,6 +79,15 @@ function parseOAuthConfig(
 }
 
 export function parseRemoteHttpConfig(env: Environment = process.env): RemoteHttpConfigState {
+  try {
+    validateRuntimeEnvironment(env);
+  } catch (error) {
+    return {
+      mode: "invalid",
+      reason: error instanceof Error ? error.message : "Invalid runtime configuration",
+    };
+  }
+
   const publicBaseUrl = parsePublicBaseUrl(env.MCP_PUBLIC_BASE_URL?.trim());
   if (!publicBaseUrl) {
     return { mode: "invalid", reason: "MCP_PUBLIC_BASE_URL must be a safe HTTPS URL" };

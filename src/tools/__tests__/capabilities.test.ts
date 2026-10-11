@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MCPToolResult } from "../../types/index.js";
 import { createToolExecutor, getToolDefinitions } from "../capabilities.js";
 
@@ -27,9 +27,21 @@ const definitions: TestToolDefinition[] = [
   },
 ];
 
+afterEach(() => {
+  delete process.env.QBO_DISABLE_CREATE;
+  delete process.env.QBO_DISABLE_UPDATE;
+  delete process.env.QBO_DISABLE_DELETE;
+});
+
 describe("deployment capabilities", () => {
   it("preserves local definitions", () => {
     expect(getToolDefinitions(definitions, "local")).toEqual(definitions);
+  });
+
+  it("applies safety settings when definitions are constructed", () => {
+    process.env.QBO_DISABLE_CREATE = "true";
+    expect(getToolDefinitions(definitions, "local").map((tool) => tool.name))
+      .toEqual(["query", "qbo_authenticate", "list_qbo_profiles", "switch_qbo_profile"]);
   });
 
   it("hides process-mutating tools and local paths remotely", () => {

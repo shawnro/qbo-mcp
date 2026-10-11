@@ -3,6 +3,7 @@
 import QuickBooks from "node-quickbooks";
 import { getCredentialProvider, getCredentialMode, isLocalMode, resolveCompanyId } from "../credentials/index.js";
 import type { QBCredentials, CredentialProvider } from "../credentials/index.js";
+import { parseBooleanSetting } from "../config.js";
 import { clearLookupCache } from "./cache.js";
 import { extractHttpStatus, extractQBErrorInfo, unwrapQBError } from "../types/index.js";
 import {
@@ -15,7 +16,7 @@ import {
 } from "../runtime/credential-refresh.js";
 
 // Sandbox mode for development/testing (read lazily so dotenv has time to load)
-const isSandbox = () => process.env.QBO_SANDBOX === "true";
+const isSandbox = () => parseBooleanSetting("QBO_SANDBOX");
 
 // QuickBooks client and credentials state
 let qbo: QuickBooks | null = null;

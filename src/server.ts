@@ -45,5 +45,3 @@ export function createMcpServer(options: McpServerOptions = {}): Server {
 
   return server;
 }
-
-export const server = createMcpServer();

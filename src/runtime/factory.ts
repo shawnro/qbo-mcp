@@ -1,5 +1,6 @@
 import { createCredentialProvider } from "../credentials/index.js";
 import { getCredentialMode } from "../credentials/types.js";
+import { parseBooleanSetting } from "../config.js";
 import { DefaultQboCompanyRuntime } from "./company-runtime.js";
 import { companyKey } from "./types.js";
 import type { QboCompanyRuntime } from "./types.js";
@@ -19,7 +20,7 @@ export async function createHostedCompanyRuntime(
     companyKey: companyKey(`hosted:${mode}:${secretName ?? "default"}:${companyId}`),
     companyId,
     provider,
-    sandbox: env.QBO_SANDBOX === "true",
+    sandbox: parseBooleanSetting("QBO_SANDBOX", env),
   });
 }
 
