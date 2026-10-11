@@ -1,5 +1,20 @@
 // Tool definitions for QuickBooks MCP server
 
+function enforceStrictObjectSchemas<T>(schema: T): T {
+  if (Array.isArray(schema)) {
+    for (const value of schema) enforceStrictObjectSchemas(value);
+    return schema;
+  }
+  if (typeof schema !== "object" || schema === null) return schema;
+
+  const node = schema as Record<string, unknown>;
+  if (node.type === "object" && node.additionalProperties === undefined) {
+    node.additionalProperties = false;
+  }
+  for (const value of Object.values(node)) enforceStrictObjectSchemas(value);
+  return schema;
+}
+
 const requireAnyOf = (...fields: string[]) => ({
   anyOf: fields.map((field) => ({
     required: [field],
@@ -316,7 +331,7 @@ const vendorChangeConstraint = {
   ],
 };
 
-export const toolDefinitions = [
+export const toolDefinitions = enforceStrictObjectSchemas([
   {
     name: "qbo_authenticate",
     description: "Authenticate with QuickBooks using OAuth (local credential mode only). " +
@@ -2547,4 +2562,4 @@ export const toolDefinitions = [
       required: ["profile"],
     },
   },
-];
+]);

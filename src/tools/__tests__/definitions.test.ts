@@ -9,6 +9,7 @@ interface TestToolDefinition {
 
 interface SchemaNode {
   type?: string;
+  additionalProperties?: boolean;
   pattern?: string;
   maxLength?: number;
   description?: string;
@@ -31,6 +32,33 @@ interface SchemaNode {
 }
 
 const definitions = toolDefinitions as unknown as TestToolDefinition[];
+
+function objectSchemas(schema: SchemaNode): SchemaNode[] {
+  const nested = [
+    ...Object.values(schema.properties ?? {}),
+    ...(schema.items ? [schema.items] : []),
+    ...(schema.allOf ?? []),
+    ...(schema.anyOf ?? []),
+    ...(schema.oneOf ?? []),
+    ...(schema.not ? [schema.not] : []),
+    ...(schema.if ? [schema.if] : []),
+    ...(schema.then ? [schema.then] : []),
+    ...(schema.else ? [schema.else] : []),
+  ].flatMap(objectSchemas);
+  return schema.type === "object" ? [schema, ...nested] : nested;
+}
+
+describe("toolDefinitions object shapes", () => {
+  it("closes every declared object schema to unknown properties", () => {
+    for (const definition of definitions) {
+      const objects = objectSchemas(definition.inputSchema);
+      expect(objects.length, definition.name).toBeGreaterThan(0);
+      for (const schema of objects) {
+        expect(schema.additionalProperties, definition.name).toBe(false);
+      }
+    }
+  });
+});
 
 describe("toolDefinitions document numbers", () => {
   const expectedTools = [
@@ -309,6 +337,25 @@ describe("toolDefinitions semantic validation", () => {
       expect(() => provider.getValidator(definition.inputSchema as never), definition.name)
         .not.toThrow();
     }
+  });
+
+  it("rejects unknown top-level and nested properties", () => {
+    expect(validate("get_bill", { id: "1", idd: "2" })).toBe(false);
+    expect(validate("query", {
+      query: "SELECT * FROM Account",
+      max_results: 5,
+    })).toBe(false);
+    expect(validate("create_bill", {
+      vendor_name: "Vendor",
+      txn_date: "2026-10-10",
+      departmant_name: "Operations",
+      lines: [{ account_name: "Expense", amount: 10 }],
+    })).toBe(false);
+    expect(validate("create_bill", {
+      vendor_name: "Vendor",
+      txn_date: "2026-10-10",
+      lines: [{ account_name: "Expense", amount: 10, custmer_name: "Job" }],
+    })).toBe(false);
   });
 
   it.each(["get_journal_entry", "edit_journal_entry"])(
