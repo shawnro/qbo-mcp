@@ -607,6 +607,8 @@ Line edits use QBO full updates. The handlers preserve required header reference
 
 The server automatically refreshes OAuth tokens and persists them back to the configured credential store (local file, AWS Secrets Manager, or Azure Key Vault).
 
+Credential payloads must contain non-empty `client_id`, `client_secret`, `redirect_url`, `access_token`, and `refresh_token` strings. A missing credential file, secret, or company-ID parameter is reported as not configured; malformed payloads, permission failures, and provider outages are surfaced separately instead of being misreported as missing configuration.
+
 Local stdio processes running as the same OS user on one machine coordinate refreshes through a credential-store-scoped lock under `~/.qbo-mcp/refresh-locks`. After acquiring the lock, a process re-reads the stored credentials and skips refresh when another process has already advanced the token generation. OAuth token requests are never automatically replayed.
 
 Before contacting Intuit, local mode writes a non-secret refresh-attempt marker containing only a credential fingerprint. The marker is cleared after the rotated credentials are persisted. If a process exits or receives an ambiguous response before persistence can be confirmed, later refreshes fail closed and require deliberate reauthorization instead of risking another rotation from stale credentials. Hosted multi-replica deployments still require a distributed refresh coordinator.

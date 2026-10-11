@@ -1,5 +1,6 @@
 // Azure Key Vault credential provider for QuickBooks OAuth management
 
+import { parseCredentialJson, parseCredentialPayload } from "./types.js";
 import type { CredentialProvider, QBCredentials } from "./types.js";
 
 // Azure SDK types — imported lazily to avoid bundling in Lambda
@@ -17,9 +18,10 @@ export class AzureCredentialProvider implements CredentialProvider {
   private readonly secretName: string;
   private client: SecretClient | null = null;
 
-  constructor(secretName?: string) {
+  constructor(secretName?: string, client?: SecretClient) {
     this.vaultUrl = process.env.AZURE_KEY_VAULT_URL || undefined;
     this.secretName = secretName || process.env.QBO_SECRET_NAME || "qbo-credentials";
+    this.client = client ?? null;
   }
 
   getRefreshLockScope(): string {
@@ -59,12 +61,16 @@ export class AzureCredentialProvider implements CredentialProvider {
       throw new Error(`Key Vault secret "${this.secretName}" has no value`);
     }
 
-    return JSON.parse(secret.value) as QBCredentials;
+    return parseCredentialJson(
+      secret.value,
+      `Azure Key Vault secret "${this.secretName}"`
+    );
   }
 
   async saveCredentials(credentials: QBCredentials): Promise<void> {
+    const validated = parseCredentialPayload(credentials, "QuickBooks credentials to save");
     const client = await this.getSecretClient();
-    await client.setSecret(this.secretName, JSON.stringify(credentials));
+    await client.setSecret(this.secretName, JSON.stringify(validated));
   }
 
   async getCompanyId(): Promise<string> {

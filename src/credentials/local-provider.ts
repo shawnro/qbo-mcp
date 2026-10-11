@@ -4,10 +4,29 @@ import { promises as fs, realpathSync } from "fs";
 import { randomUUID } from "crypto";
 import { homedir } from "os";
 import { join, dirname, resolve, basename } from "path";
+import { parseCredentialPayload } from "./types.js";
 import type { CredentialProvider, QBCredentials } from "./types.js";
 
 // Default credential file location
 const DEFAULT_CREDENTIAL_PATH = join(homedir(), ".qbo-mcp", "credentials.json");
+
+function clientCredentialsFrom(
+  value: Record<string, unknown>,
+  source: string
+): { clientId: string; clientSecret: string } | null {
+  const clientId = value.client_id;
+  const clientSecret = value.client_secret;
+  if (clientId === undefined && clientSecret === undefined) return null;
+  if (
+    typeof clientId !== "string"
+    || !clientId.trim()
+    || typeof clientSecret !== "string"
+    || !clientSecret.trim()
+  ) {
+    throw new Error(`${source} must provide non-empty string client_id and client_secret fields together`);
+  }
+  return { clientId, clientSecret };
+}
 
 /**
  * Get the credential file path from environment or use default
@@ -45,31 +64,42 @@ export class LocalCredentialProvider implements CredentialProvider {
   async getCredentials(): Promise<QBCredentials> {
     try {
       const content = await fs.readFile(this.credentialPath, "utf-8");
-      const stored = JSON.parse(content);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        throw new Error(`Local credential file ${this.credentialPath} must contain valid JSON`);
+      }
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error(`Local credential file ${this.credentialPath} must contain a JSON object`);
+      }
+      const stored = parsed as Record<string, unknown>;
 
       // Merge with environment variables (env vars take precedence for client credentials)
-      const credentials: QBCredentials = {
+      return parseCredentialPayload({
         client_id: process.env.QBO_CLIENT_ID || stored.client_id,
         client_secret: process.env.QBO_CLIENT_SECRET || stored.client_secret,
         redirect_url: stored.redirect_url || "https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl",
         access_token: stored.access_token,
         refresh_token: stored.refresh_token,
         company_id: stored.company_id,
-      };
-
-      return credentials;
+      }, `Local credential file ${this.credentialPath}`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(
+        const missing = new Error(
           `Credentials file not found at ${this.credentialPath}. ` +
-            "Run qbo_authenticate to set up OAuth credentials."
+            "Run qbo_authenticate to set up OAuth credentials.",
+          { cause: error }
         );
+        Object.assign(missing, { code: "ENOENT" });
+        throw missing;
       }
       throw error;
     }
   }
 
   async saveCredentials(credentials: QBCredentials): Promise<void> {
+    const validated = parseCredentialPayload(credentials, "QuickBooks credentials to save");
     const dir = dirname(this.credentialPath);
     await fs.mkdir(dir, { recursive: true });
     const temporaryPath = join(dir, `.${basename(this.credentialPath)}.${randomUUID()}.tmp`);
@@ -77,7 +107,7 @@ export class LocalCredentialProvider implements CredentialProvider {
 
     try {
       handle = await fs.open(temporaryPath, "wx", 0o600);
-      await handle.writeFile(JSON.stringify(credentials, null, 2), "utf8");
+      await handle.writeFile(JSON.stringify(validated, null, 2), "utf8");
       await handle.sync();
       await handle.close();
       handle = undefined;
@@ -105,15 +135,10 @@ export class LocalCredentialProvider implements CredentialProvider {
   async isConfigured(): Promise<boolean> {
     try {
       const credentials = await this.getCredentials();
-      return !!(
-        credentials.client_id &&
-        credentials.client_secret &&
-        credentials.access_token &&
-        credentials.refresh_token &&
-        credentials.company_id
-      );
-    } catch {
-      return false;
+      return Boolean(credentials.company_id);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
     }
   }
 
@@ -122,19 +147,7 @@ export class LocalCredentialProvider implements CredentialProvider {
    * Client ID and secret can come from env vars or stored file
    */
   async hasClientCredentials(): Promise<boolean> {
-    // Check environment variables first
-    if (process.env.QBO_CLIENT_ID && process.env.QBO_CLIENT_SECRET) {
-      return true;
-    }
-
-    // Check stored credentials
-    try {
-      const content = await fs.readFile(this.credentialPath, "utf-8");
-      const stored = JSON.parse(content);
-      return !!(stored.client_id && stored.client_secret);
-    } catch {
-      return false;
-    }
+    return (await this.getClientCredentials()) !== null;
   }
 
   /**
@@ -142,22 +155,30 @@ export class LocalCredentialProvider implements CredentialProvider {
    * Returns null if not available
    */
   async getClientCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
-    const clientId = process.env.QBO_CLIENT_ID;
-    const clientSecret = process.env.QBO_CLIENT_SECRET;
-
-    if (clientId && clientSecret) {
-      return { clientId, clientSecret };
+    if (process.env.QBO_CLIENT_ID !== undefined || process.env.QBO_CLIENT_SECRET !== undefined) {
+      return clientCredentialsFrom({
+        client_id: process.env.QBO_CLIENT_ID,
+        client_secret: process.env.QBO_CLIENT_SECRET,
+      }, "QBO_CLIENT_ID and QBO_CLIENT_SECRET");
     }
 
-    // Try to read from file
     try {
       const content = await fs.readFile(this.credentialPath, "utf-8");
-      const stored = JSON.parse(content);
-      if (stored.client_id && stored.client_secret) {
-        return { clientId: stored.client_id, clientSecret: stored.client_secret };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        throw new Error(`Local credential file ${this.credentialPath} must contain valid JSON`);
       }
-    } catch {
-      // File doesn't exist or is invalid
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error(`Local credential file ${this.credentialPath} must contain a JSON object`);
+      }
+      return clientCredentialsFrom(
+        parsed as Record<string, unknown>,
+        `Local credential file ${this.credentialPath}`
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
 
     return null;
