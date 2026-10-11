@@ -138,6 +138,20 @@ describe("executeTool", () => {
     expect(mockHandleCreateBill).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown properties before client creation", async () => {
+    const result = await executeTool("create_bill", {
+      vendor_name: "Acme",
+      txn_date: "2026-10-10",
+      lines: [{ account_name: "Office Expenses", amount: 10, custmer_name: "Job" }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Invalid arguments for "create_bill"');
+    expect(result.content[0].text).toContain("additional properties");
+    expect(mockGetClient).not.toHaveBeenCalled();
+    expect(mockHandleCreateBill).not.toHaveBeenCalled();
+  });
+
   it("dispatches arguments that satisfy the advertised schema", async () => {
     mockHandleCreateBill.mockResolvedValue({
       content: [{ type: "text", text: "Bill draft" }],
