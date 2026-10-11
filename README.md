@@ -454,6 +454,8 @@ QuickBooks callback operations and local operation queue waits have a configurab
 
 Entity getters return allowlisted, workflow-relevant data rather than raw QuickBooks API objects. IDs, `SyncToken`, editable line IDs, linked transactions, and references needed for follow-up work are retained; unsupported upstream fields and opaque nested payloads are excluded from both inline HTTP output and local report files. Generic queries remain broader read surfaces, but they remove tax identifiers, employer IDs, vendor payment-bank details, signed attachment URLs, and opaque extension metadata. CompanyInfo and Attachable query results use the same bounded projections as their dedicated getters. Generic queries and financial reports also use the bounded output policy described above.
 
+Local stdio report files are retained for seven days. Report writes perform throttled, best-effort cleanup of expired files and abandoned `qb-reports-*` directories; directories owned by another live MCP process are preserved. Cleanup uses no timer, watcher, or scheduled task.
+
 ---
 
 ## Available Tools

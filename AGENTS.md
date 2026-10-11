@@ -82,6 +82,8 @@ Follow the closest existing tool. Use `outputReport()` for returned data. Encode
 - stdio writes full data to a temporary file and returns summary text plus its path.
 - HTTP returns bounded inline JSON. Generic queries and financial-report detail are capped at 100 records or rows, with a 100,000-character serialized backstop.
 
+Local stdio report retention is write-triggered: report writes periodically remove expired files and abandoned report directories older than seven days. Preserve directories owned by live MCP processes; do not add timers, watchers, or scheduled cleanup tasks.
+
 For large outputs, compute summaries from all data, then cap HTTP detail with `isHttpMode()` from `src/utils/output.ts`. Include original and returned counts plus continuation guidance. Do not use the generic size backstop as a substitute for a useful tool-specific projection.
 
 Generic query results must pass through the shared privacy projection before output. Preserve accounting workflow fields, but remove tax/employer identifiers, payment-bank details, signed attachment URLs, and opaque extension metadata. CompanyInfo and Attachable queries must reuse their dedicated allowlisted projections.
