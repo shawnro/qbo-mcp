@@ -23,6 +23,7 @@
     "dist"
   ],
   "scripts": {
+    "prebuild": "node scripts/clean-dist.mjs",
     "build": "tsc",
     "build:lambda": "node scripts/build-lambda.mjs",
     "prepare": "npm run build",
