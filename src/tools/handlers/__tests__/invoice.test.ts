@@ -218,6 +218,19 @@ describe("handleCreateInvoice", () => {
     expect(mockResolveItem).not.toHaveBeenCalled();
   });
 
+  it("coalesces duplicate item-name lookups across lines", async () => {
+    await handleCreateInvoice(client as never, {
+      txn_date: "2026-04-01",
+      customer_id: "201",
+      lines: [
+        { item_name: "Consulting Services", amount: 100 },
+        { item_name: " consulting services ", amount: 200 },
+      ],
+    });
+
+    expect(mockResolveItem).toHaveBeenCalledOnce();
+  });
+
   it("rejects item_name combined with item_id", async () => {
     await expect(handleCreateInvoice(client as never, {
       txn_date: "2026-04-01",

@@ -6,7 +6,7 @@ import {
 } from "../../client/index.js";
 import { validateAmount, validateDocNumber, toDollars, formatDollars, sumCents, outputReport, getQboUrl } from "../../utils/index.js";
 import { applyClassRefChange, assertNoClassRefChangeOnDelete, createResolutionCoordinator, hasClassRefChange, resolveOptionalClassRef } from "../resolve.js";
-import { resolveItemReference } from "../item-resolution.js";
+import { resolveItemReference, resolveItemReferences } from "../item-resolution.js";
 import type { QboRequestContext } from "../../runtime/types.js";
 
 interface SalesReceiptLineChange {
@@ -88,8 +88,7 @@ export async function handleCreateSalesReceipt(
     departmentRef = await resolver.department(deptInput);
   }
 
-  // Resolve lines
-  const resolvedLines = await Promise.all(lines.map(async (line) => {
+  for (const line of lines) {
     const itemInput = line.item_name || line.item_id;
     if (!itemInput) {
       throw new Error("Each line must have either item_name or item_id");
@@ -97,8 +96,12 @@ export async function handleCreateSalesReceipt(
     if (line.amount === undefined && (line.qty === undefined || line.unit_price === undefined)) {
       throw new Error(`Line for "${itemInput}" requires amount, or both qty and unit_price`);
     }
+  }
+  const itemRefs = await resolveItemReferences(client, lines, lookupCache);
 
-    const itemRef = await resolveItemReference(client, line, lookupCache);
+  // Resolve lines
+  const resolvedLines = await Promise.all(lines.map(async (line, index) => {
+    const itemRef = itemRefs[index];
     const classRef = await resolveOptionalClassRef(resolver, line);
     const itemLabel = itemRef.name || itemRef.value;
 
