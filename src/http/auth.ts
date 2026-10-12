@@ -30,11 +30,18 @@ export async function authorizeRequest(
   request: Request,
   config: AuthConfig,
   resourceUrl: string,
-  validator: TokenValidator
+  validator: TokenValidator,
+  maxBearerTokenBytes: number
 ): Promise<AuthorizationResult> {
   const token = extractBearerToken(request);
   if (!token) {
     return { authorized: false, response: unauthorized(resourceUrl, "Bearer token required") };
+  }
+  if (
+    token.length > maxBearerTokenBytes ||
+    new TextEncoder().encode(token).byteLength > maxBearerTokenBytes
+  ) {
+    return { authorized: false, response: unauthorized(resourceUrl, "Bearer token is invalid") };
   }
   const result = await validator(token, config);
   if (!result.valid) {

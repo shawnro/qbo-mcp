@@ -8,6 +8,11 @@ const config: RemoteHttpConfigState = {
     publicBaseUrl: "https://api.example.com/prod",
     mcpPath: "/qb/mcp",
     resourceName: "QBO",
+    limits: {
+      maxBodyBytes: 1_048_576,
+      maxBearerTokenBytes: 16_384,
+      oauthUpstreamTimeoutMs: 15_000,
+    },
     auth: { mode: "disabled" },
     oauth: { mode: "disabled" },
   },

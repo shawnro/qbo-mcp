@@ -35,6 +35,11 @@ const anonymousConfig: RemoteHttpConfigState = {
     publicBaseUrl: "https://mcp.example.com",
     mcpPath: "/qb/mcp",
     resourceName: "QuickBooks MCP Server",
+    limits: {
+      maxBodyBytes: 1_048_576,
+      maxBearerTokenBytes: 16_384,
+      oauthUpstreamTimeoutMs: 15_000,
+    },
     auth: { mode: "disabled" },
     oauth: { mode: "disabled" },
   },
@@ -46,6 +51,11 @@ const authenticatedConfig: RemoteHttpConfigState = {
     publicBaseUrl: "https://mcp.example.com/prod",
     mcpPath: "/qb/mcp",
     resourceName: "Example QBO",
+    limits: {
+      maxBodyBytes: 1_048_576,
+      maxBearerTokenBytes: 16_384,
+      oauthUpstreamTimeoutMs: 15_000,
+    },
     auth: {
       mode: "enabled",
       config: {
@@ -162,6 +172,58 @@ describe("HTTP application", () => {
     expect(response.status).toBe(400);
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(proxiedBody).toContain("api%3A%2F%2Fquickbooks%2Faccess_as_user+offline_access");
+  });
+
+  it("rejects oversized request bodies before handler or OAuth dispatch", async () => {
+    const limitedConfig: RemoteHttpConfigState = {
+      ...authenticatedConfig,
+      config: {
+        ...authenticatedConfig.config,
+        limits: { ...authenticatedConfig.config.limits, maxBodyBytes: 8 },
+      },
+    };
+    const handleMcp = vi.fn(async () => new Response("mcp"));
+    const fetchImpl = vi.fn(async () => new Response("oauth"));
+    const app = createTestApp(limitedConfig, { handleMcp, fetch: fetchImpl });
+
+    const mcpResponse = await app(new Request("https://mcp.example.com/prod/qb/mcp", {
+      method: "POST",
+      body: "123456789",
+    }));
+    const tokenResponse = await app(new Request("https://mcp.example.com/prod/token", {
+      method: "POST",
+      body: "123456789",
+    }));
+
+    expect(mcpResponse.status).toBe(413);
+    expect(tokenResponse.status).toBe(413);
+    expect(handleMcp).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("aborts stalled OAuth token exchanges at the configured deadline", async () => {
+    const limitedConfig: RemoteHttpConfigState = {
+      ...authenticatedConfig,
+      config: {
+        ...authenticatedConfig.config,
+        limits: { ...authenticatedConfig.config.limits, oauthUpstreamTimeoutMs: 5 },
+      },
+    };
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      })
+    ) as typeof fetch;
+    const app = createTestApp(limitedConfig, { fetch: fetchImpl });
+
+    const response = await app(new Request("https://mcp.example.com/prod/token", {
+      method: "POST",
+      body: "grant_type=refresh_token",
+    }));
+
+    expect(response.status).toBe(504);
+    expect(await response.json()).toMatchObject({ error: "oauth_upstream_timeout" });
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("returns exact route and method errors with CORS", async () => {

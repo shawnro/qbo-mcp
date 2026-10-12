@@ -21,3 +21,10 @@ export function methodNotAllowed(methods: string[]): Response {
   response.headers.set("Allow", methods.join(", "));
   return response;
 }
+
+export function payloadTooLarge(): Response {
+  return jsonResponse(413, {
+    error: "payload_too_large",
+    error_description: "The request body exceeds the configured limit.",
+  });
+}

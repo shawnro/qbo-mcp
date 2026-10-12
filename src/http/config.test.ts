@@ -31,9 +31,56 @@ describe("parseRemoteHttpConfig", () => {
       mode: "valid",
       config: {
         publicBaseUrl: "https://mcp.example.com/prod",
+        limits: {
+          maxBodyBytes: 1_048_576,
+          maxBearerTokenBytes: 16_384,
+          oauthUpstreamTimeoutMs: 15_000,
+        },
         auth: { mode: "disabled" },
         oauth: { mode: "disabled" },
       },
+    });
+  });
+
+  it("accepts bounded hosted resource limit overrides", () => {
+    expect(parseRemoteHttpConfig({
+      ...authenticatedEnvironment,
+      MCP_HTTP_MAX_BODY_BYTES: "2048",
+      MCP_HTTP_MAX_BEARER_BYTES: "4096",
+      MCP_OAUTH_UPSTREAM_TIMEOUT_MS: "2500",
+    })).toMatchObject({
+      mode: "valid",
+      config: {
+        limits: {
+          maxBodyBytes: 2048,
+          maxBearerTokenBytes: 4096,
+          oauthUpstreamTimeoutMs: 2500,
+        },
+      },
+    });
+  });
+
+  it("rejects malformed or excessive hosted resource limits", () => {
+    expect(parseRemoteHttpConfig({
+      ...authenticatedEnvironment,
+      MCP_HTTP_MAX_BODY_BYTES: "",
+    })).toEqual({
+      mode: "invalid",
+      reason: "MCP_HTTP_MAX_BODY_BYTES must be a positive integer",
+    });
+    expect(parseRemoteHttpConfig({
+      ...authenticatedEnvironment,
+      MCP_HTTP_MAX_BEARER_BYTES: "65537",
+    })).toEqual({
+      mode: "invalid",
+      reason: "MCP_HTTP_MAX_BEARER_BYTES must be between 1 and 65536",
+    });
+    expect(parseRemoteHttpConfig({
+      ...authenticatedEnvironment,
+      MCP_OAUTH_UPSTREAM_TIMEOUT_MS: "1.5",
+    })).toEqual({
+      mode: "invalid",
+      reason: "MCP_OAUTH_UPSTREAM_TIMEOUT_MS must be a positive integer",
     });
   });
 

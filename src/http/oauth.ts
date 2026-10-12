@@ -42,15 +42,18 @@ export function authorizeRedirect(request: Request, config: EnabledOAuthConfig):
 export async function proxyToken(
   request: Request,
   config: EnabledOAuthConfig,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  timeoutMs: number
 ): Promise<Response> {
   const params = new URLSearchParams(await request.text());
   replaceScope(params, config);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
   try {
     const upstream = await fetchImpl(config.tokenEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString(),
+      signal: AbortSignal.any([request.signal, timeoutSignal]),
     });
     return new Response(upstream.body, {
       status: upstream.status,
@@ -59,6 +62,12 @@ export async function proxyToken(
       },
     });
   } catch {
+    if (timeoutSignal.aborted) {
+      return jsonResponse(504, {
+        error: "oauth_upstream_timeout",
+        error_description: "The authorization server did not respond in time.",
+      });
+    }
     return jsonResponse(502, {
       error: "oauth_upstream_error",
       error_description: "The authorization server could not be reached.",

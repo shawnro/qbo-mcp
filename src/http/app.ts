@@ -11,7 +11,14 @@ import { publicUrl, routePath } from "./config.js";
 import { corsPreflight, withCors } from "./cors.js";
 import { handleMcpRequest } from "./mcp-handler.js";
 import { authorizeRedirect, oauthServerMetadata, proxyToken } from "./oauth.js";
-import { configurationError, jsonResponse, methodNotAllowed, notFound } from "./responses.js";
+import { readBoundedRequest, RequestBodyTooLargeError } from "./request-body.js";
+import {
+  configurationError,
+  jsonResponse,
+  methodNotAllowed,
+  notFound,
+  payloadTooLarge,
+} from "./responses.js";
 
 export interface HttpAppDependencies {
   validateToken?: TokenValidator;
@@ -56,7 +63,18 @@ export function createHttpApp(
     if (path === "/token") {
       if (config.oauth.mode !== "enabled") return withCors(notFound());
       if (request.method !== "POST") return withCors(methodNotAllowed(["POST"]));
-      return withCors(await proxyToken(request, config.oauth, fetchImpl));
+      try {
+        request = await readBoundedRequest(request, config.limits.maxBodyBytes);
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) return withCors(payloadTooLarge());
+        throw error;
+      }
+      return withCors(await proxyToken(
+        request,
+        config.oauth,
+        fetchImpl,
+        config.limits.oauthUpstreamTimeoutMs
+      ));
     }
 
     if (path !== config.mcpPath) return withCors(notFound());
@@ -74,13 +92,20 @@ export function createHttpApp(
       }));
     }
     if (request.method !== "POST") return withCors(methodNotAllowed(["GET", "POST"]));
+    try {
+      request = await readBoundedRequest(request, config.limits.maxBodyBytes);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) return withCors(payloadTooLarge());
+      throw error;
+    }
     let principal: QboPrincipal = anonymousPrincipal;
     if (config.auth.mode === "enabled") {
       const authorization = await authorizeRequest(
         request,
         config.auth.config,
         publicUrl(config, config.mcpPath),
-        validator
+        validator,
+        config.limits.maxBearerTokenBytes
       );
       if (!authorization.authorized) return withCors(authorization.response);
       principal = authorization.principal;
