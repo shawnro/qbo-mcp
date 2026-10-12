@@ -38,6 +38,7 @@ declare module "node-quickbooks" {
     findAccounts(criteria: object | string, callback: Callback<unknown>): void;
     findInvoices(criteria: object | string, callback: Callback<unknown>): void;
     findBills(criteria: object | string, callback: Callback<unknown>): void;
+    findBillPayments(criteria: object | string, callback: Callback<unknown>): void;
     findItems(criteria: object | string, callback: Callback<unknown>): void;
     findDepartments(criteria: object | string, callback: Callback<unknown>): void;
     findJournalEntries(criteria: object | string, callback: Callback<unknown>): void;
@@ -47,8 +48,11 @@ declare module "node-quickbooks" {
     findDeposits(criteria: object | string, callback: Callback<unknown>): void;
     findEmployees(criteria: object | string, callback: Callback<unknown>): void;
     findEstimates(criteria: object | string, callback: Callback<unknown>): void;
-    findCreditmemos(criteria: object | string, callback: Callback<unknown>): void;
+    findCreditMemos(criteria: object | string, callback: Callback<unknown>): void;
+    findPurchaseOrders(criteria: object | string, callback: Callback<unknown>): void;
+    findRefundReceipts(criteria: object | string, callback: Callback<unknown>): void;
     findTransfers(criteria: object | string, callback: Callback<unknown>): void;
+    findVendorCredits(criteria: object | string, callback: Callback<unknown>): void;
     findClasses(criteria: object | string, callback: Callback<unknown>): void;
     findTaxAgencies(criteria: object | string, callback: Callback<unknown>): void;
     findCompanyInfos(criteria: object | string, callback: Callback<unknown>): void;

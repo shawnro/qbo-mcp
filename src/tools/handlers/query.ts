@@ -13,7 +13,10 @@ import {
 } from "../../query/index.js";
 import { isQBError, extractQBErrorInfo } from "../../types/index.js";
 import type { QboRequestContext } from "../../runtime/types.js";
-import { projectQueryEntities } from "../query-output.js";
+import {
+  assertHostedQueryEntitySupported,
+  projectQueryEntities,
+} from "../query-output.js";
 
 export async function handleQuery(
   client: QuickBooks,
@@ -32,6 +35,8 @@ export async function handleQuery(
   }
 
   const entity = entityMatch[1];
+  const httpMode = isHttpMode(context?.output);
+  if (httpMode) assertHostedQueryEntitySupported(entity);
 
   // Handle irregular plurals for finder method names
   const pluralMap: Record<string, string> = {
@@ -81,7 +86,7 @@ export async function handleQuery(
     }));
   }
 
-  entities = projectQueryEntities(entity, entities) as typeof entities;
+  entities = projectQueryEntities(entity, entities, httpMode ? "hosted" : "local") as typeof entities;
 
   // Build result object for file output
   const result = {
@@ -97,8 +102,6 @@ export async function handleQuery(
   ];
 
   const explicitMaxResults = query.match(/MAXRESULTS\s+(\d+)/i);
-  const httpMode = isHttpMode(context?.output);
-
   // Add pagination info
   if (startPositionSpecified) {
     summaryLines.push('Note: STARTPOSITION specified - no auto-pagination');

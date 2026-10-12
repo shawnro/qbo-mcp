@@ -1,5 +1,6 @@
 import type { MCPToolResult } from "../types/index.js";
 import { filterTools } from "./crud-filter.js";
+import { HOSTED_QUERY_ENTITIES } from "./query-output.js";
 
 export type DeploymentMode = "local" | "remote";
 
@@ -26,6 +27,12 @@ const REMOTE_HIDDEN_TOOLS = new Set([
 ]);
 
 function projectRemoteDefinition<T extends ToolDefinition>(definition: T): T {
+  if (definition.name === "query") {
+    return {
+      ...definition,
+      description: `${definition.description} Hosted mode returns reviewed field projections and supports only: ${HOSTED_QUERY_ENTITIES.join(", ")}.`,
+    };
+  }
   if (definition.name !== "create_attachable") return definition;
 
   const { file_path: _filePath, ...properties } = definition.inputSchema.properties ?? {};
