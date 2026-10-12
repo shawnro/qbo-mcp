@@ -375,6 +375,38 @@ describe("executeTool", () => {
     expect(mockHandleCreateVendor).not.toHaveBeenCalled();
   });
 
+  it("keeps stdio runtime contexts on the local operation queue", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const runtime = {
+      createClientAttempt: vi.fn().mockResolvedValue({
+        client: fakeClient,
+        credentialFingerprint: "fingerprint",
+      }),
+      clearCaches: vi.fn(),
+    };
+    const context = {
+      transport: "stdio",
+      runtime,
+    } as unknown as QboRequestContext;
+    mockHandleGetCompanyInfo.mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ content: [{ type: "text", text: "Company Info" }] });
+    }));
+    const blockingCall = executeTool("get_company_info", {}, context);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const queuedCall = executeTool("create_vendor", {
+      display_name: "Acme",
+      draft: false,
+    }, context);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(queuedCall).resolves.toMatchObject({ isError: true });
+    expect(mockHandleCreateVendor).not.toHaveBeenCalled();
+    release();
+    await blockingCall;
+  });
+
   it("retries after refreshing token on auth error", async () => {
     // First call fails with auth error
     mockHandleGetCompanyInfo
@@ -680,5 +712,40 @@ describe("executeTool", () => {
 
     expect(result.content[0].text).toBe("Auth instructions");
     expect(mockGetClient).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a stdio runtime after replacing OAuth credentials", async () => {
+    const { handleAuthenticate } = await import("../handlers/index.js");
+    vi.mocked(handleAuthenticate).mockResolvedValue({
+      content: [{ type: "text", text: "Authenticated" }],
+    });
+    const clearCaches = vi.fn();
+    const context = {
+      transport: "stdio",
+      runtime: { clearCaches },
+    } as unknown as QboRequestContext;
+
+    await executeTool("qbo_authenticate", {
+      authorization_code: "code",
+      realm_id: "123",
+    }, context);
+
+    expect(clearCaches).toHaveBeenCalledOnce();
+  });
+
+  it("invalidates a stdio runtime after switching profiles", async () => {
+    const { handleSwitchProfile } = await import("../handlers/index.js");
+    vi.mocked(handleSwitchProfile).mockResolvedValue({
+      content: [{ type: "text", text: "Switched" }],
+    });
+    const clearCaches = vi.fn();
+    const context = {
+      transport: "stdio",
+      runtime: { clearCaches },
+    } as unknown as QboRequestContext;
+
+    await executeTool("switch_qbo_profile", { profile: "beta" }, context);
+
+    expect(clearCaches).toHaveBeenCalledOnce();
   });
 });

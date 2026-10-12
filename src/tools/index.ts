@@ -150,8 +150,8 @@ export async function executeTool(
   context?: QboRequestContext
 ): Promise<MCPToolResult> {
   try {
-    if (!context && name !== "switch_qbo_profile") {
-      return await runLocalOperation(() => executeToolAttempt(name, args));
+    if (context?.transport !== "http" && name !== "switch_qbo_profile") {
+      return await runLocalOperation(() => executeToolAttempt(name, args, context));
     }
     return await executeToolAttempt(name, args, context);
   } catch (error) {
@@ -202,7 +202,9 @@ async function executeToolAttempt(
 
   // Special case: qbo_authenticate doesn't need a QuickBooks client
   if (name === "qbo_authenticate") {
-    return asMCPToolResult(await handleAuthenticate(args as { authorization_code?: string; realm_id?: string }));
+    const result = await handleAuthenticate(args as { authorization_code?: string; realm_id?: string });
+    if (context && !result.isError && args.authorization_code) context.runtime.clearCaches();
+    return asMCPToolResult(result);
   }
 
   // Special case: profile tools don't need a QuickBooks client
@@ -210,7 +212,9 @@ async function executeToolAttempt(
     return asMCPToolResult(await handleListProfiles());
   }
   if (name === "switch_qbo_profile") {
-    return asMCPToolResult(await handleSwitchProfile(args as { profile: string }));
+    const result = await handleSwitchProfile(args as { profile: string });
+    if (context && !result.isError) context.runtime.clearCaches();
+    return asMCPToolResult(result);
   }
 
   const handler = toolHandlers.get(name);
