@@ -327,6 +327,18 @@ describe("handleEditSalesReceipt", () => {
     ],
   };
 
+  it("coalesces duplicate item-name lookups across lines", async () => {
+    await handleCreateSalesReceipt(client as never, {
+      txn_date: "2026-03-01",
+      lines: [
+        { item_name: "Widget", amount: 10 },
+        { item_name: " widget ", amount: 20 },
+      ],
+    });
+
+    expect(mockResolveItem).toHaveBeenCalledOnce();
+  });
+
   beforeEach(() => {
     client = createMockClient();
     resetMockClient(client);
