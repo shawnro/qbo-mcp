@@ -35,6 +35,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Type-check source and tests
+        run: npm run typecheck
+
       - name: Compile TypeScript
         run: npm run build
 
@@ -43,3 +46,6 @@ jobs:
 
       - name: Bundle Lambda entry point
         run: npm run build:lambda
+
+      - name: Validate distribution artifact
+        run: npm run check:artifact

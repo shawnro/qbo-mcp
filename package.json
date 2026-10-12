@@ -1,9 +1,9 @@
 {
   "name": "qbo-mcp",
   "version": "0.5.2",
+  "private": true,
   "description": "MCP server for QuickBooks Online API integration",
   "license": "MIT",
-  "mcpName": "io.github.shawnro/qbo-mcp",
   "author": "shawnro",
   "homepage": "https://github.com/shawnro/qbo-mcp",
   "bugs": "https://github.com/shawnro/qbo-mcp/issues",
@@ -24,11 +24,13 @@
   ],
   "scripts": {
     "prebuild": "node scripts/clean-dist.mjs",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "build:lambda": "node scripts/build-lambda.mjs",
     "prepare": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "check:artifact": "node scripts/validate-artifact.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

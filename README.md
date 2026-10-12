@@ -47,7 +47,7 @@ Store credentials locally for personal use, or in AWS Secrets Manager or Azure K
 | **Write safety** | Executes immediately | Draft preview by default |
 | **Query approach** | Entity-specific search tools | SQL-like queries across all entities |
 | **Credentials** | Local `.env` file | Local file, AWS Secrets Manager, or Azure Key Vault |
-| **Distribution** | Clone from GitHub | `npx qbo-mcp` |
+| **Distribution** | Clone from GitHub | Private local checkout |
 
 ## Prerequisites
 
@@ -60,15 +60,14 @@ Choose the setup that fits your use case:
 
 | Setup | Best For |
 |-------|----------|
-| [NPM Install](#option-1-npm-install) | Quick setup, using your own QuickBooks app |
-| [Local Checkout](#option-2-local-checkout) | Development, customization |
-| [AWS Mode](#option-3-aws-mode) | Shared/production environments |
+| [Local Checkout](#option-1-local-checkout) | Personal use, development, customization |
+| [AWS Mode](#option-2-aws-mode) | Shared/production environments |
 
 ---
 
-## Option 1: NPM Install
+## Option 1: Local Checkout
 
-The simplest way to get started. Credentials are stored locally on your machine.
+The server is currently distributed as source for private use. It is not published to npm.
 
 ### 1. Create a QuickBooks App
 
@@ -77,53 +76,6 @@ The simplest way to get started. Credentials are stored locally on your machine.
 3. Go to "Keys & credentials"
 4. Note your **Client ID** and **Client Secret**
 5. Under "Redirect URIs", add: `https://developer.intuit.com/v2/OAuth2Playground/RedirectUrl`
-
-### 2. Add to Claude Code
-
-Add to your project's `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "quickbooks": {
-      "command": "npx",
-      "args": ["-y", "qbo-mcp"]
-    }
-  }
-}
-```
-
-### 3. Configure Credentials
-
-Create `~/.qbo-mcp/credentials.json`:
-
-```json
-{
-  "client_id": "your_client_id",
-  "client_secret": "your_client_secret"
-}
-```
-
-### 4. Authenticate
-
-Once Claude Code is running, use the `qbo_authenticate` tool:
-
-1. Call `qbo_authenticate` with no arguments to get an authorization URL
-2. Open the URL in your browser and authorize the app
-3. Copy the `code` and `realmId` from the redirect URL
-4. Call `qbo_authenticate` again with the authorization code and realm ID
-
-Your OAuth tokens will be saved and automatically refreshed.
-
----
-
-## Option 2: Local Checkout
-
-For development or customization.
-
-### 1. Create a QuickBooks App
-
-Follow the same steps as Option 1 above.
 
 ### 2. Clone and Build
 
@@ -151,11 +103,11 @@ Add to your project's `.mcp.json`:
 
 ### 4. Configure Credentials
 
-Create `~/.qbo-mcp/credentials.json` with your client credentials (same as Option 1), then run `qbo_authenticate` to complete the OAuth flow.
+Create `~/.qbo-mcp/credentials.json` with your client credentials, then run `qbo_authenticate` to complete the OAuth flow.
 
 ---
 
-## Option 3: AWS Mode
+## Option 2: AWS Mode
 
 For shared or production environments. Stores credentials in AWS Secrets Manager.
 
@@ -237,7 +189,7 @@ The server needs these AWS permissions:
 
 ---
 
-## Option 4: Azure Mode
+## Option 3: Azure Mode
 
 For environments using Azure Key Vault for secret management. Stores all QuickBooks credentials (including company ID) in a single Key Vault secret.
 
@@ -385,14 +337,14 @@ Create a `.env` file in the qbo-mcp directory:
 QBO_INLINE_OUTPUT=true
 ```
 
-**Option B — via `.mcp.json` env block** (recommended for NPM install):
+**Option B — via `.mcp.json` env block**:
 
 ```json
 {
   "mcpServers": {
     "quickbooks": {
-      "command": "npx",
-      "args": ["-y", "qbo-mcp"],
+      "command": "node",
+      "args": ["/path/to/qbo-mcp/dist/index.js"],
       "env": {
         "QBO_CREDENTIAL_MODE": "local",
         "QBO_CREDENTIAL_FILE": "~/.qbo-mcp/credentials.json",
