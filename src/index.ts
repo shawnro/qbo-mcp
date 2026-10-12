@@ -8,6 +8,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { setOutputMode } from "./utils/output.js";
 import { loadProfiles } from "./credentials/index.js";
 import { parseBooleanSetting, validateRuntimeEnvironment } from "./config.js";
+import { LocalQboCompanyRuntime } from "./runtime/local-company-runtime.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,7 +31,19 @@ if (hasProfileConfig) {
 // Start the server
 async function main() {
   const { createMcpServer } = await import("./server.js");
-  const server = createMcpServer();
+  const server = createMcpServer({
+    deploymentMode: "local",
+    context: {
+      requestId: "stdio",
+      principal: { kind: "anonymous", id: "anonymous" },
+      transport: "stdio",
+      output: {
+        mode: parseBooleanSetting("QBO_INLINE_OUTPUT") ? "http" : "stdio",
+        executionEnvironment: "local",
+      },
+      runtime: new LocalQboCompanyRuntime(),
+    },
+  });
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("QuickBooks MCP server running on stdio");

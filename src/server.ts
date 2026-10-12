@@ -11,7 +11,7 @@ import type { DeploymentMode } from "./tools/capabilities.js";
 import type { QboRequestContext } from "./runtime/types.js";
 
 export type McpServerOptions =
-  | { deploymentMode?: "local"; context?: never }
+  | { deploymentMode?: "local"; context?: QboRequestContext }
   | { deploymentMode: "remote"; context: QboRequestContext };
 
 export function createMcpServer(options: McpServerOptions = {}): Server {
