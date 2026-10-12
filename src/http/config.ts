@@ -18,6 +18,11 @@ export interface RemoteHttpConfig {
   publicBaseUrl: string;
   mcpPath: string;
   resourceName: string;
+  limits: {
+    maxBodyBytes: number;
+    maxBearerTokenBytes: number;
+    oauthUpstreamTimeoutMs: number;
+  };
   auth: AuthConfigState;
   oauth: OAuthConfigState;
 }
@@ -78,6 +83,22 @@ function parseOAuthConfig(
   };
 }
 
+function parseBoundedInteger(
+  value: string | undefined,
+  name: string,
+  defaultValue: number,
+  maximum: number
+): number | string {
+  if (value === undefined) return defaultValue;
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) return `${name} must be a positive integer`;
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
+    return `${name} must be between 1 and ${maximum}`;
+  }
+  return parsed;
+}
+
 export function parseRemoteHttpConfig(env: Environment = process.env): RemoteHttpConfigState {
   try {
     validateRuntimeEnvironment(env);
@@ -106,12 +127,39 @@ export function parseRemoteHttpConfig(env: Environment = process.env): RemoteHtt
   const oauth = parseOAuthConfig(env, auth);
   if (oauth.mode === "invalid") return oauth;
 
+  const maxBodyBytes = parseBoundedInteger(
+    env.MCP_HTTP_MAX_BODY_BYTES,
+    "MCP_HTTP_MAX_BODY_BYTES",
+    1_048_576,
+    10_485_760
+  );
+  if (typeof maxBodyBytes === "string") return { mode: "invalid", reason: maxBodyBytes };
+  const maxBearerTokenBytes = parseBoundedInteger(
+    env.MCP_HTTP_MAX_BEARER_BYTES,
+    "MCP_HTTP_MAX_BEARER_BYTES",
+    16_384,
+    65_536
+  );
+  if (typeof maxBearerTokenBytes === "string") {
+    return { mode: "invalid", reason: maxBearerTokenBytes };
+  }
+  const oauthUpstreamTimeoutMs = parseBoundedInteger(
+    env.MCP_OAUTH_UPSTREAM_TIMEOUT_MS,
+    "MCP_OAUTH_UPSTREAM_TIMEOUT_MS",
+    15_000,
+    120_000
+  );
+  if (typeof oauthUpstreamTimeoutMs === "string") {
+    return { mode: "invalid", reason: oauthUpstreamTimeoutMs };
+  }
+
   return {
     mode: "valid",
     config: {
       publicBaseUrl,
       mcpPath: "/qb/mcp",
       resourceName: env.MCP_RESOURCE_NAME?.trim() || "QuickBooks MCP Server",
+      limits: { maxBodyBytes, maxBearerTokenBytes, oauthUpstreamTimeoutMs },
       auth,
       oauth,
     },

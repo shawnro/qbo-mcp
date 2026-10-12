@@ -389,6 +389,9 @@ QBO_INLINE_OUTPUT=true
 | `MCP_AUTH_SERVER_URL` | - | Optional OAuth authorization-server URL for hosted interactive login proxy |
 | `MCP_RESOURCE_NAME` | `QuickBooks MCP Server` | Display name in protected-resource metadata |
 | `MCP_AUTH_DISABLED` | `false` | Explicitly allow anonymous hosted MCP access; cannot be combined with auth/OAuth settings |
+| `MCP_HTTP_MAX_BODY_BYTES` | `1048576` | Maximum hosted MCP or OAuth request body, from 1 to 10485760 bytes |
+| `MCP_HTTP_MAX_BEARER_BYTES` | `16384` | Maximum hosted bearer token, from 1 to 65536 bytes |
+| `MCP_OAUTH_UPSTREAM_TIMEOUT_MS` | `15000` | OAuth token-proxy deadline, from 1 to 120000 ms; expiration aborts the upstream request |
 
 Runtime boolean settings accept `true` or `false` (case-insensitive). Invalid or blank values, and unsupported `QBO_CREDENTIAL_MODE` values, fail configuration instead of silently selecting a less restrictive or different accounting mode.
 
@@ -403,6 +406,8 @@ The hosted transport uses one configured QuickBooks company per endpoint. Local 
 Hosted deployments must currently run as one process/replica and set `MCP_SINGLE_REPLICA=true`. Refresh coordination is process-local, so Lambda reserved concurrency and container replica limits must both be one. Do not scale a hosted endpoint beyond one replica until a distributed coordinator and durable shared attempt journal are implemented and validated. The planned Azure backend uses a Blob lease; AWS can use a conditional DynamoDB lease. See [OAuth Refresh Coordination](docs/oauth-refresh-coordination.md) for the required protocol and safety gates.
 
 Remote routing, authentication, OAuth, CORS, MCP lifecycle, and capability policy live in a provider-neutral Web `Request` to `Response` application. AWS Lambda is an API Gateway adapter over that application; Azure Functions and Node/container adapters can use the same core without duplicating accounting or security policy.
+
+The shared HTTP application rejects MCP and OAuth request bodies above `MCP_HTTP_MAX_BODY_BYTES` with `413 payload_too_large` before authentication or handler dispatch. Bearer tokens above `MCP_HTTP_MAX_BEARER_BYTES` are rejected before cryptographic validation. OAuth token exchanges are aborted after `MCP_OAUTH_UPSTREAM_TIMEOUT_MS` and return `504 oauth_upstream_timeout`; other connection failures return `502 oauth_upstream_error`. Invalid, blank, or out-of-range limit settings fail hosted configuration.
 
 QuickBooks callback operations and local operation queue waits have a configurable deadline through `QBO_REQUEST_TIMEOUT_MS`. A callback deadline stops the MCP request from waiting but cannot cancel a request already sent by `node-quickbooks`. A local queue deadline expires before the operation starts, so the expired operation is skipped rather than executed later. Reads automatically retry once after 250 ms for a callback deadline, HTTP 408/429/502/503/504, or an allowlisted transport timeout/reset code. Draft previews are not transport-retried. Reads share a three-attempt ceiling across that retry and the existing one-time authentication refresh. A timed-out or otherwise ambiguous committed mutation returns `indeterminate_result` and is never replayed automatically; verify the record in QuickBooks before deciding whether to retry.
 

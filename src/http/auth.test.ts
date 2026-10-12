@@ -19,7 +19,8 @@ describe("hosted authorization identity", () => {
       }),
       config,
       "https://mcp.example.com/qb/mcp",
-      validator
+      validator,
+      16_384
     );
 
     expect(result).toEqual({
@@ -35,7 +36,8 @@ describe("hosted authorization identity", () => {
       }),
       config,
       "https://mcp.example.com/qb/mcp",
-      async () => ({ valid: true, claims: { sub: "subject-1" } })
+      async () => ({ valid: true, claims: { sub: "subject-1" } }),
+      16_384
     );
     expect(subResult).toMatchObject({
       authorized: true,
@@ -48,7 +50,8 @@ describe("hosted authorization identity", () => {
       }),
       config,
       "https://mcp.example.com/qb/mcp",
-      async () => ({ valid: true, claims: {} })
+      async () => ({ valid: true, claims: {} }),
+      16_384
     );
     expect(missingResult.authorized).toBe(false);
     if (!missingResult.authorized) expect(missingResult.response.status).toBe(401);
@@ -59,5 +62,37 @@ describe("hosted authorization identity", () => {
     expect(extractBearerToken(new Request("https://mcp.example.com", {
       headers: { Authorization: "Bearer token extra" },
     }))).toBeNull();
+  });
+
+  it("rejects oversized bearer tokens before validation", async () => {
+    const validator = vi.fn();
+    const result = await authorizeRequest(
+      new Request("https://mcp.example.com/qb/mcp", {
+        headers: { Authorization: "Bearer oversized" },
+      }),
+      config,
+      "https://mcp.example.com/qb/mcp",
+      validator,
+      4
+    );
+
+    expect(result.authorized).toBe(false);
+    expect(validator).not.toHaveBeenCalled();
+  });
+
+  it("measures malformed multibyte bearer values in encoded bytes", async () => {
+    const validator = vi.fn();
+    const result = await authorizeRequest(
+      new Request("https://mcp.example.com/qb/mcp", {
+        headers: { Authorization: "Bearer éé" },
+      }),
+      config,
+      "https://mcp.example.com/qb/mcp",
+      validator,
+      3
+    );
+
+    expect(result.authorized).toBe(false);
+    expect(validator).not.toHaveBeenCalled();
   });
 });
