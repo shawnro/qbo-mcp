@@ -175,7 +175,11 @@ describe("handleQuery", () => {
       requestedLimit: 1000,
     } as never);
 
-    const result = await handleQuery(client as never, { query: "SELECT * FROM Attachable" });
+    const result = await handleQuery(
+      client as never,
+      { query: "SELECT * FROM Attachable" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    );
     const report = (result as unknown as { _data: { QueryResponse: { Attachable: unknown[] } } })._data;
 
     expect(report.QueryResponse.Attachable).toEqual([{
@@ -208,7 +212,11 @@ describe("handleQuery", () => {
       requestedLimit: 1000,
     } as never);
 
-    const result = await handleQuery(client as never, { query: "SELECT * FROM Company" });
+    const result = await handleQuery(
+      client as never,
+      { query: "SELECT * FROM Company" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    );
     const report = (result as unknown as { _data: { QueryResponse: { CompanyInfo: unknown[] } } })._data;
 
     expect(report.QueryResponse.CompanyInfo).toEqual([{
@@ -218,6 +226,130 @@ describe("handleQuery", () => {
       Country: "US",
       FiscalYearStartMonth: "January",
     }]);
+  });
+
+  it("uses deep reviewed projections for hosted customer queries", async () => {
+    mockPaginatedQuery.mockResolvedValue({
+      entities: [{
+        Id: "1",
+        SyncToken: "2",
+        DisplayName: "Acme",
+        Balance: 25,
+        PrimaryEmailAddr: { Address: "billing@example.com", FutureSecret: "drop" },
+        BillAddr: { Line1: "100 Main", City: "Santa Rosa", FutureSecret: "drop" },
+        MetaData: { CreateTime: "2026-01-01", FutureSecret: "drop" },
+        FutureSensitiveField: "drop",
+      }],
+      entityKey: "Customer",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: false,
+      returnedCount: 1,
+      requestedLimit: HTTP_QUERY_LIMIT,
+    } as never);
+
+    const result = await handleQuery(
+      client as never,
+      { query: "SELECT * FROM Customer" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    );
+    const report = (result as unknown as { _data: { QueryResponse: { Customer: unknown[] } } })._data;
+
+    expect(report.QueryResponse.Customer).toEqual([{
+      Id: "1",
+      SyncToken: "2",
+      DisplayName: "Acme",
+      Balance: 25,
+      PrimaryEmailAddr: { Address: "billing@example.com" },
+      BillAddr: { Line1: "100 Main", City: "Santa Rosa" },
+      MetaData: { CreateTime: "2026-01-01" },
+    }]);
+  });
+
+  it("preserves hosted transaction workflow fields without unknown nested data", async () => {
+    mockPaginatedQuery.mockResolvedValue({
+      entities: [{
+        Id: "10",
+        SyncToken: "3",
+        TxnDate: "2026-10-01",
+        TotalAmt: 42,
+        FutureSensitiveField: "drop",
+        Line: [{
+          Id: "1",
+          Amount: 42,
+          DetailType: "SalesItemLineDetail",
+          FutureSensitiveField: "drop",
+          SalesItemLineDetail: {
+            ItemRef: { value: "7", name: "Services", FutureSecret: "drop" },
+            Qty: 2,
+            UnitPrice: 21,
+            FutureSensitiveField: "drop",
+          },
+        }],
+      }],
+      entityKey: "Invoice",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: false,
+      returnedCount: 1,
+      requestedLimit: HTTP_QUERY_LIMIT,
+    } as never);
+
+    const result = await handleQuery(
+      client as never,
+      { query: "SELECT * FROM Invoice" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    );
+    const report = (result as unknown as { _data: { QueryResponse: { Invoice: unknown[] } } })._data;
+
+    expect(report.QueryResponse.Invoice).toEqual([{
+      Id: "10",
+      SyncToken: "3",
+      TxnDate: "2026-10-01",
+      TotalAmt: 42,
+      Line: [{
+        Id: "1",
+        Amount: 42,
+        DetailType: "SalesItemLineDetail",
+        SalesItemLineDetail: {
+          ItemRef: { value: "7", name: "Services" },
+          Qty: 2,
+          UnitPrice: 21,
+        },
+      }],
+      QboLink: "https://qbo.intuit.com/app/test?txnId=10",
+    }]);
+  });
+
+  it("rejects unreviewed hosted entities before querying QuickBooks", async () => {
+    await expect(handleQuery(
+      client as never,
+      { query: "SELECT * FROM Employee" },
+      { output: { mode: "http", executionEnvironment: "node" } } as never
+    )).rejects.toThrow("does not have a reviewed privacy projection");
+
+    expect(mockPaginatedQuery).not.toHaveBeenCalled();
+  });
+
+  it("retains local denylist compatibility for unreviewed entities", async () => {
+    (client as unknown as Record<string, unknown>).findEmployees = vi.fn();
+    mockPaginatedQuery.mockResolvedValue({
+      entities: [{ Id: "1", DisplayName: "Employee", SSN: "drop" }],
+      entityKey: "Employee",
+      apiCalls: 1,
+      truncated: false,
+      startPositionSpecified: false,
+      hasMore: false,
+      returnedCount: 1,
+      requestedLimit: 1000,
+    } as never);
+
+    const result = await handleQuery(client as never, { query: "SELECT * FROM Employee" });
+    const report = (result as unknown as { _data: { QueryResponse: { Employee: unknown[] } } })._data;
+
+    expect(report.QueryResponse.Employee).toEqual([{ Id: "1", DisplayName: "Employee" }]);
   });
 
   // --- Empty response ---

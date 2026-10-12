@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MCPToolResult } from "../../types/index.js";
 import { createToolExecutor, getToolDefinitions } from "../capabilities.js";
+import { HOSTED_QUERY_ENTITIES } from "../query-output.js";
 
 interface TestToolDefinition {
   name: string;
@@ -47,6 +48,9 @@ describe("deployment capabilities", () => {
   it("hides process-mutating tools and local paths remotely", () => {
     const remote = getToolDefinitions(definitions, "remote");
     expect(remote.map((tool) => tool.name)).toEqual(["query", "create_attachable"]);
+    for (const entity of HOSTED_QUERY_ENTITIES) {
+      expect(remote[0].description).toContain(entity);
+    }
     expect(remote[1].inputSchema.properties).toEqual({ note: { type: "string" } });
     expect(remote[1].inputSchema.anyOf).toEqual([{
       required: ["note"],
