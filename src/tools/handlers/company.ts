@@ -2,12 +2,19 @@
 
 import QuickBooks from "node-quickbooks";
 import { promisify, getCompanyIdValue } from "../../client/index.js";
+import type { QboRequestContext } from "../../runtime/types.js";
 import { projectCompanyInfo } from "../query-output.js";
 
-export async function handleGetCompanyInfo(client: QuickBooks): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const companyId = getCompanyIdValue();
+export async function handleGetCompanyInfo(
+  client: QuickBooks,
+  context?: QboRequestContext
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const companyId = context?.runtime.companyId ?? getCompanyIdValue();
+  if (!companyId) {
+    throw new Error("QuickBooks company ID is not available");
+  }
   const result = await promisify<unknown>((cb) =>
-    client.getCompanyInfo(companyId!, cb)
+    client.getCompanyInfo(companyId, cb)
   );
   return {
     content: [{ type: "text", text: JSON.stringify(projectCompanyInfo(result), null, 2) }],
