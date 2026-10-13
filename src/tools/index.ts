@@ -95,7 +95,7 @@ const inputValidators = new Map(toolDefinitions.map((definition) => [
 const toolHandlers = new Map<string, ToolHandler>();
 
 // Register all tools
-toolHandlers.set("get_company_info", (client) => handleGetCompanyInfo(client));
+toolHandlers.set("get_company_info", (client, _args, context) => handleGetCompanyInfo(client, context));
 toolHandlers.set("query", (client, args, context) => handleQuery(client, args as { query: string }, context));
 toolHandlers.set("list_accounts", (client, args, context) => handleListAccounts(client, args as { account_type?: string; active_only?: boolean }, context));
 toolHandlers.set("get_profit_loss", (client, args, context) => handleGetProfitLoss(client, args as Parameters<typeof handleGetProfitLoss>[1], context));

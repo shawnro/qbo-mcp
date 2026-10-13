@@ -119,6 +119,22 @@ describe("executeTool", () => {
     expect(mockRefreshTokens).not.toHaveBeenCalled();
   });
 
+  it("passes request context to the company info handler", async () => {
+    const context = {
+      transport: "http",
+      runtime: {
+        createClientAttempt: vi.fn().mockResolvedValue({
+          client: fakeClient,
+          credentialFingerprint: "credential-fingerprint",
+        }),
+      },
+    } as unknown as QboRequestContext;
+
+    await executeTool("get_company_info", {}, context);
+
+    expect(mockHandleGetCompanyInfo).toHaveBeenCalledWith(fakeClient, context);
+  });
+
   it("routes Vendor tools through the registry", async () => {
     const result = await executeTool("get_vendor", { id: "42" });
 
