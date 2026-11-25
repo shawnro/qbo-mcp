@@ -53,6 +53,16 @@ describe("handleGetCompanyInfo", () => {
     });
   });
 
+  it("uses the request runtime company ID", async () => {
+    mockSuccess(client.getCompanyInfo, { Id: "runtime-company", CompanyName: "Runtime Corp" });
+
+    await handleGetCompanyInfo(client as never, {
+      runtime: { companyId: "runtime-company" },
+    } as never);
+
+    expect(client.getCompanyInfo).toHaveBeenCalledWith("runtime-company", expect.any(Function));
+  });
+
   it("propagates API errors", async () => {
     mockError(client.getCompanyInfo, "Unauthorized");
 
