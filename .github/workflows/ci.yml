@@ -33,7 +33,7 @@ jobs:
         run: npm ci
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run audit:production
 
       - name: Type-check source and tests
         run: npm run typecheck

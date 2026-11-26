@@ -96,6 +96,12 @@ declare module "intuit-oauth" {
 
     authorizeUri(params: AuthorizeUriParams): string;
     createToken(uri: string): Promise<AuthResponse>;
+    getTokenRequest(request: {
+      url: string;
+      data: Record<string, string>;
+      method: string;
+      headers: Record<string, string>;
+    }): Promise<AuthResponse>;
     refresh(): Promise<AuthResponse>;
     refreshUsingToken(refreshToken: string): Promise<AuthResponse>;
     revoke(params?: { access_token?: string; refresh_token?: string }): Promise<AuthResponse>;

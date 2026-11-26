@@ -51,4 +51,32 @@ describe("OAuth token request safety", () => {
       "code=%25ZZ%26realmId%3Dattacker&realmId=123%26code%3Dattacker"
     );
   });
+
+  it("parses encoded callback values through intuit-oauth without making a token request", async () => {
+    const request = vi.spyOn(OAuthClient.prototype, "getTokenRequest").mockResolvedValue({
+      json: {
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        token_type: "bearer",
+        expires_in: 3600,
+        x_refresh_token_expires_in: 8726400,
+      },
+      getToken: () => ({ access_token: "access-token", refresh_token: "refresh-token" }),
+    } as never);
+
+    const result = await exchangeCodeForTokens(
+      "client-id",
+      "client-secret",
+      "%ZZ&realmId=attacker",
+      "123&code=attacker"
+    );
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0][0].data).toMatchObject({
+      grant_type: "authorization_code",
+      code: "%ZZ&realmId=attacker",
+    });
+    expect(result.credentials.access_token).toBe("access-token");
+    expect(result.companyId).toBe("123&code=attacker");
+  });
 });
