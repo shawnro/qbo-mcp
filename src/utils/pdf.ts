@@ -36,7 +36,6 @@ export async function renderPdfPages(
   const loadingTask = getDocument({
     data: new Uint8Array(bytes),
     disableFontFace: true,
-    isEvalSupported: false,
     useSystemFonts: true,
   });
 

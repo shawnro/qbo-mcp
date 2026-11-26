@@ -4,11 +4,14 @@ import {
   renderPdfPages,
 } from "../pdf.js";
 
-function createTestPdf(pageCount = 1): Buffer {
+function createTestPdf(pageCount = 1, withScript = false): Buffer {
   const objects: string[] = [];
   const pageIds = Array.from({ length: pageCount }, (_, index) => 3 + index * 2);
   const fontId = 3 + pageCount * 2;
-  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  const actionId = fontId + 1;
+  objects.push(
+    `<< /Type /Catalog /Pages 2 0 R${withScript ? ` /OpenAction ${actionId} 0 R` : ""} >>`
+  );
   objects.push(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageCount} >>`);
   for (let index = 0; index < pageCount; index++) {
     const pageId = pageIds[index];
@@ -21,6 +24,9 @@ function createTestPdf(pageCount = 1): Buffer {
     objects.push(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`);
   }
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  if (withScript) {
+    objects.push("<< /S /JavaScript /JS (globalThis.qboPdfScriptExecuted = true) >>");
+  }
 
   let pdf = "%PDF-1.4\n%PDFTEST\n";
   const offsets = [0];
@@ -59,6 +65,18 @@ describe("renderPdfPages", () => {
 
     expect(result.pageCount).toBe(5);
     expect(result.pages.map((page) => page.page)).toEqual([2, 3, 4]);
+  });
+
+  it("renders a document with an embedded script without executing it", async () => {
+    const marker = "qboPdfScriptExecuted";
+    Reflect.deleteProperty(globalThis, marker);
+    try {
+      const result = await renderPdfPages(createTestPdf(1, true));
+      expect(result.pages).toHaveLength(1);
+      expect(Reflect.has(globalThis, marker)).toBe(false);
+    } finally {
+      Reflect.deleteProperty(globalThis, marker);
+    }
   });
 
   it("rejects pages beyond the document", async () => {

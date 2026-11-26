@@ -30,6 +30,7 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "audit:production": "node scripts/audit-production.mjs",
     "check:artifact": "node scripts/validate-artifact.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -52,7 +53,7 @@
     "intuit-oauth": "^4.2.5",
     "jose": "^6.2.8",
     "node-quickbooks": "^2.0.50",
-    "pdfjs-dist": "^5.4.624",
+    "pdfjs-dist": "^6.5.438",
     "proper-lockfile": "^4.1.2",
     "tmp": "^0.2.7"
   },
@@ -66,7 +67,7 @@
   },
   "overrides": {
     "node-quickbooks": {
-      "fast-xml-parser": "5.10.1",
+      "fast-xml-parser": "5.12.1",
       "underscore": "1.13.8",
       "uuid": "11.1.1"
     }
