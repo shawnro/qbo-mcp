@@ -17,7 +17,7 @@ const report = JSON.parse(result.stdout);
 const { blocked, excepted } = evaluateAudit(report);
 if (excepted.length) {
   console.warn(
-    `Known unresolved Intuit OAuth advisory exception: ${excepted.join(", ")}. ` +
+    "Production audit: approved dependency policy exception applies. " +
     "See docs/dependency-overrides.md.",
   );
 }
