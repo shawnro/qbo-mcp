@@ -346,6 +346,47 @@ describe("handleEditDeposit", () => {
     expect(payload.Line).toHaveLength(1);
   });
 
+  it("replaces the full line list, removing omitted existing lines", async () => {
+    mockSuccess(client.getDeposit, {
+      ...existingDeposit,
+      Line: [
+        { ...existingDeposit.Line[0], Amount: 100 },
+        { ...existingDeposit.Line[0], Id: "2", Amount: 100 },
+      ],
+    });
+    mockSuccess(client.updateDeposit, { Id: "800", SyncToken: "2" });
+
+    await handleEditDeposit(client as never, {
+      id: "800",
+      draft: false,
+      lines: [
+        { line_id: "1", account_name: "Tips", amount: 150 },
+        { account_name: "Tips", amount: 50 },
+      ],
+    });
+
+    const payload = client.updateDeposit.mock.calls[0][0];
+    expect(payload.sparse).toBe(false);
+    expect(payload.Line).toHaveLength(2);
+    expect(payload.Line[0].Id).toBe("1");
+    expect(payload.Line[0].DepositLineDetail.Entity).toEqual(existingDeposit.Line[0].DepositLineDetail.Entity);
+    expect(payload.Line[1].Id).toBeUndefined();
+    expect(payload.Line.map((line: { Id?: string }) => line.Id)).not.toContain("2");
+  });
+
+  it("treats an empty lines array as a header-only update", async () => {
+    mockSuccess(client.updateDeposit, { Id: "800", SyncToken: "2" });
+    await handleEditDeposit(client as never, {
+      id: "800",
+      memo: "Updated",
+      lines: [],
+      draft: false,
+    });
+    const payload = client.updateDeposit.mock.calls[0][0];
+    expect(payload.sparse).toBe(true);
+    expect(payload.Line).toBeUndefined();
+  });
+
   it("preserves or clears an existing line class explicitly", async () => {
     mockSuccess(client.updateDeposit, { Id: "800", SyncToken: "2" });
     await handleEditDeposit(client as never, {
