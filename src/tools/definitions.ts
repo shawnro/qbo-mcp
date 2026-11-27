@@ -1600,7 +1600,7 @@ export const toolDefinitions = enforceStrictObjectSchemas([
   },
   {
     name: "edit_deposit",
-    description: "Modify a deposit, including line classes. Omitted classes are preserved; assign or replace by name/ID, or clear explicitly. Deposit line updates merge and must retain the required total.",
+    description: "Modify a deposit, including line classes. A non-empty lines array replaces all deposit lines; omit lines for header-only edits. Retained existing lines preserve omitted classes; assign or replace by name/ID, or clear explicitly. Replacement lines must match the required total.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1626,13 +1626,13 @@ export const toolDefinitions = enforceStrictObjectSchemas([
         },
         lines: {
           type: "array",
-          description: "IMPORTANT: You MUST include ALL existing lines with their line_ids. Lines without line_id are ADDED (not replaced). Lines not included are KEPT (not deleted). To 'delete' a line, set its amount to 0. Line amounts must sum to original deposit total.",
+          description: "A non-empty array replaces the entire deposit line list. Include every existing line you want to keep with its line_id; omitted existing lines are removed. Omit line_id to create a new line. Lines must sum to the original deposit total, or expected_total if supplied. Omit lines or supply an empty array for no line changes.",
           items: {
             type: "object",
             properties: {
               line_id: {
                 type: "string",
-                description: "ID of existing line to update (preserves Entity/Vendor reference). Omit to create new line.",
+                description: "ID of an existing line to retain and update (preserves its Entity/Vendor reference and omitted class). Omit to create a new line.",
               },
               amount: {
                 type: "number",

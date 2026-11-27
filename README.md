@@ -457,7 +457,7 @@ Local stdio report files are retained for seven days. Report writes perform thro
 | **Deposits** | |
 | `create_deposit` | Create a bank deposit with optional line classes |
 | `get_deposit` | Fetch a deposit by ID, including line classes |
-| `edit_deposit` | Modify a deposit and preserve, assign, change, or clear line classes |
+| `edit_deposit` | Modify a deposit; non-empty line lists replace all lines and can preserve, assign, change, or clear classes |
 | **Vendor Credits** | |
 | `create_vendor_credit` | Create a vendor credit with optional line customer/job and class tracking |
 | `get_vendor_credit` | Fetch a vendor credit by ID, including line customer/job, class, and billable status |
