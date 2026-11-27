@@ -55,10 +55,13 @@ describe("parseAuthConfig", () => {
     });
   });
 
-  it("accepts Azure v1 and v2 issuers for a tenant", () => {
+  it.each([
+    "https://login.microsoftonline.com/12345678-1234-1234-1234-123456789abc/v2.0",
+    "https://sts.windows.net/12345678-1234-1234-1234-123456789abc/",
+  ])("accepts Azure v1 and v2 issuers for a tenant configured as %s", (issuer) => {
     const result = parseAuthConfig({
       ...enabledEnvironment,
-      MCP_AUTH_ISSUER: "https://login.microsoftonline.com/12345678-1234-1234-1234-123456789abc/v2.0",
+      MCP_AUTH_ISSUER: issuer,
     });
 
     expect(result).toEqual({
@@ -73,5 +76,22 @@ describe("parseAuthConfig", () => {
         requiredScope: undefined,
       },
     });
+  });
+
+  it.each([
+    "https://login.example.com/12345678-1234-1234-1234-123456789abc/",
+    "https://login.microsoftonline.com.example.com/12345678-1234-1234-1234-123456789abc/v2.0",
+    "https://login.microsoftonline.com:8443/12345678-1234-1234-1234-123456789abc/v2.0",
+    "https://login.microsoftonline.com/extra/12345678-1234-1234-1234-123456789abc/v2.0",
+    "https://login.microsoftonline.com/extra/../12345678-1234-1234-1234-123456789abc/v2.0",
+    "https://sts.windows.net/12345678-1234-1234-1234-123456789abc/extra",
+    "https://login.microsoftonline.com/------------------------------------/v2.0",
+    "https://LOGIN.example.com/tenant/",
+  ])("preserves noncanonical issuer exactly: %s", (issuer) => {
+    const result = parseAuthConfig({ ...enabledEnvironment, MCP_AUTH_ISSUER: issuer });
+    expect(result.mode).toBe("enabled");
+    if (result.mode === "enabled") {
+      expect(result.config.issuers).toEqual([issuer]);
+    }
   });
 });

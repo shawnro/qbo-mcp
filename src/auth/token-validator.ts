@@ -62,15 +62,17 @@ export function parseAuthConfig(env: AuthEnvironment = process.env): AuthConfigS
     return { mode: "invalid", reason: parsedIssuer };
   }
 
-  // Azure AD v1 tokens use sts.windows.net issuer, v2 uses login.microsoftonline.com.
-  // Accept both by extracting the tenant ID and building both issuer URLs.
-  const tenantMatch = parsedIssuer.href.match(/([0-9a-f-]{36})/i);
+  // Only canonical Entra issuer URLs imply that both v1 and v2 issuers are trusted.
+  const tenantId = "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
+  const tenantMatch =
+    issuer.match(new RegExp(`^https://login\\.microsoftonline\\.com/${tenantId}/v2\\.0$`, "i")) ??
+    issuer.match(new RegExp(`^https://sts\\.windows\\.net/${tenantId}/$`, "i"));
   const issuers = tenantMatch
     ? [
         `https://login.microsoftonline.com/${tenantMatch[1]}/v2.0`,
         `https://sts.windows.net/${tenantMatch[1]}/`,
       ]
-    : [parsedIssuer.href.replace(/\/$/, "")];
+    : [issuer];
 
   return {
     mode: "enabled",
